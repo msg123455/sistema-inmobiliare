@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
   // Preflight CORS (el navegador lo manda antes del POST)
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
-  const BASE_URL  = 'https://ndsoftware.base44.app';
+  const BASE_URL  = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs      = { 'api_key': base44Key, 'Content-Type': 'application/json' };
   const waPhoneId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '';

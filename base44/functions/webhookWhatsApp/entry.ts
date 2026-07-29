@@ -263,7 +263,7 @@ Deno.serve(async (req) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function procesarConversacion({ mensaje, msgId, tel, waPhoneId, adReferral, base44Key, anthropicKey, waToken, wasiKey, wasiUser }) {
-  const BASE_URL = 'https://ndsoftware.base44.app';
+  const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 
   const defaultE = {

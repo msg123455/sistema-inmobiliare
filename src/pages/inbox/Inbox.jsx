@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Nota } from '@/api/base44Client';
+import { callFunction } from '@/lib/backend';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -106,13 +107,7 @@ export default function Inbox() {
     if (!texto) return;
     setEnviando(true);
     try {
-      const r = await fetch('https://ndsoftware.base44.app/api/functions/enviarMensajeManual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: 'SYNCWASI2026', tel: conv.tel, mensaje: texto }),
-      });
-      const res = await r.json().catch(() => ({}));
-      if (!r.ok || res?.error) throw new Error(res?.error || `Error ${r.status}`);
+      await callFunction('enviarMensajeManual', { tel: conv.tel, mensaje: texto });
       setMensaje('');
       await refetchNotas();
       toast.success('Mensaje enviado');

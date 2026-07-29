@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
   const base44Key = Deno.env.get('BASE44_API_KEY');
   if (base44Key) {
     try {
-      const r = await fetch('https://ndsoftware.base44.app/api/entities/ConfigAgente?limit=1', {
+      const r = await fetch(`${Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app'}/api/entities/ConfigAgente?limit=1`, {
         headers: { 'api_key': base44Key }
       });
       base44Test = r.ok ? `✅ OK (${r.status})` : `❌ Error ${r.status}`;

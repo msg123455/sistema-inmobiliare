@@ -1,6 +1,6 @@
 // Reclasifica un lead: score, temperatura y prioridad. Scoring puro (sin IA).
 // POST { contacto_id }
-const BASE_URL = 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',

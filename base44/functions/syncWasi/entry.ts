@@ -3,7 +3,7 @@
 // direction: "test" | "import_properties" | "pull" | "both"
 // Token público para llamadas server-to-server: ?token=SYNCWASI2026
 Deno.serve(async (req) => {
-  const BASE_URL = 'https://ndsoftware.base44.app';
+  const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 

@@ -7,7 +7,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const BASE_URL  = 'https://ndsoftware.base44.app';
+  const BASE_URL  = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 

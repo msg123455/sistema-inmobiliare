@@ -475,7 +475,7 @@ Deno.serve(async (req) => {
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   if (!base44Key) return new Response(JSON.stringify({ error: 'BASE44_API_KEY no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
 
-  const BASE_URL = 'https://ndsoftware.base44.app';
+  const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 
   // Verificar si ya existen chunks para no duplicar (con ?force=1 los borra y re-seedea)

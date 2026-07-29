@@ -1,6 +1,6 @@
 // Envío rápido de WhatsApp a un contacto desde el CRM.
 // POST { contacto_id, variables: { mensaje } }  (o template_id + variables)
-const BASE_URL = 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
