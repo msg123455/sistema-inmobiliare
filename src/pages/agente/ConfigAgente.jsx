@@ -178,9 +178,11 @@ export default function ConfigAgenteIA() {
     ambos:     'bg-violet-50 text-violet-700 border-violet-200',
   };
 
-  // URL del webhook — endpoint de Base44 (distinto al frontend)
+  // URL del webhook — endpoint de Base44 (distinto al frontend).
+  // Apunta a agenteInbound: es la funcion conversacional actual y atiende los
+  // dos canales. webhookWhatsApp y webhookTelegram se eliminaron.
   const appHost = window.location.hostname; // ej: <tenant>.base44.app
-  const webhookUrl = `https://${appHost}/api/functions/webhookWhatsApp`;
+  const webhookUrl = `https://${appHost}/api/functions/agenteInbound`;
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
