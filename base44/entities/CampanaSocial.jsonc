@@ -1,0 +1,42 @@
+{
+  "name": "CampanaSocial",
+  "type": "object",
+  "description": "Publicación de un inmueble en redes sociales, programada o inmediata. La publica la función publishSocialPost vía Meta Graph API.",
+  "properties": {
+    "propiedad_id": {
+      "type": "string",
+      "description": "ID de la Propiedad que se promociona"
+    },
+    "propiedad_titulo": {
+      "type": "string",
+      "description": "Título de la propiedad, desnormalizado"
+    },
+    "plataforma": {
+      "type": "string",
+      "enum": ["Instagram", "Facebook", "Instagram_y_Facebook"],
+      "default": "Instagram",
+      "description": "Red o redes donde se publica"
+    },
+    "caption": {
+      "type": "string",
+      "description": "Texto del post"
+    },
+    "fecha_programada": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento en que debe publicarse; vacío significa borrador"
+    },
+    "fecha_publicado": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento en que se publicó efectivamente"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["Borrador", "Programado", "Publicado", "Error"],
+      "default": "Borrador",
+      "description": "Estado de la publicación"
+    }
+  },
+  "required": ["propiedad_id"]
+}

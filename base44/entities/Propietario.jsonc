@@ -1,0 +1,57 @@
+{
+  "name": "Propietario",
+  "type": "object",
+  "description": "Propietario de uno o más inmuebles en administración. Contraparte del arrendatario en el contrato de arriendo.",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo o razón social"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": ["Natural", "Juridico"],
+      "default": "Natural",
+      "description": "Persona natural o jurídica"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo electrónico de contacto"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Teléfono / WhatsApp de contacto"
+    },
+    "cedula_nit": {
+      "type": "string",
+      "description": "Cédula (natural) o NIT (jurídica)"
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad de residencia o domicilio fiscal"
+    },
+    "banco": {
+      "type": "string",
+      "description": "Banco para consignar el pago del canon"
+    },
+    "tipo_cuenta": {
+      "type": "string",
+      "enum": ["Ahorros", "Corriente"],
+      "default": "Ahorros",
+      "description": "Tipo de cuenta bancaria"
+    },
+    "numero_cuenta": {
+      "type": "string",
+      "description": "Número de cuenta bancaria"
+    },
+    "porcentaje_administracion": {
+      "type": "number",
+      "default": 10,
+      "description": "Porcentaje que cobra la inmobiliaria por administrar el inmueble"
+    },
+    "notas": {
+      "type": "string",
+      "description": "Notas internas sobre el propietario"
+    }
+  },
+  "required": ["nombre"]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "Visita",
+  "type": "object",
+  "description": "Visita de un contacto a un inmueble, presencial o virtual. Agendada por un asesor o por el agente conversacional.",
+  "properties": {
+    "propiedad_id": {
+      "type": "string",
+      "description": "ID de la Propiedad visitada"
+    },
+    "propiedad_titulo": {
+      "type": "string",
+      "description": "Título de la propiedad, desnormalizado"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto que visita"
+    },
+    "contacto_nombre": {
+      "type": "string",
+      "description": "Nombre del contacto, desnormalizado"
+    },
+    "fecha_hora": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora programada de la visita"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": ["Presencial", "Virtual"],
+      "default": "Presencial",
+      "description": "Modalidad de la visita"
+    },
+    "duracion_minutos": {
+      "type": "number",
+      "default": 60,
+      "description": "Duración estimada en minutos"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["Programada", "Realizada", "Cancelada", "No_asistio"],
+      "default": "Programada",
+      "description": "Estado de la visita"
+    },
+    "notas_resultado": {
+      "type": "string",
+      "description": "Resultado y observaciones tras la visita"
+    }
+  },
+  "required": ["propiedad_id", "contacto_id", "fecha_hora"]
+}

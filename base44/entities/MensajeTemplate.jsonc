@@ -1,0 +1,45 @@
+{
+  "name": "MensajeTemplate",
+  "type": "object",
+  "description": "Plantilla de mensaje reutilizable por canal. Soporta variables {{nombre}} {{propiedad}} {{precio}} {{fecha}} {{agente}} {{ciudad}} y puede dispararse automáticamente ante un evento del pipeline.",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre interno de la plantilla"
+    },
+    "canal": {
+      "type": "string",
+      "enum": ["WhatsApp", "Instagram", "Facebook", "Email"],
+      "default": "WhatsApp",
+      "description": "Canal por el que se envía"
+    },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "nuevo_lead",
+        "visita_agendada",
+        "visita_recordatorio",
+        "seguimiento_post_visita",
+        "oferta_recibida",
+        "contrato_proximo_vencer"
+      ],
+      "default": "manual",
+      "description": "Evento que dispara el envío"
+    },
+    "asunto": {
+      "type": "string",
+      "description": "Asunto del correo; solo aplica cuando canal es Email"
+    },
+    "contenido": {
+      "type": "string",
+      "description": "Cuerpo del mensaje con variables interpoladas"
+    },
+    "auto_envio": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si true, se envía solo al dispararse el trigger sin intervención humana"
+    }
+  },
+  "required": ["nombre", "contenido"]
+}

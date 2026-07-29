@@ -1,0 +1,54 @@
+{
+  "name": "HistorialLead",
+  "type": "object",
+  "description": "Timeline de eventos de un lead: cada interacción, cambio de etapa y acción automática queda registrada aquí. Es la fuente del historial en la ficha del contacto y de las métricas de conversión.",
+  "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto al que pertenece el evento"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Llamada",
+        "Mensaje_WhatsApp",
+        "Mensaje_IG",
+        "Mensaje_FB",
+        "Visita",
+        "Cambio_Etapa",
+        "Nota",
+        "Auto_Mensaje",
+        "Calificacion_IA",
+        "Asignacion"
+      ],
+      "description": "Tipo de evento registrado"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripción legible del evento"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento en que ocurrió el evento"
+    },
+    "etapa_anterior": {
+      "type": "string",
+      "description": "Etapa del pipeline antes del cambio (solo para tipo Cambio_Etapa)"
+    },
+    "etapa_nueva": {
+      "type": "string",
+      "description": "Etapa del pipeline después del cambio (solo para tipo Cambio_Etapa)"
+    },
+    "usuario_email": {
+      "type": "string",
+      "description": "Email del usuario que originó el evento; vacío si fue automático"
+    },
+    "es_automatico": {
+      "type": "boolean",
+      "default": false,
+      "description": "true si lo generó el sistema o el agente IA, false si fue una persona"
+    }
+  },
+  "required": ["contacto_id", "tipo"]
+}
