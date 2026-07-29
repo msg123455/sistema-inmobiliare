@@ -1,32 +1,51 @@
 {
-  "name": "Propiedad",
   "type": "object",
+  "name": "Propiedad",
   "properties": {
     "titulo": {
       "type": "string",
-      "description": "Título del inmueble"
+      "description": "T\u00edtulo del inmueble"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripción del inmueble"
+      "description": "Descripci\u00f3n del inmueble"
     },
     "tipo": {
       "type": "string",
-      "enum": ["Apartamento", "Casa", "Local", "Oficina", "Bodega", "Lote", "Finca", "Otro"],
-      "default": "Apartamento",
-      "description": "Tipo de inmueble"
+      "description": "Tipo de inmueble",
+      "enum": [
+        "Apartamento",
+        "Casa",
+        "Local",
+        "Oficina",
+        "Bodega",
+        "Lote",
+        "Finca",
+        "Otro"
+      ],
+      "default": "Apartamento"
     },
     "operacion": {
       "type": "string",
-      "enum": ["Venta", "Arriendo", "Venta_y_Arriendo"],
-      "default": "Venta",
-      "description": "Tipo de operación"
+      "description": "Tipo de operaci\u00f3n",
+      "enum": [
+        "Venta",
+        "Arriendo",
+        "Venta_y_Arriendo"
+      ],
+      "default": "Venta"
     },
     "estado": {
       "type": "string",
-      "enum": ["Disponible", "Reservado", "Vendido", "Arrendado", "No_disponible"],
-      "default": "Disponible",
-      "description": "Estado del inmueble"
+      "description": "Estado del inmueble",
+      "enum": [
+        "Disponible",
+        "Reservado",
+        "Vendido",
+        "Arrendado",
+        "No_disponible"
+      ],
+      "default": "Disponible"
     },
     "precio_venta": {
       "type": "number",
@@ -38,36 +57,36 @@
     },
     "administracion": {
       "type": "number",
-      "description": "Cuota de administración mensual en COP"
+      "description": "Cuota de administraci\u00f3n mensual en COP"
     },
     "comision_pct": {
       "type": "number",
-      "default": 3,
-      "description": "Porcentaje de comisión"
+      "description": "Porcentaje de comisi\u00f3n",
+      "default": 3
     },
     "area_m2": {
       "type": "number",
-      "description": "Área en metros cuadrados"
+      "description": "\u00c1rea en metros cuadrados"
     },
     "habitaciones": {
       "type": "number",
-      "description": "Número de habitaciones"
+      "description": "N\u00famero de habitaciones"
     },
     "banos": {
       "type": "number",
-      "description": "Número de baños"
+      "description": "N\u00famero de ba\u00f1os"
     },
     "parqueaderos": {
       "type": "number",
-      "description": "Número de parqueaderos"
+      "description": "N\u00famero de parqueaderos"
     },
     "estrato": {
       "type": "number",
-      "description": "Estrato socioeconómico (1-6)"
+      "description": "Estrato socioecon\u00f3mico (1-6)"
     },
     "piso": {
       "type": "number",
-      "description": "Número de piso"
+      "description": "N\u00famero de piso"
     },
     "ciudad": {
       "type": "string",
@@ -79,7 +98,7 @@
     },
     "direccion": {
       "type": "string",
-      "description": "Dirección completa"
+      "description": "Direcci\u00f3n completa"
     },
     "latitud": {
       "type": "number",
@@ -91,8 +110,10 @@
     },
     "fotos": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "URLs de fotos del inmueble"
+      "description": "URLs de fotos del inmueble",
+      "items": {
+        "type": "string"
+      }
     },
     "valor_administracion": {
       "type": "number",
@@ -139,23 +160,23 @@
     },
     "publicado_wasi": {
       "type": "boolean",
-      "default": false,
-      "description": "Publicado en WASI.co"
+      "description": "Publicado en WASI.co",
+      "default": false
     },
     "publicado_instagram": {
       "type": "boolean",
-      "default": false,
-      "description": "Publicado en Instagram"
+      "description": "Publicado en Instagram",
+      "default": false
     },
     "publicado_facebook": {
       "type": "boolean",
-      "default": false,
-      "description": "Publicado en Facebook"
+      "description": "Publicado en Facebook",
+      "default": false
     },
     "fuente_wasi": {
       "type": "boolean",
-      "default": false,
-      "description": "Importado desde WASI"
+      "description": "Importado desde WASI",
+      "default": false
     },
     "wasi_id": {
       "type": "string",
@@ -170,5 +191,8 @@
       "description": "URL del post/reel de Instagram del inmueble (video). Valentina lo envia cuando piden ver el inmueble en video."
     }
   },
-  "required": ["titulo", "ciudad"]
+  "required": [
+    "titulo",
+    "ciudad"
+  ]
 }

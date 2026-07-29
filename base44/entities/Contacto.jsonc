@@ -1,6 +1,6 @@
 {
-  "name": "Contacto",
   "type": "object",
+  "name": "Contacto",
   "properties": {
     "nombre": {
       "type": "string",
@@ -8,32 +8,55 @@
     },
     "email": {
       "type": "string",
-      "description": "Correo electrónico"
+      "description": "Correo electr\u00f3nico"
     },
     "telefono": {
       "type": "string",
-      "description": "Número de teléfono / WhatsApp"
+      "description": "N\u00famero de tel\u00e9fono / WhatsApp"
     },
     "tipo_interes": {
       "type": "string",
-      "enum": ["Compra", "Arriendo", "Compra_y_Arriendo", "Otro"],
-      "description": "Tipo de operación que busca"
+      "description": "Tipo de operaci\u00f3n que busca",
+      "enum": [
+        "Compra",
+        "Arriendo",
+        "Compra_y_Arriendo",
+        "Otro"
+      ]
     },
     "etapa_pipeline": {
       "type": "string",
-      "enum": ["Lead", "Visita_Agendada", "Oferta", "Negociacion", "Promesa", "Escritura", "Activo", "Perdido"],
-      "default": "Lead",
-      "description": "Etapa en el pipeline de ventas"
+      "description": "Etapa en el pipeline de ventas",
+      "enum": [
+        "Lead",
+        "Visita_Agendada",
+        "Oferta",
+        "Negociacion",
+        "Promesa",
+        "Escritura",
+        "Activo",
+        "Perdido"
+      ],
+      "default": "Lead"
     },
     "pipeline_tipo": {
       "type": "string",
-      "enum": ["Venta", "Arriendo", "Ambos"],
-      "description": "Tipo de pipeline"
+      "description": "Tipo de pipeline",
+      "enum": [
+        "Venta",
+        "Arriendo",
+        "Ambos"
+      ]
     },
     "temperatura": {
       "type": "string",
-      "enum": ["Frio", "Tibio", "Caliente", "Urgente"],
-      "description": "Temperatura del lead"
+      "description": "Temperatura del lead",
+      "enum": [
+        "Frio",
+        "Tibio",
+        "Caliente",
+        "Urgente"
+      ]
     },
     "score_lead": {
       "type": "number",
@@ -41,15 +64,15 @@
     },
     "presupuesto_max": {
       "type": "number",
-      "description": "Presupuesto máximo en COP"
+      "description": "Presupuesto m\u00e1ximo en COP"
     },
     "ciudad_interes": {
       "type": "string",
-      "description": "Ciudad de interés"
+      "description": "Ciudad de inter\u00e9s"
     },
     "habitaciones_min": {
       "type": "number",
-      "description": "Mínimo de habitaciones requeridas"
+      "description": "M\u00ednimo de habitaciones requeridas"
     },
     "asignado_a": {
       "type": "string",
@@ -57,27 +80,27 @@
     },
     "canal_adquisicion": {
       "type": "string",
-      "description": "Canal por el que llegó el contacto"
+      "description": "Canal por el que lleg\u00f3 el contacto"
     },
     "fecha_primer_contacto": {
       "type": "string",
-      "format": "date",
-      "description": "Fecha del primer contacto"
+      "description": "Fecha del primer contacto",
+      "format": "date"
     },
     "ultima_actividad": {
       "type": "string",
-      "format": "date-time",
-      "description": "Última actividad registrada"
+      "description": "\u00daltima actividad registrada",
+      "format": "date-time"
     },
     "en_conversacion": {
       "type": "boolean",
-      "default": false,
-      "description": "Está actualmente en conversación con Valentina"
+      "description": "Est\u00e1 actualmente en conversaci\u00f3n con Valentina",
+      "default": false
     },
     "ia_calificado": {
       "type": "boolean",
-      "default": false,
-      "description": "Fue calificado por Valentina (IA)"
+      "description": "Fue calificado por Valentina (IA)",
+      "default": false
     },
     "notas": {
       "type": "string",
@@ -89,27 +112,27 @@
     },
     "broker_telefono": {
       "type": "string",
-      "description": "Teléfono del broker asignado"
+      "description": "Tel\u00e9fono del broker asignado"
     },
     "fecha_asignacion": {
       "type": "string",
-      "format": "date-time",
-      "description": "Cuándo se entregó el lead al broker"
+      "description": "Cu\u00e1ndo se entreg\u00f3 el lead al broker",
+      "format": "date-time"
     },
     "fecha_ultimo_avance": {
       "type": "string",
-      "format": "date-time",
-      "description": "Último cambio de estado de seguimiento (para detectar enfriamiento)"
+      "description": "\u00daltimo cambio de estado de seguimiento (para detectar enfriamiento)",
+      "format": "date-time"
     },
     "recordatorios_broker": {
       "type": "number",
-      "default": 0,
-      "description": "Cuántos recordatorios se han enviado al broker por este lead"
+      "description": "Cu\u00e1ntos recordatorios se han enviado al broker por este lead",
+      "default": 0
     },
     "descalificado": {
       "type": "boolean",
-      "default": false,
-      "description": "El lead fue descalificado (no encaja: ciudad/presupuesto fuera de rango)"
+      "description": "El lead fue descalificado (no encaja: ciudad/presupuesto fuera de rango)",
+      "default": false
     },
     "motivo_descalificacion": {
       "type": "string",
@@ -117,7 +140,7 @@
     },
     "motivo_perdida": {
       "type": "string",
-      "description": "Motivo por el que se perdió el negocio (distinto de descalificación)"
+      "description": "Motivo por el que se perdi\u00f3 el negocio (distinto de descalificaci\u00f3n)"
     },
     "arrendatario_id": {
       "type": "string",
@@ -134,13 +157,15 @@
     },
     "fuente_wasi": {
       "type": "boolean",
-      "default": false,
-      "description": "Lead proveniente de WASI"
+      "description": "Lead proveniente de WASI",
+      "default": false
     },
     "wasi_lead_id": {
       "type": "string",
       "description": "ID del lead en WASI.co"
     }
   },
-  "required": ["nombre"]
+  "required": [
+    "nombre"
+  ]
 }

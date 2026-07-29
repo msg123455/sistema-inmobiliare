@@ -1,59 +1,53 @@
 {
   "name": "CampanaSocial",
   "type": "object",
+  "description": "Publicaci\u00f3n de un inmueble en redes sociales, programada o inmediata. La publica la funci\u00f3n publishSocialPost v\u00eda Meta Graph API.",
   "properties": {
-    "nombre": {
+    "propiedad_id": {
       "type": "string",
-      "description": "Nombre de la campana"
+      "description": "ID de la Propiedad que se promociona"
     },
-    "red": {
+    "propiedad_titulo": {
+      "type": "string",
+      "description": "T\u00edtulo de la propiedad, desnormalizado"
+    },
+    "plataforma": {
       "type": "string",
       "enum": [
         "Instagram",
         "Facebook",
-        "TikTok",
-        "LinkedIn"
+        "Instagram_y_Facebook"
       ],
-      "description": "Red social"
+      "default": "Instagram",
+      "description": "Red o redes donde se publica"
     },
-    "propiedad_id": {
-      "type": "string",
-      "description": "Inmueble que promociona"
-    },
-    "contenido": {
+    "caption": {
       "type": "string",
       "description": "Texto del post"
     },
-    "media_urls": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "Imagenes o videos"
+    "fecha_programada": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento en que debe publicarse; vac\u00edo significa borrador"
+    },
+    "fecha_publicado": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento en que se public\u00f3 efectivamente"
     },
     "estado": {
       "type": "string",
       "enum": [
         "Borrador",
-        "Programada",
-        "Publicada",
-        "Fallida"
+        "Programado",
+        "Publicado",
+        "Error"
       ],
       "default": "Borrador",
-      "description": "Estado"
-    },
-    "fecha_publicacion": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Cuando se publica"
-    },
-    "post_url": {
-      "type": "string",
-      "description": "URL del post publicado"
+      "description": "Estado de la publicaci\u00f3n"
     }
   },
   "required": [
-    "nombre"
+    "propiedad_id"
   ]
 }

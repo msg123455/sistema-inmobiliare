@@ -8,7 +8,7 @@
 // despliega en este app; el estilo index.ts con context.entities está muerto).
 // La generación del artículo va por secciones porque Base44 corta a los ~15s.
 
-const BASE_URL = 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 const MODELO   = 'claude-haiku-4-5-20251001';
 
 const CORS = {

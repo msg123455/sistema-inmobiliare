@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="manifest" href="/manifest.json" />
-    <title>Inmobiliare Julio Corredor</title>
+    <title>INMOBILIARE Julio Corredor</title>
 
     <!-- Barra de estado del navegador con el morado de marca. Se declara por
          esquema para que en oscuro no aparezca una franja clara sobre la app. -->
@@ -13,12 +13,14 @@
     <meta name="theme-color" content="#14101F" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Inmobiliare" />
+    <meta name="apple-mobile-web-app-title" content="INMOBILIARE" />
 
     <!-- Security headers via meta tags.
-         Nota: no se permiten orígenes de fuentes externos a propósito. DM Sans
-         va auto-hospedada vía @fontsource; un @import a Google Fonts fallaría
-         aquí en silencio, que es justo lo que pasaba con Inter. -->
+         No se permiten origenes de fuentes externos a proposito: DM Sans va
+         auto-hospedada via @fontsource y se sirve desde 'self'. Antes esta
+         politica listaba fonts.googleapis.com/fonts.gstatic.com para que Inter
+         cargara; al auto-hospedar, esos origenes sobran y quitarlos reduce la
+         superficie del CSP y una dependencia de red de terceros. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; connect-src 'self' https://*.base44.com wss://*.base44.com https://www.googleapis.com https://calendar.google.com https://accounts.google.com; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self';" />

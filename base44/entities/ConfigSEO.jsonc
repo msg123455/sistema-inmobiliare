@@ -1,11 +1,11 @@
 {
-  "name": "ConfigSEO",
   "type": "object",
+  "name": "ConfigSEO",
   "properties": {
     "clave": {
       "type": "string",
-      "default": "general",
-      "description": "Clave única de configuración (usar 'general')"
+      "description": "Clave \u00fanica de configuraci\u00f3n (usar 'general')",
+      "default": "general"
     },
     "nombre_inmobiliaria": {
       "type": "string",
@@ -13,14 +13,16 @@
     },
     "ciudad_principal": {
       "type": "string",
-      "default": "Bogotá",
-      "description": "Ciudad principal de operación"
+      "description": "Ciudad principal de operaci\u00f3n",
+      "default": "Bogot\u00e1"
     },
     "zonas": {
       "type": "array",
-      "items": { "type": "string" },
+      "description": "Barrios y zonas que maneja la inmobiliaria (universo de keywords)",
       "default": [],
-      "description": "Barrios y zonas que maneja la inmobiliaria (universo de keywords)"
+      "items": {
+        "type": "string"
+      }
     },
     "website_url": {
       "type": "string",
@@ -28,15 +30,15 @@
     },
     "whatsapp_numero": {
       "type": "string",
-      "description": "Número de WhatsApp para los CTA del contenido"
+      "description": "N\u00famero de WhatsApp para los CTA del contenido"
     },
     "anos_experiencia": {
       "type": "string",
-      "description": "Años de trayectoria en el mercado"
+      "description": "A\u00f1os de trayectoria en el mercado"
     },
     "descripcion_marca": {
       "type": "string",
-      "description": "Descripción de la empresa que se inyecta en los prompts"
+      "description": "Descripci\u00f3n de la empresa que se inyecta en los prompts"
     },
     "rango_venta_min": {
       "type": "number",
@@ -48,15 +50,19 @@
     },
     "interlinks": {
       "type": "array",
-      "items": { "type": "string" },
+      "description": "URLs internas disponibles para enlazado interno",
       "default": [],
-      "description": "URLs internas disponibles para enlazado interno"
+      "items": {
+        "type": "string"
+      }
     },
     "activo": {
       "type": "boolean",
-      "default": true,
-      "description": "Si el módulo SEO está activo"
+      "description": "Si el m\u00f3dulo SEO est\u00e1 activo",
+      "default": true
     }
   },
-  "required": ["clave"]
+  "required": [
+    "clave"
+  ]
 }

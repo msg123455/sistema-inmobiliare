@@ -1,53 +1,62 @@
 {
   "name": "Visita",
   "type": "object",
+  "description": "Visita de un contacto a un inmueble, presencial o virtual. Agendada por un asesor o por el agente conversacional.",
   "properties": {
-    "contacto_id": {
-      "type": "string",
-      "description": "Quien visita"
-    },
     "propiedad_id": {
       "type": "string",
-      "description": "Inmueble a visitar"
+      "description": "ID de la Propiedad visitada"
     },
-    "asesor_id": {
+    "propiedad_titulo": {
       "type": "string",
-      "description": "Asesor que acompana"
+      "description": "T\u00edtulo de la propiedad, desnormalizado"
     },
-    "fecha_visita": {
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto que visita"
+    },
+    "contacto_nombre": {
+      "type": "string",
+      "description": "Nombre del contacto, desnormalizado"
+    },
+    "fecha_hora": {
       "type": "string",
       "format": "date-time",
-      "description": "Cuando se hace la visita"
+      "description": "Fecha y hora programada de la visita"
     },
-    "preferencia_horario": {
+    "tipo": {
       "type": "string",
-      "description": "Disponibilidad que dio el cliente"
+      "enum": [
+        "Presencial",
+        "Virtual"
+      ],
+      "default": "Presencial",
+      "description": "Modalidad de la visita"
+    },
+    "duracion_minutos": {
+      "type": "number",
+      "default": 60,
+      "description": "Duraci\u00f3n estimada en minutos"
     },
     "estado": {
       "type": "string",
       "enum": [
-        "Solicitada",
-        "Agendada",
+        "Programada",
         "Realizada",
         "Cancelada",
         "No_asistio"
       ],
-      "default": "Solicitada",
-      "description": "Como va"
+      "default": "Programada",
+      "description": "Estado de la visita"
     },
-    "feedback": {
+    "notas_resultado": {
       "type": "string",
-      "description": "Que opino el cliente despues de verla"
-    },
-    "origen": {
-      "type": "string",
-      "description": "Por donde entro"
-    },
-    "fecha_solicitud": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Cuando la pidio"
+      "description": "Resultado y observaciones tras la visita"
     }
   },
-  "required": []
+  "required": [
+    "propiedad_id",
+    "contacto_id",
+    "fecha_hora"
+  ]
 }

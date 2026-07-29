@@ -1,41 +1,40 @@
 {
   "name": "Propietario",
   "type": "object",
+  "description": "Propietario de uno o m\u00e1s inmuebles en administraci\u00f3n. Contraparte del arrendatario en el contrato de arriendo.",
   "properties": {
     "nombre": {
       "type": "string",
-      "description": "Nombre completo o razon social"
+      "description": "Nombre completo o raz\u00f3n social"
     },
-    "tipo_documento": {
+    "tipo": {
       "type": "string",
       "enum": [
-        "CC",
-        "CE",
-        "NIT",
-        "PA"
+        "Natural",
+        "Juridico"
       ],
-      "default": "CC",
-      "description": "Tipo de documento"
-    },
-    "numero_documento": {
-      "type": "string",
-      "description": "Numero de documento, solo digitos"
-    },
-    "telefono": {
-      "type": "string",
-      "description": "WhatsApp con indicativo, sin +"
+      "default": "Natural",
+      "description": "Persona natural o jur\u00eddica"
     },
     "email": {
       "type": "string",
-      "description": "Correo electronico"
+      "description": "Correo electr\u00f3nico de contacto"
     },
-    "direccion": {
+    "telefono": {
       "type": "string",
-      "description": "Direccion de correspondencia"
+      "description": "Tel\u00e9fono / WhatsApp de contacto"
+    },
+    "cedula_nit": {
+      "type": "string",
+      "description": "C\u00e9dula (natural) o NIT (jur\u00eddica)"
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad de residencia o domicilio fiscal"
     },
     "banco": {
       "type": "string",
-      "description": "Banco para el giro"
+      "description": "Banco para consignar el pago del canon"
     },
     "tipo_cuenta": {
       "type": "string",
@@ -43,23 +42,21 @@
         "Ahorros",
         "Corriente"
       ],
-      "description": "Tipo de cuenta"
+      "default": "Ahorros",
+      "description": "Tipo de cuenta bancaria"
     },
     "numero_cuenta": {
       "type": "string",
-      "description": "Numero de cuenta para el giro"
+      "description": "N\u00famero de cuenta bancaria"
     },
-    "propiedades_ids": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "Inmuebles que tiene con nosotros"
+    "porcentaje_administracion": {
+      "type": "number",
+      "default": 10,
+      "description": "Porcentaje que cobra la inmobiliaria por administrar el inmueble"
     },
-    "origen": {
+    "notas": {
       "type": "string",
-      "description": "Como llego"
+      "description": "Notas internas sobre el propietario"
     }
   },
   "required": [

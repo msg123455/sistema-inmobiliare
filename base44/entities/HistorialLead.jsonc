@@ -1,30 +1,57 @@
 {
   "name": "HistorialLead",
   "type": "object",
+  "description": "Timeline de eventos de un lead: cada interacci\u00f3n, cambio de etapa y acci\u00f3n autom\u00e1tica queda registrada aqu\u00ed. Es la fuente del historial en la ficha del contacto y de las m\u00e9tricas de conversi\u00f3n.",
   "properties": {
     "contacto_id": {
       "type": "string",
-      "description": "Lead al que corresponde"
+      "description": "ID del Contacto al que pertenece el evento"
     },
-    "evento": {
+    "tipo": {
       "type": "string",
-      "description": "Que paso: Calificado, Contactado, Visita, Cambio_estado"
+      "enum": [
+        "Llamada",
+        "Mensaje_WhatsApp",
+        "Mensaje_IG",
+        "Mensaje_FB",
+        "Visita",
+        "Cambio_Etapa",
+        "Nota",
+        "Auto_Mensaje",
+        "Calificacion_IA",
+        "Asignacion"
+      ],
+      "description": "Tipo de evento registrado"
     },
-    "detalle": {
+    "descripcion": {
       "type": "string",
-      "description": "Descripcion del evento"
-    },
-    "asesor_id": {
-      "type": "string",
-      "description": "Quien lo hizo"
+      "description": "Descripci\u00f3n legible del evento"
     },
     "fecha": {
       "type": "string",
       "format": "date-time",
-      "description": "Cuando"
+      "description": "Momento en que ocurri\u00f3 el evento"
+    },
+    "etapa_anterior": {
+      "type": "string",
+      "description": "Etapa del pipeline antes del cambio (solo para tipo Cambio_Etapa)"
+    },
+    "etapa_nueva": {
+      "type": "string",
+      "description": "Etapa del pipeline despu\u00e9s del cambio (solo para tipo Cambio_Etapa)"
+    },
+    "usuario_email": {
+      "type": "string",
+      "description": "Email del usuario que origin\u00f3 el evento; vac\u00edo si fue autom\u00e1tico"
+    },
+    "es_automatico": {
+      "type": "boolean",
+      "default": false,
+      "description": "true si lo gener\u00f3 el sistema o el agente IA, false si fue una persona"
     }
   },
   "required": [
-    "contacto_id"
+    "contacto_id",
+    "tipo"
   ]
 }

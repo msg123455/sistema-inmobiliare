@@ -1,26 +1,47 @@
 {
   "name": "MensajeEnviado",
   "type": "object",
+  "description": "Registro de auditor\u00eda de cada mensaje saliente hacia un contacto. Lo escribe la funci\u00f3n leadWhatsApp y el motor de plantillas.",
   "properties": {
-    "template_id": {
-      "type": "string",
-      "description": "Plantilla usada"
-    },
     "contacto_id": {
       "type": "string",
-      "description": "A quien se envio"
+      "description": "ID del Contacto destinatario"
     },
-    "telefono": {
+    "contacto_nombre": {
       "type": "string",
-      "description": "Numero de destino"
+      "description": "Nombre del destinatario, desnormalizado"
+    },
+    "contacto_telefono": {
+      "type": "string",
+      "description": "Tel\u00e9fono destino del env\u00edo"
     },
     "canal": {
       "type": "string",
-      "description": "Por donde se envio"
+      "enum": [
+        "WhatsApp",
+        "Instagram",
+        "Facebook",
+        "Email"
+      ],
+      "default": "WhatsApp",
+      "description": "Canal usado para el env\u00edo"
     },
-    "contenido": {
+    "template_id": {
       "type": "string",
-      "description": "Lo que se envio"
+      "description": "ID de la MensajeTemplate usada; vac\u00edo si fue mensaje libre"
+    },
+    "template_nombre": {
+      "type": "string",
+      "description": "Nombre de la plantilla, desnormalizado"
+    },
+    "contenido_final": {
+      "type": "string",
+      "description": "Contenido efectivamente enviado, con las variables ya reemplazadas"
+    },
+    "fecha_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento del env\u00edo"
     },
     "estado": {
       "type": "string",
@@ -28,20 +49,23 @@
         "Enviado",
         "Entregado",
         "Leido",
-        "Fallido"
+        "Error"
       ],
       "default": "Enviado",
-      "description": "Estado de entrega"
+      "description": "Estado de entrega reportado por el proveedor"
     },
-    "error": {
+    "mensaje_id_externo": {
       "type": "string",
-      "description": "Error de entrega, si lo hubo"
+      "description": "ID del mensaje en la API del proveedor (Meta Graph), para conciliar estados"
     },
-    "fecha_envio": {
-      "type": "string",
-      "format": "date-time",
-      "description": "Cuando se envio"
+    "es_automatico": {
+      "type": "boolean",
+      "default": false,
+      "description": "true si lo dispar\u00f3 un trigger, false si lo envi\u00f3 una persona"
     }
   },
-  "required": []
+  "required": [
+    "contacto_id",
+    "contenido_final"
+  ]
 }

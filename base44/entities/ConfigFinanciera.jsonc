@@ -1,6 +1,6 @@
 {
-  "name": "ConfigFinanciera",
   "type": "object",
+  "name": "ConfigFinanciera",
   "properties": {
     "clave": {
       "type": "string",
@@ -8,38 +8,38 @@
     },
     "gastos_fijos_mes": {
       "type": "number",
-      "default": 0,
-      "description": "Gastos fijos mensuales de la empresa (USD)"
+      "description": "Gastos fijos mensuales de la empresa (USD)",
+      "default": 0
     },
     "salarios_mes": {
       "type": "number",
-      "default": 0,
-      "description": "N\u00f3mina mensual (USD)"
+      "description": "N\u00f3mina mensual (USD)",
+      "default": 0
     },
     "otros_gastos_mes": {
       "type": "number",
-      "default": 0,
-      "description": "Otros gastos operativos mensuales (USD)"
+      "description": "Otros gastos operativos mensuales (USD)",
+      "default": 0
     },
     "tasa_impuesto_renta": {
       "type": "number",
-      "default": 35,
-      "description": "Tasa de impuesto de renta en %"
+      "description": "Tasa de impuesto de renta en %",
+      "default": 35
     },
     "tasa_iva": {
       "type": "number",
-      "default": 19,
-      "description": "IVA en %"
+      "description": "IVA en %",
+      "default": 19
     },
     "reserva_legal_pct": {
       "type": "number",
-      "default": 10,
-      "description": "% de reserva legal sobre utilidades"
+      "description": "% de reserva legal sobre utilidades",
+      "default": 10
     },
     "capital_inicial": {
       "type": "number",
-      "default": 0,
-      "description": "Capital inicial disponible (USD)"
+      "description": "Capital inicial disponible (USD)",
+      "default": 0
     }
   },
   "required": [

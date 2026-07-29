@@ -1,5 +1,6 @@
 {
   "type": "object",
+  "name": "PerfilUsuario",
   "properties": {
     "email": {
       "type": "string",
@@ -7,11 +8,11 @@
     },
     "rol": {
       "type": "string",
+      "title": "Rol",
       "enum": [
         "Admin",
         "Comercial"
-      ],
-      "title": "Rol"
+      ]
     },
     "nombre": {
       "type": "string",
@@ -21,6 +22,5 @@
   "required": [
     "email",
     "rol"
-  ],
-  "name": "PerfilUsuario"
+  ]
 }

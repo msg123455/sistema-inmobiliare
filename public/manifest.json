@@ -1,10 +1,12 @@
 {
-  "name": "Inmobiliare Julio Corredor",
-  "short_name": "Inmobiliare",
-  "description": "Gestión inmobiliaria de INMOBILIARE Julio Corredor desde 1960",
+  "name": "INMOBILIARE Julio Corredor",
+  "short_name": "INMOBILIARE",
+  "description": "Plataforma de gestion inmobiliaria: CRM, contratos, cartera y agentes IA.",
   "lang": "es-CO",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#FAF9FC",
   "theme_color": "#5400CF",
   "icons": [

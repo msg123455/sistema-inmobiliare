@@ -19,7 +19,7 @@ export default function TareasCRM() {
   const queryClient = useQueryClient();
   const { isAdmin, email: userEmail } = useUserRole();
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ titulo: '', fecha_limite: '', hora: '', asignado_a: '', cliente_id: '' });
+  const [form, setForm] = useState({ titulo: '', fecha_limite: '', hora: '', asignado_a: '', contacto_id: '' });
   const [filtro, setFiltro] = useState('pendientes');
   const [filtroCliente, setFiltroCliente] = useState('');
   const [currentUser, setCurrentUser] = useState(null);
@@ -34,10 +34,15 @@ export default function TareasCRM() {
     refetchOnMount: 'always',
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ['clientes'],
-    queryFn: () => base44.entities.Cliente.list(),
+  const { data: contactos = [] } = useQuery({
+    queryKey: ['contactos'],
+    queryFn: () => base44.entities.Contacto.list(),
   });
+
+  // Tarea todavia tiene cliente_id como required en el esquema, asi que durante la
+  // transicion se escriben los dos campos con el mismo valor y se lee contacto_id
+  // primero. Al terminar el backfill se elimina cliente_id.
+  const refContacto = (t) => t.contacto_id || t.cliente_id;
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -53,9 +58,9 @@ export default function TareasCRM() {
       asignado_a: form.asignado_a || currentUser?.email || '',
     };
     if (form.hora) payload.hora = form.hora;
-    if (form.cliente_id) payload.cliente_id = form.cliente_id;
+    if (form.contacto_id) { payload.contacto_id = form.contacto_id; payload.cliente_id = form.contacto_id; }
     await base44.entities.Tarea.create(payload);
-    setForm({ titulo: '', fecha_limite: '', hora: '', asignado_a: '', cliente_id: '' });
+    setForm({ titulo: '', fecha_limite: '', hora: '', asignado_a: '', contacto_id: '' });
     setShowForm(false);
     refetch();
   };
@@ -75,8 +80,8 @@ export default function TareasCRM() {
       .filter(t => {
         if (filtro === 'pendientes' && t.completada) return false;
         if (filtro === 'completadas' && !t.completada) return false;
-        if (filtroCliente === '__general__' && t.cliente_id) return false;
-        if (filtroCliente && filtroCliente !== '__general__' && t.cliente_id !== filtroCliente) return false;
+        if (filtroCliente === '__general__' && refContacto(t)) return false;
+        if (filtroCliente && filtroCliente !== '__general__' && refContacto(t) !== filtroCliente) return false;
         return true;
       })
       .sort((a, b) => {
@@ -142,11 +147,11 @@ export default function TareasCRM() {
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Empresa (opcional)</label>
-              <select value={form.cliente_id} onChange={e => setForm({ ...form, cliente_id: e.target.value })}
+              <select value={form.contacto_id} onChange={e => setForm({ ...form, contacto_id: e.target.value })}
                 className="mt-1 w-full h-10 px-3 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
                 <option value="">— Tarea general —</option>
-                {[...clientes].sort((a, b) => a.nombre_empresa.localeCompare(b.nombre_empresa)).map(c => (
-                  <option key={c.id} value={c.id}>{c.nombre_empresa}</option>
+                {[...contactos].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')).map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
                 ))}
               </select>
             </div>
@@ -171,8 +176,8 @@ export default function TareasCRM() {
           className="h-8 px-3 text-xs rounded-lg border border-border bg-background text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary ml-auto">
           <option value="">Todas las empresas</option>
           <option value="__general__">Solo generales</option>
-          {[...clientes].sort((a, b) => a.nombre_empresa.localeCompare(b.nombre_empresa)).map(c => (
-            <option key={c.id} value={c.id}>{c.nombre_empresa}</option>
+          {[...contactos].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')).map(c => (
+            <option key={c.id} value={c.id}>{c.nombre}</option>
           ))}
         </select>
       </div>
@@ -189,7 +194,7 @@ export default function TareasCRM() {
           </div>
         ) : (
           tareasFiltradas.map(tarea => {
-            const cliente = tarea.cliente_id ? clientes.find(c => c.id === tarea.cliente_id) : null;
+            const contacto = refContacto(tarea) ? contactos.find(c => c.id === refContacto(tarea)) : null;
             const fechaTarea = new Date(tarea.fecha_limite + 'T12:00:00');
             const vencida = !tarea.completada && fechaTarea < hoy;
             const esHoy = !tarea.completada && fechaTarea.toDateString() === hoy.toDateString();
@@ -215,10 +220,10 @@ export default function TareasCRM() {
                     {tarea.asignado_a && (
                       <span className="text-xs text-muted-foreground">· {assignee?.full_name || tarea.asignado_a}</span>
                     )}
-                    {cliente ? (
+                    {contacto ? (
                       <span className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">
                         <Building2 className="w-2.5 h-2.5" />
-                        {cliente.nombre_empresa}
+                        {contacto.nombre}
                       </span>
                     ) : (
                       <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">General</span>

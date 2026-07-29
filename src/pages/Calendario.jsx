@@ -21,12 +21,16 @@ export default function Calendario() {
     queryFn: () => base44.entities.Tarea.list(),
     staleTime: 60_000,
   });
-  const { data: clientes = [] } = useQuery({
-    queryKey: ['clientes'],
-    queryFn: () => base44.entities.Cliente.list(),
+  const { data: contactos = [] } = useQuery({
+    queryKey: ['contactos'],
+    queryFn: () => base44.entities.Contacto.list(),
   });
 
-  const clienteMap = useMemo(() => Object.fromEntries(clientes.map(c => [c.id, c])), [clientes]);
+  const contactoMap = useMemo(() => Object.fromEntries(contactos.map(c => [c.id, c])), [contactos]);
+
+  // Tarea todavia guarda el vinculo en cliente_id (herencia del modelo anterior).
+  // Se lee contacto_id primero y se cae a cliente_id mientras dura el backfill.
+  const refContacto = (t) => t.contacto_id || t.cliente_id;
 
   const tareasByDay = useMemo(() => {
     const map = {};
@@ -108,17 +112,17 @@ export default function Calendario() {
                 <div className="space-y-0.5">
                   {dayTareas.slice(0, 2).map(t => {
                     const isOv = !t.completada && new Date(dateKey) < new Date(todayStr());
-                    const c = clienteMap[t.cliente_id];
+                    const c = contactoMap[refContacto(t)];
                     return (
                       <div
                         key={t.id}
-                        onClick={() => t.cliente_id && navigate(`/crm/cliente/${t.cliente_id}`)}
+                        onClick={() => refContacto(t) && navigate(`/crm/contactos/${refContacto(t)}`)}
                         className={`text-[10px] px-1.5 py-0.5 rounded truncate leading-tight ${
                           t.completada ? 'bg-green-100/60 text-green-700 dark:bg-green-950/30 dark:text-green-400 line-through' :
                           isOv ? 'bg-red-100/60 text-red-700 dark:bg-red-950/30 dark:text-red-400' :
                           'bg-primary/10 text-primary'
-                        } ${t.cliente_id ? 'cursor-pointer hover:opacity-80' : ''}`}
-                        title={`${t.titulo}${c ? ` — ${c.nombre_empresa}` : ''}${t.asignado_a ? ` (${t.asignado_a.split('@')[0]})` : ''}`}
+                        } ${refContacto(t) ? 'cursor-pointer hover:opacity-80' : ''}`}
+                        title={`${t.titulo}${c ? ` — ${c.nombre}` : ''}${t.asignado_a ? ` (${t.asignado_a.split('@')[0]})` : ''}`}
                       >
                         {t.titulo}
                       </div>
@@ -144,24 +148,24 @@ export default function Calendario() {
           {monthTareas.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">Sin tareas este mes</div>
           ) : monthTareas.map(t => {
-            const c = clienteMap[t.cliente_id];
+            const c = contactoMap[refContacto(t)];
             const isOv = !t.completada && new Date(t.fecha_limite) < new Date(todayStr());
             const isToday2 = new Date(t.fecha_limite).toDateString() === todayStr();
             return (
               <div
                 key={t.id}
-                className={`flex items-center gap-3 px-5 py-3 transition-colors ${t.cliente_id ? 'hover:bg-muted/20' : ''}`}
+                className={`flex items-center gap-3 px-5 py-3 transition-colors ${refContacto(t) ? 'hover:bg-muted/20' : ''}`}
               >
-                <button className="flex-shrink-0" onClick={() => t.cliente_id && navigate(`/crm/cliente/${t.cliente_id}`)}>
+                <button className="flex-shrink-0" onClick={() => refContacto(t) && navigate(`/crm/contactos/${refContacto(t)}`)}>
                   {t.completada
                     ? <CheckCircle2 className="w-4 h-4 text-green-500" />
                     : isOv
                     ? <AlertTriangle className="w-4 h-4 text-destructive" />
                     : <Clock className="w-4 h-4 text-muted-foreground/40" />}
                 </button>
-                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => t.cliente_id && navigate(`/crm/cliente/${t.cliente_id}`)}>
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => refContacto(t) && navigate(`/crm/contactos/${refContacto(t)}`)}>
                   <p className={`text-sm ${t.completada ? 'line-through text-muted-foreground' : 'text-foreground'}`}>{t.titulo}</p>
-                  {c && <p className="text-xs text-muted-foreground truncate">{c.nombre_empresa}</p>}
+                  {c && <p className="text-xs text-muted-foreground truncate">{c.nombre}</p>}
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {t.asignado_a && (
@@ -175,7 +179,7 @@ export default function Calendario() {
                   </span>
                   {gcalEventLink({ titulo: t.titulo, fecha_limite: t.fecha_limite, hora: t.hora || '' }) && (
                     <a
-                      href={gcalEventLink({ titulo: t.titulo, fecha_limite: t.fecha_limite, hora: t.hora || '', descripcion: c ? `Cliente: ${c.nombre_empresa}` : '' })}
+                      href={gcalEventLink({ titulo: t.titulo, fecha_limite: t.fecha_limite, hora: t.hora || '', descripcion: c ? `Cliente: ${c.nombre}` : '' })}
                       target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"

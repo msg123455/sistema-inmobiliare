@@ -1,34 +1,34 @@
 {
-  "name": "CampanaAds",
   "type": "object",
+  "name": "CampanaAds",
   "properties": {
     "nombre": {
       "type": "string",
-      "description": "Nombre interno de la campaña (ej: Rosales Compra Enero)"
+      "description": "Nombre interno de la campa\u00f1a (ej: Rosales Compra Enero)"
     },
     "que_promociona": {
       "type": "string",
-      "description": "Qué se está promocionando exactamente (oferta, tipo de inmueble, gancho del anuncio)"
+      "description": "Qu\u00e9 se est\u00e1 promocionando exactamente (oferta, tipo de inmueble, gancho del anuncio)"
     },
     "trigger_mensaje": {
       "type": "string",
-      "description": "Frase distintiva del PRIMER mensaje del anuncio (ej: 'quiero mas informacion' o 'mi nombre es y estoy buscando'). Sirve para reconocer por qué anuncio entró el lead."
+      "description": "Frase distintiva del PRIMER mensaje del anuncio (ej: 'quiero mas informacion' o 'mi nombre es y estoy buscando'). Sirve para reconocer por qu\u00e9 anuncio entr\u00f3 el lead."
     },
     "mensaje_bienvenida": {
       "type": "string",
-      "description": "Info del inmueble que Valentina manda de una en el primer mensaje. Si se deja vacío, se arma con los inmuebles seleccionados."
+      "description": "Info del inmueble que Valentina manda de una en el primer mensaje. Si se deja vac\u00edo, se arma con los inmuebles seleccionados."
     },
     "link_ficha": {
       "type": "string",
-      "description": "Link EXACTO de la ficha técnica del inmueble (pégalo a mano). Tiene prioridad sobre el link que trae WASI, por si ese está mal."
+      "description": "Link EXACTO de la ficha t\u00e9cnica del inmueble (p\u00e9galo a mano). Tiene prioridad sobre el link que trae WASI, por si ese est\u00e1 mal."
     },
     "contexto_agente": {
       "type": "string",
-      "description": "Contexto que Valentina debe manejar sobre esta campaña para dar respuestas alineadas"
+      "description": "Contexto que Valentina debe manejar sobre esta campa\u00f1a para dar respuestas alineadas"
     },
     "zona": {
       "type": "string",
-      "description": "Zona o barrio que promociona la campaña"
+      "description": "Zona o barrio que promociona la campa\u00f1a"
     },
     "rango_precio": {
       "type": "string",
@@ -36,34 +36,42 @@
     },
     "operacion": {
       "type": "string",
-      "enum": ["Venta", "Arriendo", "Ambos"],
-      "description": "Tipo de operación que promociona"
+      "description": "Tipo de operaci\u00f3n que promociona",
+      "enum": [
+        "Venta",
+        "Arriendo",
+        "Ambos"
+      ]
     },
     "inmuebles": {
       "type": "array",
-      "items": { "type": "string" },
+      "description": "IDs de las propiedades (entidad Propiedad) que promociona esta campa\u00f1a",
       "default": [],
-      "description": "IDs de las propiedades (entidad Propiedad) que promociona esta campaña"
+      "items": {
+        "type": "string"
+      }
     },
     "activa": {
       "type": "boolean",
-      "default": false,
-      "description": "Si la campaña está activa (el agente inyecta su contexto)"
+      "description": "Si la campa\u00f1a est\u00e1 activa (el agente inyecta su contexto)",
+      "default": false
     },
     "meta_ad_id": {
       "type": "string",
-      "description": "ID del anuncio o campaña en Meta, para atribución por lead (Fase B)"
+      "description": "ID del anuncio o campa\u00f1a en Meta, para atribuci\u00f3n por lead (Fase B)"
     },
     "fecha_inicio": {
       "type": "string",
-      "format": "date",
-      "description": "Fecha de inicio de la campaña"
+      "description": "Fecha de inicio de la campa\u00f1a",
+      "format": "date"
     },
     "fecha_fin": {
       "type": "string",
-      "format": "date",
-      "description": "Fecha de fin de la campaña"
+      "description": "Fecha de fin de la campa\u00f1a",
+      "format": "date"
     }
   },
-  "required": ["nombre"]
+  "required": [
+    "nombre"
+  ]
 }

@@ -1,48 +1,53 @@
 {
   "name": "MensajeTemplate",
   "type": "object",
+  "description": "Plantilla de mensaje reutilizable por canal. Soporta variables {{nombre}} {{propiedad}} {{precio}} {{fecha}} {{agente}} {{ciudad}} y puede dispararse autom\u00e1ticamente ante un evento del pipeline.",
   "properties": {
     "nombre": {
       "type": "string",
-      "description": "Nombre interno"
+      "description": "Nombre interno de la plantilla"
     },
     "canal": {
       "type": "string",
       "enum": [
         "WhatsApp",
-        "Email",
-        "SMS"
+        "Instagram",
+        "Facebook",
+        "Email"
       ],
       "default": "WhatsApp",
-      "description": "Canal"
+      "description": "Canal por el que se env\u00eda"
     },
-    "meta_template_name": {
+    "trigger": {
       "type": "string",
-      "description": "Nombre de la plantilla aprobada en Meta"
+      "enum": [
+        "manual",
+        "nuevo_lead",
+        "visita_agendada",
+        "visita_recordatorio",
+        "seguimiento_post_visita",
+        "oferta_recibida",
+        "contrato_proximo_vencer"
+      ],
+      "default": "manual",
+      "description": "Evento que dispara el env\u00edo"
     },
-    "cuerpo": {
+    "asunto": {
       "type": "string",
-      "description": "Texto con variables {{1}}, {{2}}"
+      "description": "Asunto del correo; solo aplica cuando canal es Email"
     },
-    "variables": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "default": [],
-      "description": "Que representa cada variable"
-    },
-    "categoria": {
+    "contenido": {
       "type": "string",
-      "description": "Utility, Marketing o Authentication"
+      "description": "Cuerpo del mensaje con variables interpoladas"
     },
-    "activa": {
+    "auto_envio": {
       "type": "boolean",
-      "description": "Si esta en uso",
-      "default": true
+      "default": false,
+      "description": "Si true, se env\u00eda solo al dispararse el trigger sin intervenci\u00f3n humana"
     }
   },
   "required": [
-    "nombre"
+    "nombre",
+    "contenido"
   ]
 }

@@ -12,6 +12,7 @@ import { Conversacion } from '@/api/base44Client';
 import NotificationBell from '@/components/NotificationBell';
 import MobileTabBar from '@/components/MobileTabBar';
 import ThemeToggle from '@/components/ThemeToggle';
+import { MARCA } from '@/lib/marca';
 import { Imagotipo, Isotipo } from '@/components/Logo';
 import { useUserRole } from '@/hooks/useUserRole';
 
@@ -299,7 +300,7 @@ export default function Layout() {
           {/* Imagotipo completo en pantallas donde cabe por encima del tamaño
               mínimo del manual; en móvil solo el isotipo. */}
           <Imagotipo className="hidden sm:inline-flex text-[15px] text-foreground" />
-          <Isotipo className="sm:hidden h-7 w-auto text-primary" title="Inmobiliare Julio Corredor" />
+          <Isotipo className="sm:hidden h-7 w-auto text-primary" title={MARCA.nombre} />
         </Link>
 
         <div className="flex-1" />

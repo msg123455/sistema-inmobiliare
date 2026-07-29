@@ -1,6 +1,6 @@
 {
-  "name": "SyncState",
   "type": "object",
+  "name": "SyncState",
   "properties": {
     "sync_token": {
       "type": "string",
@@ -8,8 +8,8 @@
     },
     "ultima_sincronizacion": {
       "type": "string",
-      "format": "date-time",
-      "description": "\u00daltima fecha de sincronizaci\u00f3n exitosa"
+      "description": "\u00daltima fecha de sincronizaci\u00f3n exitosa",
+      "format": "date-time"
     }
   },
   "required": []

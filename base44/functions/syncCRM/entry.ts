@@ -2,7 +2,7 @@
 // GET  /api/functions/syncCRM?token=SYNCWASI2026
 // POST /api/functions/syncCRM  { token: "SYNCWASI2026" }  (desde el frontend)
 Deno.serve(async (req) => {
-  const BASE_URL = 'https://ndsoftware.base44.app';
+  const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 

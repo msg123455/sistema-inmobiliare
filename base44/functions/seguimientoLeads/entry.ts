@@ -9,7 +9,7 @@
 // Corre en cron (Base44 automation en function.jsonc) cada 30 min.
 
 const TOKEN = 'SEGUIMIENTO2026';
-const BASE_URL = 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 // Follow-ups al LEAD por WhatsApp solo dentro de la ventana de 24h de Meta (texto
 // libre sin plantilla). 3h y 20h caen dentro; +24h necesitaria plantilla.
 const UMBRALES_H = [3, 20]; // horas de silencio para el seguimiento #1 y #2

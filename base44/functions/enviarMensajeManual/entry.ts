@@ -32,7 +32,12 @@ Deno.serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch { /* body vacio */ }
 
-  const esperado = Deno.env.get('BANDEJA_TOKEN') || '';
+  // Mismo nombre que envia src/lib/backend.js (VITE_FUNCTIONS_TOKEN); si los dos
+  // lados no coinciden, la Bandeja recibe 401 sin explicacion.
+  // Falla cerrado a proposito: sin la variable puesta no se atiende a nadie. El
+  // token viaja al navegador, asi que no es un secreto — es solo una barrera
+  // contra invocaciones sueltas, no autenticacion de usuario.
+  const esperado = Deno.env.get('FUNCTIONS_TOKEN') || '';
   if (!esperado || String(body.token || '') !== esperado) return json({ error: 'Unauthorized' }, 401);
   if (!BASE_URL) return json({ error: 'BASE44_APP_URL no configurada' }, 500);
 

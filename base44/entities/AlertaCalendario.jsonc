@@ -1,6 +1,6 @@
 {
-  "name": "AlertaCalendario",
   "type": "object",
+  "name": "AlertaCalendario",
   "properties": {
     "event_id": {
       "type": "string",
@@ -16,13 +16,13 @@
     },
     "fecha_inicio": {
       "type": "string",
-      "format": "date-time",
-      "description": "Fecha y hora de inicio del evento"
+      "description": "Fecha y hora de inicio del evento",
+      "format": "date-time"
     },
     "fecha_fin": {
       "type": "string",
-      "format": "date-time",
-      "description": "Fecha y hora de fin del evento"
+      "description": "Fecha y hora de fin del evento",
+      "format": "date-time"
     },
     "ubicacion": {
       "type": "string",
@@ -34,8 +34,8 @@
     },
     "leido": {
       "type": "boolean",
-      "default": false,
-      "description": "Si la alerta ha sido le\u00edda"
+      "description": "Si la alerta ha sido le\u00edda",
+      "default": false
     }
   },
   "required": [

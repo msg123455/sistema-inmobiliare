@@ -6,7 +6,7 @@ const MIN_VENTA    = 1_000_000_000; // piso oficial ND: $1.000M
 const MIN_ARRIENDO = 5_000_000;     // piso oficial ND: $5M/mes
 const DESC_VENTA    = 700_000_000;  // debajo de esto sí se descalifica; entre esto y MIN = zona gris (se envía al broker con aviso)
 const DESC_ARRIENDO = 4_000_000;
-const BASE_URL     = 'https://ndsoftware.base44.app';
+const BASE_URL     = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const rand  = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 

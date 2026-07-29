@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MemoriaChat } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
+import { callFunction } from '@/lib/backend';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -120,17 +120,7 @@ export default function Inbox() {
     if (!texto) return;
     setEnviando(true);
     try {
-      const base = String(appParams.appBaseUrl || '').replace(/\/+$/, '');
-      const r = await fetch(`${base}/api/functions/enviarMensajeManual`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tel: conv.tel, canal: conv.canal, mensaje: texto,
-          token: import.meta.env.VITE_BANDEJA_TOKEN,
-        }),
-      });
-      const res = await r.json().catch(() => ({}));
-      if (!r.ok || res?.error) throw new Error(res?.error || `Error ${r.status}`);
+      await callFunction('enviarMensajeManual', { tel: conv.tel, canal: conv.canal, mensaje: texto });
       setMensaje('');
       await refetchMemorias();
       toast.success('Mensaje enviado');

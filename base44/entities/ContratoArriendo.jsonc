@@ -1,75 +1,113 @@
 {
   "name": "ContratoArriendo",
   "type": "object",
+  "description": "Contrato de arrendamiento entre propietario y arrendatario, administrado por la inmobiliaria. Soporta renovaci\u00f3n autom\u00e1tica con incremento anual.",
   "properties": {
-    "numero_contrato": {
-      "type": "string",
-      "description": "Numero interno del contrato"
-    },
     "propiedad_id": {
       "type": "string",
-      "description": "Inmueble arrendado"
+      "description": "ID de la Propiedad arrendada"
+    },
+    "propiedad_titulo": {
+      "type": "string",
+      "description": "T\u00edtulo de la propiedad, desnormalizado para listar sin join"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto que act\u00faa como arrendatario"
+    },
+    "arrendatario_nombre": {
+      "type": "string",
+      "description": "Nombre del arrendatario, desnormalizado"
     },
     "propietario_id": {
       "type": "string",
-      "description": "Dueno del inmueble"
+      "description": "ID del Propietario del inmueble"
     },
-    "arrendatario_id": {
+    "propietario_nombre": {
       "type": "string",
-      "description": "Quien lo habita"
+      "description": "Nombre del propietario, desnormalizado"
     },
-    "arrendatario_telefono": {
-      "type": "string",
-      "description": "Telefono del arrendatario. Senal de ruteo del agente."
-    },
-    "direccion_inmueble": {
-      "type": "string",
-      "description": "Direccion del inmueble"
-    },
-    "canon": {
+    "canon_mensual": {
       "type": "number",
-      "description": "Canon mensual en pesos"
+      "description": "Canon de arrendamiento mensual en COP"
     },
-    "valor_administracion": {
+    "administracion_pct": {
       "type": "number",
-      "description": "Administracion mensual en pesos"
+      "default": 10,
+      "description": "Porcentaje de administraci\u00f3n que retiene la inmobiliaria"
     },
-    "dia_pago": {
+    "deposito": {
       "type": "number",
-      "description": "Dia del mes en que vence el canon"
+      "description": "Dep\u00f3sito o garant\u00eda en COP"
     },
     "fecha_inicio": {
       "type": "string",
       "format": "date",
-      "description": "Inicio de vigencia"
+      "description": "Fecha de inicio del contrato"
     },
     "fecha_fin": {
       "type": "string",
       "format": "date",
-      "description": "Fin de vigencia"
+      "description": "Fecha de vencimiento del contrato"
+    },
+    "duracion_meses": {
+      "type": "number",
+      "default": 12,
+      "description": "Duraci\u00f3n del contrato en meses"
+    },
+    "incremento_anual_pct": {
+      "type": "number",
+      "default": 4,
+      "description": "Porcentaje de incremento aplicado en cada renovaci\u00f3n"
+    },
+    "dia_pago": {
+      "type": "number",
+      "default": 1,
+      "description": "D\u00eda del mes en que vence el pago del canon (1-28)"
     },
     "estado": {
       "type": "string",
       "enum": [
         "Activo",
         "Por_vencer",
-        "Terminado",
-        "En_mora"
+        "Vencido",
+        "Terminado"
       ],
       "default": "Activo",
       "description": "Estado del contrato"
     },
-    "tiene_seguro": {
-      "type": "boolean",
-      "description": "Tiene poliza de arrendamiento",
-      "default": false
+    "renovaciones": {
+      "type": "array",
+      "description": "Hist\u00f3rico de renovaciones aplicadas",
+      "items": {
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date",
+            "description": "Fecha en que se aplic\u00f3 la renovaci\u00f3n"
+          },
+          "nuevo_canon": {
+            "type": "number",
+            "description": "Canon resultante tras el incremento"
+          },
+          "nueva_fecha_fin": {
+            "type": "string",
+            "format": "date",
+            "description": "Nueva fecha de vencimiento"
+          }
+        }
+      }
     },
-    "comision_pct": {
-      "type": "number",
-      "description": "Comision de administracion, en porcentaje"
+    "notas": {
+      "type": "string",
+      "description": "Notas internas del contrato"
     }
   },
   "required": [
-    "arrendatario_id"
+    "propiedad_id",
+    "contacto_id",
+    "canon_mensual",
+    "fecha_inicio"
   ]
 }

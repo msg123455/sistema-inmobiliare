@@ -1,5 +1,5 @@
 // Propiedades del catálogo que mejor encajan con un lead. POST { contacto_id, limit? }
-const BASE_URL = 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',

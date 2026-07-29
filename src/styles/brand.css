@@ -1,156 +1,118 @@
-/* ============================================================================
-   MARCA — INMOBILIARE Julio Corredor desde 1960
+/* ─────────────────────────────────────────────────────────────────────────────
+   INMOBILIARE Julio Corredor — Tokens de marca
    Fuente: Manual de Marca Inmobiliare Julio Corredor
+   ─────────────────────────────────────────────────────────────────────────────
 
-   Este es el UNICO archivo que hay que tocar para re-skinear la aplicacion.
-   Nada de aqui depende de un componente; todo se consume via hsl(var(--*)).
+   Este es el UNICO archivo que se toca para aplicar el manual de marca.
+   Contiene decisiones de marca (color, tipografia, radio). El mapeo semantico
+   —que token es "card", cual es "muted"— vive en index.css y no deberia cambiar
+   al re-skinear.
 
-   Nota sobre el manual: la pagina 14 anota el morado como "RGB 54,0,207" y la
-   pagina 18 como "WEB: 6600CC". Ambas se contradicen con el hex 5400CF, que
-   es RGB(84,0,207) y aparece consistente en las paginas 9 y 18. Se toma
-   #5400CF como autoridad. Igual, "RGB: 2221,221,221" del gris DDDDDD es un
-   dedazo por 221,221,221.
-   ============================================================================ */
+   Formato: los valores de color son tripletas HSL SIN envolver en hsl(), porque
+   Tailwind las consume como `hsl(var(--token))` y necesita componerlas con alpha
+   (ej. `bg-primary/50`). Escribir `#5400CF` aqui rompe las variantes de opacidad.
+
+   Discrepancias del manual, resueltas: la pag. 14 anota el morado como
+   "RGB 54,0,207" y la pag. 18 como "WEB: 6600CC". Ambas se contradicen con el
+   hex 5400CF, que es RGB(84,0,207) y aparece consistente en las pags. 9 y 18;
+   se toma #5400CF como autoridad. Igual, "RGB: 2221,221,221" del gris DDDDDD
+   es un dedazo por 221,221,221.
+   ────────────────────────────────────────────────────────────────────────────── */
+
+/* DM Sans (manual, pags. 19-21) va AUTO-HOSPEDADA via @fontsource.
+   No usar @import de Google Fonts aqui: el CSP de index.html declara
+   `font-src 'self'`, asi que la hoja remota se bloquea y la fuente nunca carga
+   —exactamente lo que le pasaba a Inter, que caia al font del sistema sin
+   avisar. Auto-hospedarla ademas evita una peticion a un tercero y funciona
+   sin conexion. Los pesos van en un solo archivo variable. */
+@import '@fontsource-variable/dm-sans/index.css';
+@import '@fontsource-variable/dm-sans/wght-italic.css';
 
 :root {
-  /* ── Tipografia ───────────────────────────────────────────────────────────
-     DM Sans es la tipografia principal del manual (Regular, Medium, Bold, con
-     italicas). Va auto-hospedada via @fontsource: el CSP de index.html
-     (`style-src 'self'`) bloquea Google Fonts, asi que un @import remoto
-     fallaria en silencio y caeria al fallback del sistema. */
-  --font-sans: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont,
-               'SF Pro Text', system-ui, sans-serif;
-  --font-display: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont,
-                  'SF Pro Display', system-ui, sans-serif;
+  /* ── Tipografia ─────────────────────────────────────────────────────────── */
+  /* Cuerpo de texto e interfaz. */
+  --brand-font-sans: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  /* Titulares. El manual especifica una sola familia, asi que display apunta a
+     la misma; el token existe para que un cambio futuro entre por un lado solo. */
+  --brand-font-display: var(--brand-font-sans);
+  /* DM Sans es geometrica y de ojo grande: aguanta el tracking un poco mas
+     cerrado que la Inter que habia antes sin perder legibilidad. */
+  --brand-tracking: -0.011em;
 
-  /* ── Colores del logo (manual, pag. 9 y 14) ───────────────────────────────
-     Se guardan en HSL sin envolver para poder componer opacidades con Tailwind
-     (`bg-primary/10`). El valor hex va al lado para poder cotejarlo contra el
-     manual sin tener que convertir nada. */
-  --marca-morado:      264 100% 41%;  /* #5400CF — morado principal */
-  --marca-negro:         0   0%  0%;  /* #000000 */
-  --marca-gris-claro:    0   0% 81%;  /* #CECECE */
-  --marca-gris-isotipo:  0   0% 46%;  /* #757575 — isotipo en gris */
+  /* ── Color de marca ─────────────────────────────────────────────────────── */
+  /* #5400CF. Da 9.2:1 contra blanco, asi que sirve de relleno con texto blanco
+     encima y tambien de color de texto sobre fondo claro. */
+  --brand-primary: 264 100% 41%;
+  --brand-primary-foreground: 0 0% 100%;
+  --brand-accent: 264 100% 41%;
+  --brand-accent-foreground: 0 0% 100%;
 
-  /* ── Paleta monocromatica (manual, pag. 18) ───────────────────────────────
-     "puede ser evolucionada y modificada sin perder la linea grafica". */
-  --marca-indigo:      244 100% 29%;  /* #0A0094 */
-  --marca-azul:        225 100% 41%;  /* #0033CF */
-  --marca-violeta:     283 100% 41%;  /* #9600CF */
-  --marca-magenta:     299 100% 41%;  /* #CC00CF */
-  --marca-gris-humo:     0   0% 87%;  /* #DDDDDD */
-  --marca-gris-medio:    0   0% 40%;  /* #666666 */
+  /* Resto del logo (manual, pag. 9 y 14). No se mapean a tokens semanticos;
+     estan para componentes que reproducen el logo o piden gris de marca. */
+  --brand-negro: 0 0% 0%;           /* #000000 */
+  --brand-gris-claro: 0 0% 81%;     /* #CECECE */
+  --brand-gris-isotipo: 0 0% 46%;   /* #757575 — isotipo en gris */
 
-  /* ── Radios (lenguaje iOS) ─────────────────────────────────────────────── */
-  --radius: 0.875rem;
+  /* ── Color funcional ────────────────────────────────────────────────────── */
+  /* Usados para estados, no para identidad. El manual no los define, pero deben
+     convivir con la paleta sin chocar. */
+  --brand-danger: 0 72% 51%;
+  --brand-danger-foreground: 0 0% 100%;
+  --brand-success: 145 63% 38%;
+  --brand-success-foreground: 0 0% 100%;
+  --brand-warning: 38 92% 45%;
+  --brand-warning-foreground: 0 0% 100%;
 
-  /* ── Semanticos: claro ────────────────────────────────────────────────────
-     El morado #5400CF da 9.2:1 contra blanco, asi que sirve tanto de relleno
-     con texto blanco encima como de color de texto sobre fondo claro. */
-  --background: 264 20% 98%;
-  --foreground: 264 30% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 264 30% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 264 30% 10%;
+  /* ── Neutros ────────────────────────────────────────────────────────────── */
+  /* Tono base de los grises (fondos, bordes, texto secundario). Sesgarlos hacia
+     el morado en vez de dejarlos neutros puros hace que la interfaz se sienta de
+     la marca incluso donde no hay color de marca a la vista.
+     Vive aqui, y no en index.css, para que re-skinear siga siendo un solo
+     archivo: sin este token los grises quedarian clavados en el tono anterior. */
+  --brand-neutral-hue: 264;
 
-  --primary: var(--marca-morado);
-  --primary-foreground: 0 0% 100%;
-  --secondary: 264 25% 96%;
-  --secondary-foreground: 264 30% 10%;
-  --muted: 264 20% 96%;
-  --muted-foreground: 264 8% 45%;
-  --accent: 264 30% 95%;
-  --accent-foreground: var(--marca-morado);
+  /* ── Forma ──────────────────────────────────────────────────────────────── */
+  --brand-radius: 0.875rem;
 
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 145 63% 38%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 45%;
-  --warning-foreground: 0 0% 100%;
-
-  --border: 264 15% 90%;
-  --input: 264 15% 90%;
-  --ring: var(--marca-morado);
-
-  /* Series de datos.
-     La paleta del manual abarca de 225° a 299°: 74 grados de tono para cinco
-     categorias. Solo con tono las series contiguas se confunden, asi que se
-     alternan tambien en luminosidad — cada par vecino se diferencia por dos
-     canales, no por uno. Eso ademas las mantiene distinguibles impresas en
-     escala de grises.
+  /* ── Paleta de datos ────────────────────────────────────────────────────── */
+  /* La paleta monocromatica del manual (pag. 18) abarca de 225° a 299°: 74
+     grados de tono para cinco categorias. Solo con tono las series contiguas se
+     confunden, asi que se alternan tambien en luminosidad — cada par vecino se
+     diferencia por dos canales, no por uno. Eso ademas las mantiene
+     distinguibles impresas en escala de grises.
      Cinco es el techo de esta rampa: para mas series hay que cambiar de
      codificacion (posicion, etiqueta directa), no estirar el morado. */
-  --chart-1: 264 100% 41%;  /* morado de marca, el ancla */
-  --chart-2: 225 100% 45%;  /* azul */
-  --chart-3: 299 100% 41%;  /* magenta */
-  --chart-4: 244 100% 28%;  /* indigo profundo */
-  --chart-5: 283  70% 62%;  /* violeta claro */
-
-  --sidebar-background: 0 0% 100%;
-  --sidebar-foreground: 264 30% 10%;
-  --sidebar-primary: var(--marca-morado);
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 264 25% 96%;
-  --sidebar-accent-foreground: 264 30% 10%;
-  --sidebar-border: 264 15% 90%;
-  --sidebar-ring: var(--marca-morado);
-
-  /* Superficie translucida de las barras (efecto iOS) */
-  --superficie-vidrio: 0 0% 100%;
+  --brand-chart-1: 264 100% 41%;  /* #5400CF morado de marca, el ancla */
+  --brand-chart-2: 225 100% 45%;  /* azul, de #0033CF */
+  --brand-chart-3: 299 100% 41%;  /* #CC00CF magenta */
+  --brand-chart-4: 244 100% 28%;  /* #0A0094 indigo profundo */
+  --brand-chart-5: 283  70% 62%;  /* violeta claro, de #9600CF */
 }
 
-/* ── Semanticos: oscuro ─────────────────────────────────────────────────────
-   El #5400CF puro sobre fondo oscuro da 1.9:1 y es ilegible. En oscuro el
-   morado sube a 72% de luminosidad (#AA70FF, 5.9:1), que es la misma marca
-   corrida en la rampa, no un color distinto. El manual lo permite: la paleta
-   "puede ser evolucionada conservando el mismo lenguaje". */
-.dark,
-:root[data-theme='dark'] {
-  --background: 264 18% 7%;
-  --foreground: 264 10% 96%;
-  --card: 264 16% 11%;
-  --card-foreground: 264 10% 96%;
-  --popover: 264 16% 11%;
-  --popover-foreground: 264 10% 96%;
+/* ── Marca en tema oscuro ───────────────────────────────────────────────────
+   El #5400CF puro sobre fondo oscuro da 1.9:1 y es ilegible. Aqui el morado
+   sube a 72% de luminosidad (#AA70FF, 5.9:1): es la misma marca corrida en su
+   propia rampa, no otro color. El manual lo contempla — la paleta "puede ser
+   evolucionada y modificada sin perder la linea grafica".
 
-  --primary: 264 100% 72%;
-  --primary-foreground: 264 40% 8%;
-  --secondary: 264 14% 17%;
-  --secondary-foreground: 264 10% 96%;
-  --muted: 264 14% 17%;
-  --muted-foreground: 264 8% 62%;
-  --accent: 264 20% 20%;
-  --accent-foreground: 264 100% 80%;
+   Va en brand.css y no en index.css porque es una decision de MARCA (que morado
+   representa a Inmobiliare sobre fondo oscuro), no de mapeo semantico. */
+.dark {
+  --brand-primary: 264 100% 72%;
+  --brand-primary-foreground: 264 40% 8%;
+  --brand-accent: 264 100% 72%;
+  --brand-accent-foreground: 264 40% 8%;
 
-  --destructive: 0 72% 58%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 145 55% 48%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 55%;
-  --warning-foreground: 264 40% 8%;
+  --brand-danger: 0 72% 58%;
+  --brand-success: 145 55% 48%;
+  --brand-warning: 38 92% 55%;
+  --brand-warning-foreground: 264 40% 8%;
 
-  --border: 264 12% 22%;
-  --input: 264 12% 22%;
-  --ring: 264 100% 72%;
-
-  /* Mismo criterio que en claro: tono y luminosidad alternados. Todo sube de
-     luminosidad porque el fondo es oscuro. */
-  --chart-1: 264 100% 72%;
-  --chart-2: 225 100% 66%;
-  --chart-3: 299 100% 74%;
-  --chart-4: 244  95% 84%;
-  --chart-5: 283  60% 56%;
-
-  --sidebar-background: 264 18% 9%;
-  --sidebar-foreground: 264 10% 96%;
-  --sidebar-primary: 264 100% 72%;
-  --sidebar-primary-foreground: 264 40% 8%;
-  --sidebar-accent: 264 14% 17%;
-  --sidebar-accent-foreground: 264 10% 96%;
-  --sidebar-border: 264 12% 22%;
-  --sidebar-ring: 264 100% 72%;
-
-  --superficie-vidrio: 264 16% 11%;
+  /* Mismo criterio que en claro: tono y luminosidad alternados, todo mas claro
+     porque el fondo es oscuro. */
+  --brand-chart-1: 264 100% 72%;
+  --brand-chart-2: 225 100% 66%;
+  --brand-chart-3: 299 100% 74%;
+  --brand-chart-4: 244  95% 84%;
+  --brand-chart-5: 283  60% 56%;
 }

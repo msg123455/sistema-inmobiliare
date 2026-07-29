@@ -179,7 +179,7 @@ export default function ConfigAgenteIA() {
   };
 
   // URL del webhook — endpoint de Base44 (distinto al frontend)
-  const appHost = window.location.hostname; // ej: ndsoftware.base44.app
+  const appHost = window.location.hostname; // ej: <tenant>.base44.app
   const webhookUrl = `https://${appHost}/api/functions/webhookWhatsApp`;
 
   return (

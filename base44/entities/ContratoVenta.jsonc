@@ -1,56 +1,95 @@
 {
   "name": "ContratoVenta",
   "type": "object",
+  "description": "Proceso de venta de un inmueble, desde la promesa de compraventa hasta la entrega. El estado avanza por un timeline de escrituraci\u00f3n.",
   "properties": {
-    "numero_contrato": {
-      "type": "string",
-      "description": "Numero interno"
-    },
     "propiedad_id": {
       "type": "string",
-      "description": "Inmueble vendido"
+      "description": "ID de la Propiedad vendida"
     },
-    "vendedor_id": {
+    "propiedad_titulo": {
       "type": "string",
-      "description": "Propietario vendedor"
+      "description": "T\u00edtulo de la propiedad, desnormalizado"
     },
     "comprador_id": {
       "type": "string",
-      "description": "Contacto comprador"
+      "description": "ID del Contacto que act\u00faa como comprador"
     },
-    "valor_venta": {
+    "comprador_nombre": {
+      "type": "string",
+      "description": "Nombre del comprador, desnormalizado"
+    },
+    "propietario_id": {
+      "type": "string",
+      "description": "ID del Propietario vendedor"
+    },
+    "propietario_nombre": {
+      "type": "string",
+      "description": "Nombre del vendedor, desnormalizado"
+    },
+    "precio_venta": {
       "type": "number",
-      "description": "Precio pactado en pesos"
+      "description": "Precio de venta pactado en COP"
     },
     "comision_pct": {
       "type": "number",
-      "description": "Comision en porcentaje"
+      "default": 3,
+      "description": "Porcentaje de comisi\u00f3n de la inmobiliaria"
+    },
+    "valor_comision": {
+      "type": "number",
+      "description": "Valor de la comisi\u00f3n en COP, calculado sobre el precio de venta"
+    },
+    "forma_pago": {
+      "type": "string",
+      "enum": [
+        "Contado",
+        "Credito_hipotecario",
+        "Leasing",
+        "Mixto"
+      ],
+      "default": "Contado",
+      "description": "Forma de pago acordada"
+    },
+    "entidad_financiera": {
+      "type": "string",
+      "description": "Banco o entidad que otorga el cr\u00e9dito, si aplica"
+    },
+    "arras": {
+      "type": "number",
+      "description": "Valor de las arras entregadas en COP"
+    },
+    "fecha_promesa": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de firma de la promesa de compraventa"
+    },
+    "fecha_escritura": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de firma de la escritura p\u00fablica"
     },
     "estado": {
       "type": "string",
       "enum": [
         "Promesa",
+        "Credito_en_estudio",
+        "Aprobado",
         "Escritura",
-        "Cerrado",
-        "Caido"
+        "Entregado",
+        "Cancelado"
       ],
       "default": "Promesa",
-      "description": "Etapa del negocio"
+      "description": "Etapa actual del proceso de venta"
     },
-    "fecha_promesa": {
+    "notas": {
       "type": "string",
-      "format": "date",
-      "description": "Fecha de la promesa"
-    },
-    "fecha_escritura": {
-      "type": "string",
-      "format": "date",
-      "description": "Fecha de escrituracion"
-    },
-    "asesor_id": {
-      "type": "string",
-      "description": "Asesor a cargo"
+      "description": "Notas internas del proceso"
     }
   },
-  "required": []
+  "required": [
+    "propiedad_id",
+    "comprador_id",
+    "precio_venta"
+  ]
 }

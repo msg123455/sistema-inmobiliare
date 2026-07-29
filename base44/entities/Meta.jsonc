@@ -1,6 +1,6 @@
 {
-  "name": "Meta",
   "type": "object",
+  "name": "Meta",
   "properties": {
     "titulo": {
       "type": "string",
@@ -8,13 +8,13 @@
     },
     "tipo": {
       "type": "string",
+      "description": "Tipo de meta",
       "enum": [
         "leads",
         "cierres",
         "revenue_usd",
         "valvulas_instaladas"
-      ],
-      "description": "Tipo de meta"
+      ]
     },
     "valor_meta": {
       "type": "number",
@@ -22,8 +22,8 @@
     },
     "valor_actual": {
       "type": "number",
-      "default": 0,
-      "description": "Progreso actual"
+      "description": "Progreso actual",
+      "default": 0
     },
     "mes": {
       "type": "number",
@@ -43,8 +43,8 @@
     },
     "completada": {
       "type": "boolean",
-      "default": false,
-      "description": "Si la meta fue alcanzada"
+      "description": "Si la meta fue alcanzada",
+      "default": false
     }
   },
   "required": [

@@ -1,9 +1,5 @@
-/* DM Sans auto-hospedada. NO usar @import de Google Fonts: el CSP de
-   index.html (`style-src 'self'`) lo bloquea y la fuente nunca carga. */
-@import '@fontsource-variable/dm-sans/index.css';
-@import '@fontsource-variable/dm-sans/wght-italic.css';
-
-/* Los tokens de marca viven en un solo archivo. Ver src/styles/brand.css. */
+/* Tokens de marca primero: define las variables --brand-* que este archivo mapea
+   a los tokens semanticos que consume Tailwind. Para re-skinear, editar brand.css. */
 @import './styles/brand.css';
 
 @tailwind base;
@@ -11,12 +7,109 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --font-sans: var(--brand-font-sans);
+    --font-display: var(--brand-font-display);
+
+    /* Light */
+    --background: var(--brand-neutral-hue) 20% 98%;
+    --foreground: var(--brand-neutral-hue) 30% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: var(--brand-neutral-hue) 30% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: var(--brand-neutral-hue) 30% 10%;
+    --primary: var(--brand-primary);
+    --primary-foreground: var(--brand-primary-foreground);
+    --secondary: var(--brand-neutral-hue) 25% 96%;
+    --secondary-foreground: var(--brand-neutral-hue) 30% 10%;
+    --muted: var(--brand-neutral-hue) 20% 96%;
+    --muted-foreground: var(--brand-neutral-hue) 8% 45%;
+    --accent: var(--brand-accent);
+    --accent-foreground: var(--brand-accent-foreground);
+    --destructive: var(--brand-danger);
+    --destructive-foreground: var(--brand-danger-foreground);
+    --success: var(--brand-success);
+    --success-foreground: var(--brand-success-foreground);
+    --warning: var(--brand-warning);
+    --warning-foreground: var(--brand-warning-foreground);
+    --border: var(--brand-neutral-hue) 15% 90%;
+    --input: var(--brand-neutral-hue) 15% 90%;
+    --ring: var(--brand-primary);
+    --chart-1: var(--brand-chart-1);
+    --chart-2: var(--brand-chart-2);
+    --chart-3: var(--brand-chart-3);
+    --chart-4: var(--brand-chart-4);
+    --chart-5: var(--brand-chart-5);
+    --radius: var(--brand-radius);
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: var(--brand-neutral-hue) 30% 10%;
+    --sidebar-primary: var(--brand-primary);
+    --sidebar-primary-foreground: var(--brand-primary-foreground);
+    --sidebar-accent: var(--brand-neutral-hue) 25% 96%;
+    --sidebar-accent-foreground: var(--brand-neutral-hue) 30% 10%;
+    --sidebar-border: var(--brand-neutral-hue) 15% 90%;
+    --sidebar-ring: var(--brand-primary);
+
+    /* Scrollbar — no son tokens de Tailwind, se usan crudos mas abajo. */
+    --scrollbar-thumb: var(--brand-neutral-hue) 10% 78%;
+    --scrollbar-thumb-hover: var(--brand-neutral-hue) 10% 66%;
+
+    /* Superficie translucida de las barras (efecto iOS). */
+    --superficie-vidrio: 0 0% 100%;
+  }
+
+  .dark {
+    --background: var(--brand-neutral-hue) 18% 7%;
+    --foreground: var(--brand-neutral-hue) 10% 96%;
+    --card: var(--brand-neutral-hue) 16% 11%;
+    --card-foreground: var(--brand-neutral-hue) 10% 96%;
+    --popover: var(--brand-neutral-hue) 16% 11%;
+    --popover-foreground: var(--brand-neutral-hue) 10% 96%;
+    --primary: var(--brand-primary);
+    --primary-foreground: var(--brand-primary-foreground);
+    --secondary: var(--brand-neutral-hue) 14% 17%;
+    --secondary-foreground: var(--brand-neutral-hue) 10% 96%;
+    --muted: var(--brand-neutral-hue) 14% 17%;
+    --muted-foreground: var(--brand-neutral-hue) 8% 62%;
+    --accent: var(--brand-accent);
+    --accent-foreground: var(--brand-accent-foreground);
+    --destructive: var(--brand-danger);
+    --destructive-foreground: var(--brand-danger-foreground);
+    --success: var(--brand-success);
+    --success-foreground: var(--brand-success-foreground);
+    --warning: var(--brand-warning);
+    --warning-foreground: var(--brand-warning-foreground);
+    --border: var(--brand-neutral-hue) 12% 22%;
+    --input: var(--brand-neutral-hue) 12% 22%;
+    --ring: var(--brand-primary);
+    --chart-1: var(--brand-chart-1);
+    --chart-2: var(--brand-chart-2);
+    --chart-3: var(--brand-chart-3);
+    --chart-4: var(--brand-chart-4);
+    --chart-5: var(--brand-chart-5);
+    --sidebar-background: var(--brand-neutral-hue) 18% 9%;
+    --sidebar-foreground: var(--brand-neutral-hue) 10% 96%;
+    --sidebar-primary: var(--brand-primary);
+    --sidebar-primary-foreground: var(--brand-primary-foreground);
+    --sidebar-accent: var(--brand-neutral-hue) 14% 17%;
+    --sidebar-accent-foreground: var(--brand-neutral-hue) 10% 96%;
+    --sidebar-border: var(--brand-neutral-hue) 12% 22%;
+    --sidebar-ring: var(--brand-primary);
+
+    --scrollbar-thumb: var(--brand-neutral-hue) 10% 30%;
+    --scrollbar-thumb-hover: var(--brand-neutral-hue) 10% 40%;
+
+    --superficie-vidrio: var(--brand-neutral-hue) 16% 11%;
+  }
+}
+
+@layer base {
   * {
     @apply border-border outline-ring/50;
   }
 
   html {
-    /* Evita que iOS reescale el texto al girar el dispositivo */
+    /* Evita que iOS reescale el texto al girar el dispositivo. */
     -webkit-text-size-adjust: 100%;
   }
 
@@ -25,18 +118,16 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.011em;
+    letter-spacing: var(--brand-tracking);
   }
 
-  /* DM Sans es geometrica y de ojo grande: los titulos aguantan un tracking
-     mas cerrado que el cuerpo sin perder legibilidad. */
   h1, h2, h3, h4 {
     font-family: var(--font-display);
     letter-spacing: -0.021em;
   }
 
   /* Cifras en tablas y estados de cuenta: mismo ancho por digito para que las
-     columnas de pesos no bailen. */
+     columnas de pesos no bailen entre filas. */
   .tabular {
     font-variant-numeric: tabular-nums;
     font-feature-settings: 'tnum';
@@ -81,13 +172,18 @@
   .pb-seguro { padding-bottom: env(safe-area-inset-bottom); }
 }
 
-/* Scrollbar fina, como en iOS. */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
+/* Scrollbar delgado. Sigue el tema en vez de hardcodear el color claro. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.3);
+  background: hsl(var(--scrollbar-thumb));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground) / 0.5);
+  background: hsl(var(--scrollbar-thumb-hover));
 }

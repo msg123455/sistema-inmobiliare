@@ -1,6 +1,6 @@
 {
-  "name": "Nota",
   "type": "object",
+  "name": "Nota",
   "properties": {
     "cliente_id": {
       "type": "string",
@@ -12,8 +12,8 @@
     },
     "fecha_nota": {
       "type": "string",
-      "format": "date-time",
-      "description": "Fecha y hora de la nota"
+      "description": "Fecha y hora de la nota",
+      "format": "date-time"
     }
   },
   "required": [

@@ -28,9 +28,7 @@ import ContratosArriendo from '@/pages/contratos/ContratosArriendo.jsx';
 import ContratosVenta from '@/pages/contratos/ContratosVenta.jsx';
 
 // Finanzas
-import Finanzas from '@/pages/Finanzas.jsx';
 import Gastos from '@/pages/finanzas/Gastos.jsx';
-import Proyecciones from '@/pages/Proyecciones.jsx';
 
 // Marketing
 import SEOPage from '@/pages/marketing/SEO.jsx';
@@ -98,12 +96,17 @@ const AuthenticatedApp = () => {
         <Route path="/contratos/arriendos" element={<ContratosArriendo />} />
         <Route path="/contratos/ventas" element={<ContratosVenta />} />
 
-        {/* Finanzas - Admin only */}
-        <Route path="/finanzas" element={<AdminOnly><Navigate to="/finanzas/flujo-caja" replace /></AdminOnly>} />
-        <Route path="/finanzas/flujo-caja" element={<AdminOnly><Finanzas /></AdminOnly>} />
-        <Route path="/finanzas/comisiones" element={<AdminOnly><Finanzas /></AdminOnly>} />
+        {/* Finanzas - Admin only.
+            Flujo de caja, comisiones y proyecciones modelaban el P&L del SaaS de
+            valvulas anterior (costo por valvula, reparto a socios) y no significan
+            nada para una inmobiliaria. Se retiran; el modulo financiero real se
+            construye sobre PagoCanon / LiquidacionPropietario en Fase 5.
+            Las rutas viejas redirigen a Gastos para no dejar enlaces rotos. */}
+        <Route path="/finanzas" element={<AdminOnly><Navigate to="/finanzas/gastos" replace /></AdminOnly>} />
         <Route path="/finanzas/gastos" element={<AdminOnly><Gastos /></AdminOnly>} />
-        <Route path="/finanzas/proyecciones" element={<AdminOnly><Proyecciones /></AdminOnly>} />
+        <Route path="/finanzas/flujo-caja" element={<Navigate to="/finanzas/gastos" replace />} />
+        <Route path="/finanzas/comisiones" element={<Navigate to="/finanzas/gastos" replace />} />
+        <Route path="/finanzas/proyecciones" element={<Navigate to="/finanzas/gastos" replace />} />
 
         {/* Marketing */}
         <Route path="/marketing/seo" element={<SEOPage />} />
@@ -130,7 +133,6 @@ const AuthenticatedApp = () => {
         {/* Redirects de rutas antiguas */}
         <Route path="/crm/negocios" element={<Navigate to="/crm/pipeline" replace />} />
         <Route path="/comercio/inventario" element={<Navigate to="/crm/propiedades" replace />} />
-        <Route path="/comercial/simulador" element={<Navigate to="/finanzas/proyecciones" replace />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
@@ -139,16 +141,9 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    // El bloque `.dark` de brand.css llevaba tiempo muerto: next-themes estaba
-    // instalado pero nunca montado. `attribute` lleva ambos selectores para que
-    // funcionen tanto `.dark` (que es lo que lee Tailwind) como
-    // `[data-theme]`.
-    <ThemeProvider
-      attribute={['class', 'data-theme']}
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
+    // Los tokens .dark ya existian en index.css pero nadie ponia la clase en <html>,
+    // asi que el modo oscuro estaba muerto. next-themes la aplica y la persiste.
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <AuthProvider>
         <QueryClientProvider client={queryClientInstance}>
           <Router>
