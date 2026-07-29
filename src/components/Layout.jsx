@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+// Solo los iconos de las cabeceras de seccion y de los enlaces sueltos: los
+// items de cada modulo van sin icono.
 import {
-  LayoutGrid, Users, Settings, LogOut, Home as HomeIcon, Menu, X,
-  ChevronRight, CalendarDays, ClipboardList,
-  Link2, UserCheck,
-  BarChart3, MessageSquare, Bot, LineChart, Megaphone, Globe, GraduationCap, SlidersHorizontal, Brain, Upload,
-  Building2, Wrench, Ruler, MessageSquareWarning, ClipboardCheck,
-  Wallet, Barcode, Receipt, Briefcase,
+  LayoutGrid, Users, Settings, LogOut, Menu, X, ChevronRight,
+  Link2, MessageSquare, Bot, Megaphone, Globe,
+  Wrench, Wallet, Briefcase,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { Conversacion } from '@/api/base44Client';
@@ -25,12 +24,12 @@ const NAV_SECTIONS = [
     icon: Users,
     basePath: '/crm',
     items: [
-      { label: 'Pipeline', path: '/crm/pipeline', icon: BarChart3 },
-      { label: 'Propiedades', path: '/crm/propiedades', icon: HomeIcon },
-      { label: 'Contactos', path: '/crm/contactos', icon: Users },
-      { label: 'Propietarios', path: '/crm/propietarios', icon: UserCheck },
-      { label: 'Visitas', path: '/crm/visitas', icon: CalendarDays },
-      { label: 'Tareas', path: '/crm/tareas', icon: ClipboardList },
+      { label: 'Pipeline', path: '/crm/pipeline' },
+      { label: 'Propiedades', path: '/crm/propiedades' },
+      { label: 'Contactos', path: '/crm/contactos' },
+      { label: 'Propietarios', path: '/crm/propietarios' },
+      { label: 'Visitas', path: '/crm/visitas' },
+      { label: 'Tareas', path: '/crm/tareas' },
     ],
   },
   {
@@ -39,11 +38,11 @@ const NAV_SECTIONS = [
     icon: Wrench,
     basePath: '/operacion',
     items: [
-      { label: 'Consignaciones', path: '/operacion/consignaciones', icon: Building2 },
-      { label: 'Reparaciones', path: '/operacion/reparaciones', icon: Wrench },
-      { label: 'Avalúos', path: '/operacion/avaluos', icon: Ruler },
-      { label: 'PQR', path: '/operacion/pqr', icon: MessageSquareWarning },
-      { label: 'Matrículas', path: '/operacion/matriculas', icon: ClipboardCheck },
+      { label: 'Consignaciones', path: '/operacion/consignaciones' },
+      { label: 'Reparaciones', path: '/operacion/reparaciones' },
+      { label: 'Avalúos', path: '/operacion/avaluos' },
+      { label: 'PQR', path: '/operacion/pqr' },
+      { label: 'Matrículas', path: '/operacion/matriculas' },
     ],
   },
   {
@@ -52,9 +51,9 @@ const NAV_SECTIONS = [
     icon: Wallet,
     basePath: '/cartera',
     items: [
-      { label: 'Recaudo', path: '/cartera/recaudo', icon: Wallet },
-      { label: 'Envíos', path: '/cartera/envios', icon: Barcode },
-      { label: 'Liquidaciones', path: '/cartera/liquidaciones', icon: Receipt },
+      { label: 'Recaudo', path: '/cartera/recaudo' },
+      { label: 'Envíos', path: '/cartera/envios' },
+      { label: 'Liquidaciones', path: '/cartera/liquidaciones' },
     ],
   },
   {
@@ -63,13 +62,13 @@ const NAV_SECTIONS = [
     icon: Bot,
     basePath: '/agente',
     items: [
-      { label: 'Bandejas por agente', path: '/inbox', icon: MessageSquare },
-      { label: 'Agentes', path: '/agente/agentes', icon: Bot },
-      { label: 'Configurar IA', path: '/agente/configuracion', icon: Bot },
-      { label: 'Autoeducación', path: '/agente/autoeducacion', icon: GraduationCap },
-      { label: 'Aprendizajes', path: '/agente/aprendizajes', icon: Brain },
-      { label: 'Config Evaluador', path: '/agente/config-evaluador', icon: SlidersHorizontal },
-      { label: 'Analítica Leads', path: '/analytics/leads', icon: LineChart },
+      { label: 'Bandejas por agente', path: '/inbox' },
+      { label: 'Agentes', path: '/agente/agentes' },
+      { label: 'Configurar IA', path: '/agente/configuracion' },
+      { label: 'Autoeducación', path: '/agente/autoeducacion' },
+      { label: 'Aprendizajes', path: '/agente/aprendizajes' },
+      { label: 'Config Evaluador', path: '/agente/config-evaluador' },
+      { label: 'Analítica Leads', path: '/analytics/leads' },
     ],
   },
   {
@@ -78,7 +77,7 @@ const NAV_SECTIONS = [
     icon: Globe,
     basePath: '/marketing/seo',
     items: [
-      { label: 'Motor de contenido', path: '/marketing/seo', icon: Globe },
+      { label: 'Motor de contenido', path: '/marketing/seo' },
     ],
   },
   {
@@ -87,7 +86,7 @@ const NAV_SECTIONS = [
     icon: Megaphone,
     basePath: '/marketing/campanas',
     items: [
-      { label: 'Campañas', path: '/marketing/campanas', icon: Megaphone },
+      { label: 'Campañas', path: '/marketing/campanas' },
     ],
   },
   {
@@ -96,9 +95,9 @@ const NAV_SECTIONS = [
     icon: Briefcase,
     basePath: '/equipo',
     items: [
-      { label: 'Asesores', path: '/equipo/asesores', icon: UserCheck },
-      { label: 'Calendario', path: '/equipo/calendario', icon: CalendarDays },
-      { label: 'Metas', path: '/equipo/metas', icon: BarChart3 },
+      { label: 'Asesores', path: '/equipo/asesores' },
+      { label: 'Calendario', path: '/equipo/calendario' },
+      { label: 'Metas', path: '/equipo/metas' },
     ],
   },
   {
@@ -107,8 +106,8 @@ const NAV_SECTIONS = [
     icon: Link2,
     basePath: '/integraciones',
     items: [
-      { label: 'Importar inventario', path: '/integraciones/inventario', icon: Upload },
-      { label: 'WASI', path: '/integraciones/wasi', icon: Link2 },
+      { label: 'Importar inventario', path: '/integraciones/inventario' },
+      { label: 'WASI', path: '/integraciones/wasi' },
     ],
   },
 ];
@@ -251,20 +250,21 @@ export default function Layout() {
 
               {isOpen && (
                 <div className="ml-4 mt-0.5 mb-1 space-y-0.5 border-l border-border/60 pl-2">
+                  {/* Los items van sin icono: dentro de una seccion ya abierta el
+                      icono no distingue nada y compite con el de la cabecera. La
+                      jerarquia la dan la sangria y la linea de la izquierda. */}
                   {visibleItems.map(item => {
                     const active = isItemActive(item.path);
-                    const ItemIcon = item.icon;
                     return (
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`presionable flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-[14px] ${
+                        className={`presionable flex items-center px-3 py-2 rounded-[8px] text-[14px] ${
                           active
                             ? 'bg-primary/10 text-primary font-medium'
                             : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                         }`}
                       >
-                        <ItemIcon className="w-4 h-4 flex-shrink-0" />
                         {item.label}
                       </Link>
                     );
