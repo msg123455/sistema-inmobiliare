@@ -1,6 +1,6 @@
 {
-  "name": "AprendizajeValentina",
   "type": "object",
+  "name": "AprendizajeValentina",
   "properties": {
     "regla": {
       "type": "string",
@@ -8,9 +8,13 @@
     },
     "estado": {
       "type": "string",
-      "enum": ["pendiente", "aprobada", "rechazada"],
-      "default": "pendiente",
-      "description": "pendiente = esperando aprobacion humana; aprobada = se inyecta a Valentina; rechazada = descartada"
+      "description": "pendiente = esperando aprobacion humana; aprobada = se inyecta a Valentina; rechazada = descartada",
+      "enum": [
+        "pendiente",
+        "aprobada",
+        "rechazada"
+      ],
+      "default": "pendiente"
     },
     "fuente": {
       "type": "string",
@@ -21,5 +25,7 @@
       "description": "Fecha ISO en que se genero la regla"
     }
   },
-  "required": ["regla"]
+  "required": [
+    "regla"
+  ]
 }

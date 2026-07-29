@@ -1,7 +1,7 @@
 {
   "name": "ContratoArriendo",
   "type": "object",
-  "description": "Contrato de arrendamiento entre propietario y arrendatario, administrado por la inmobiliaria. Soporta renovación automática con incremento anual.",
+  "description": "Contrato de arrendamiento entre propietario y arrendatario, administrado por la inmobiliaria. Soporta renovaci\u00f3n autom\u00e1tica con incremento anual.",
   "properties": {
     "propiedad_id": {
       "type": "string",
@@ -9,11 +9,11 @@
     },
     "propiedad_titulo": {
       "type": "string",
-      "description": "Título de la propiedad, desnormalizado para listar sin join"
+      "description": "T\u00edtulo de la propiedad, desnormalizado para listar sin join"
     },
     "contacto_id": {
       "type": "string",
-      "description": "ID del Contacto que actúa como arrendatario"
+      "description": "ID del Contacto que act\u00faa como arrendatario"
     },
     "arrendatario_nombre": {
       "type": "string",
@@ -34,11 +34,11 @@
     "administracion_pct": {
       "type": "number",
       "default": 10,
-      "description": "Porcentaje de administración que retiene la inmobiliaria"
+      "description": "Porcentaje de administraci\u00f3n que retiene la inmobiliaria"
     },
     "deposito": {
       "type": "number",
-      "description": "Depósito o garantía en COP"
+      "description": "Dep\u00f3sito o garant\u00eda en COP"
     },
     "fecha_inicio": {
       "type": "string",
@@ -53,34 +53,39 @@
     "duracion_meses": {
       "type": "number",
       "default": 12,
-      "description": "Duración del contrato en meses"
+      "description": "Duraci\u00f3n del contrato en meses"
     },
     "incremento_anual_pct": {
       "type": "number",
       "default": 4,
-      "description": "Porcentaje de incremento aplicado en cada renovación"
+      "description": "Porcentaje de incremento aplicado en cada renovaci\u00f3n"
     },
     "dia_pago": {
       "type": "number",
       "default": 1,
-      "description": "Día del mes en que vence el pago del canon (1-28)"
+      "description": "D\u00eda del mes en que vence el pago del canon (1-28)"
     },
     "estado": {
       "type": "string",
-      "enum": ["Activo", "Por_vencer", "Vencido", "Terminado"],
+      "enum": [
+        "Activo",
+        "Por_vencer",
+        "Vencido",
+        "Terminado"
+      ],
       "default": "Activo",
       "description": "Estado del contrato"
     },
     "renovaciones": {
       "type": "array",
-      "description": "Histórico de renovaciones aplicadas",
+      "description": "Hist\u00f3rico de renovaciones aplicadas",
       "items": {
         "type": "object",
         "properties": {
           "fecha": {
             "type": "string",
             "format": "date",
-            "description": "Fecha en que se aplicó la renovación"
+            "description": "Fecha en que se aplic\u00f3 la renovaci\u00f3n"
           },
           "nuevo_canon": {
             "type": "number",
@@ -99,5 +104,10 @@
       "description": "Notas internas del contrato"
     }
   },
-  "required": ["propiedad_id", "contacto_id", "canon_mensual", "fecha_inicio"]
+  "required": [
+    "propiedad_id",
+    "contacto_id",
+    "canon_mensual",
+    "fecha_inicio"
+  ]
 }

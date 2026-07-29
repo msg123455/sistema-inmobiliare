@@ -1,7 +1,7 @@
 {
   "name": "MensajeEnviado",
   "type": "object",
-  "description": "Registro de auditoría de cada mensaje saliente hacia un contacto. Lo escribe la función leadWhatsApp y el motor de plantillas.",
+  "description": "Registro de auditor\u00eda de cada mensaje saliente hacia un contacto. Lo escribe la funci\u00f3n leadWhatsApp y el motor de plantillas.",
   "properties": {
     "contacto_id": {
       "type": "string",
@@ -13,17 +13,22 @@
     },
     "contacto_telefono": {
       "type": "string",
-      "description": "Teléfono destino del envío"
+      "description": "Tel\u00e9fono destino del env\u00edo"
     },
     "canal": {
       "type": "string",
-      "enum": ["WhatsApp", "Instagram", "Facebook", "Email"],
+      "enum": [
+        "WhatsApp",
+        "Instagram",
+        "Facebook",
+        "Email"
+      ],
       "default": "WhatsApp",
-      "description": "Canal usado para el envío"
+      "description": "Canal usado para el env\u00edo"
     },
     "template_id": {
       "type": "string",
-      "description": "ID de la MensajeTemplate usada; vacío si fue mensaje libre"
+      "description": "ID de la MensajeTemplate usada; vac\u00edo si fue mensaje libre"
     },
     "template_nombre": {
       "type": "string",
@@ -36,11 +41,16 @@
     "fecha_envio": {
       "type": "string",
       "format": "date-time",
-      "description": "Momento del envío"
+      "description": "Momento del env\u00edo"
     },
     "estado": {
       "type": "string",
-      "enum": ["Enviado", "Entregado", "Leido", "Error"],
+      "enum": [
+        "Enviado",
+        "Entregado",
+        "Leido",
+        "Error"
+      ],
       "default": "Enviado",
       "description": "Estado de entrega reportado por el proveedor"
     },
@@ -51,8 +61,11 @@
     "es_automatico": {
       "type": "boolean",
       "default": false,
-      "description": "true si lo disparó un trigger, false si lo envió una persona"
+      "description": "true si lo dispar\u00f3 un trigger, false si lo envi\u00f3 una persona"
     }
   },
-  "required": ["contacto_id", "contenido_final"]
+  "required": [
+    "contacto_id",
+    "contenido_final"
+  ]
 }

@@ -1,6 +1,6 @@
 {
-  "name": "ConfigEvaluador",
   "type": "object",
+  "name": "ConfigEvaluador",
   "properties": {
     "contexto_valentina": {
       "type": "string",
@@ -32,8 +32,8 @@
     },
     "pausa_ms": {
       "type": "number",
-      "default": 4000,
-      "description": "Pausa en ms entre evaluaciones para que Base44 no degrade Opus a Sonnet"
+      "description": "Pausa en ms entre evaluaciones para que Base44 no degrade Opus a Sonnet",
+      "default": 4000
     }
   },
   "required": []

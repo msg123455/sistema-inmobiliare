@@ -1,7 +1,7 @@
 {
   "name": "HistorialLead",
   "type": "object",
-  "description": "Timeline de eventos de un lead: cada interacción, cambio de etapa y acción automática queda registrada aquí. Es la fuente del historial en la ficha del contacto y de las métricas de conversión.",
+  "description": "Timeline de eventos de un lead: cada interacci\u00f3n, cambio de etapa y acci\u00f3n autom\u00e1tica queda registrada aqu\u00ed. Es la fuente del historial en la ficha del contacto y de las m\u00e9tricas de conversi\u00f3n.",
   "properties": {
     "contacto_id": {
       "type": "string",
@@ -25,12 +25,12 @@
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripción legible del evento"
+      "description": "Descripci\u00f3n legible del evento"
     },
     "fecha": {
       "type": "string",
       "format": "date-time",
-      "description": "Momento en que ocurrió el evento"
+      "description": "Momento en que ocurri\u00f3 el evento"
     },
     "etapa_anterior": {
       "type": "string",
@@ -38,17 +38,20 @@
     },
     "etapa_nueva": {
       "type": "string",
-      "description": "Etapa del pipeline después del cambio (solo para tipo Cambio_Etapa)"
+      "description": "Etapa del pipeline despu\u00e9s del cambio (solo para tipo Cambio_Etapa)"
     },
     "usuario_email": {
       "type": "string",
-      "description": "Email del usuario que originó el evento; vacío si fue automático"
+      "description": "Email del usuario que origin\u00f3 el evento; vac\u00edo si fue autom\u00e1tico"
     },
     "es_automatico": {
       "type": "boolean",
       "default": false,
-      "description": "true si lo generó el sistema o el agente IA, false si fue una persona"
+      "description": "true si lo gener\u00f3 el sistema o el agente IA, false si fue una persona"
     }
   },
-  "required": ["contacto_id", "tipo"]
+  "required": [
+    "contacto_id",
+    "tipo"
+  ]
 }

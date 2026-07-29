@@ -1,6 +1,6 @@
 {
-  "name": "AppConfig",
   "type": "object",
+  "name": "AppConfig",
   "properties": {
     "clave": {
       "type": "string",
@@ -8,8 +8,8 @@
     },
     "porcentaje_ahorro_global": {
       "type": "number",
-      "default": 15,
-      "description": "Porcentaje de ahorro global por defecto (ej: 15 = 15%)"
+      "description": "Porcentaje de ahorro global por defecto (ej: 15 = 15%)",
+      "default": 15
     }
   },
   "required": [

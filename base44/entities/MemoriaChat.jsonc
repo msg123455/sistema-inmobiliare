@@ -1,10 +1,10 @@
 {
-  "name": "MemoriaChat",
   "type": "object",
+  "name": "MemoriaChat",
   "properties": {
     "telefono": {
       "type": "string",
-      "description": "Teléfono/ID único del lead (clave de búsqueda)"
+      "description": "Tel\u00e9fono/ID \u00fanico del lead (clave de b\u00fasqueda)"
     },
     "contacto_id": {
       "type": "string",
@@ -16,34 +16,36 @@
     },
     "canal": {
       "type": "string",
-      "description": "Canal de la conversación (WhatsApp, Telegram)"
+      "description": "Canal de la conversaci\u00f3n (WhatsApp, Telegram)"
     },
     "estado_json": {
       "type": "string",
-      "description": "Estado completo de la conversación: historial, datos capturados, etapa, calificación"
+      "description": "Estado completo de la conversaci\u00f3n: historial, datos capturados, etapa, calificaci\u00f3n"
     },
     "ultimo_mensaje": {
       "type": "string",
-      "description": "Último mensaje que envió el cliente"
+      "description": "\u00daltimo mensaje que envi\u00f3 el cliente"
     },
     "ultima_respuesta": {
       "type": "string",
-      "description": "Última respuesta que dio Valentina"
+      "description": "\u00daltima respuesta que dio Valentina"
     },
     "fecha_ultimo_mensaje": {
       "type": "string",
-      "format": "date-time",
-      "description": "Fecha y hora del último intercambio"
+      "description": "Fecha y hora del \u00faltimo intercambio",
+      "format": "date-time"
     },
     "calificado": {
       "type": "boolean",
-      "default": false,
-      "description": "Si el lead ya fue calificado y asignado a broker"
+      "description": "Si el lead ya fue calificado y asignado a broker",
+      "default": false
     },
     "broker_asignado": {
       "type": "string",
       "description": "Nombre del broker asignado (si calificado)"
     }
   },
-  "required": ["telefono"]
+  "required": [
+    "telefono"
+  ]
 }

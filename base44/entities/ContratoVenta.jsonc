@@ -1,7 +1,7 @@
 {
   "name": "ContratoVenta",
   "type": "object",
-  "description": "Proceso de venta de un inmueble, desde la promesa de compraventa hasta la entrega. El estado avanza por un timeline de escrituración.",
+  "description": "Proceso de venta de un inmueble, desde la promesa de compraventa hasta la entrega. El estado avanza por un timeline de escrituraci\u00f3n.",
   "properties": {
     "propiedad_id": {
       "type": "string",
@@ -9,11 +9,11 @@
     },
     "propiedad_titulo": {
       "type": "string",
-      "description": "Título de la propiedad, desnormalizado"
+      "description": "T\u00edtulo de la propiedad, desnormalizado"
     },
     "comprador_id": {
       "type": "string",
-      "description": "ID del Contacto que actúa como comprador"
+      "description": "ID del Contacto que act\u00faa como comprador"
     },
     "comprador_nombre": {
       "type": "string",
@@ -34,21 +34,26 @@
     "comision_pct": {
       "type": "number",
       "default": 3,
-      "description": "Porcentaje de comisión de la inmobiliaria"
+      "description": "Porcentaje de comisi\u00f3n de la inmobiliaria"
     },
     "valor_comision": {
       "type": "number",
-      "description": "Valor de la comisión en COP, calculado sobre el precio de venta"
+      "description": "Valor de la comisi\u00f3n en COP, calculado sobre el precio de venta"
     },
     "forma_pago": {
       "type": "string",
-      "enum": ["Contado", "Credito_hipotecario", "Leasing", "Mixto"],
+      "enum": [
+        "Contado",
+        "Credito_hipotecario",
+        "Leasing",
+        "Mixto"
+      ],
       "default": "Contado",
       "description": "Forma de pago acordada"
     },
     "entidad_financiera": {
       "type": "string",
-      "description": "Banco o entidad que otorga el crédito, si aplica"
+      "description": "Banco o entidad que otorga el cr\u00e9dito, si aplica"
     },
     "arras": {
       "type": "number",
@@ -62,11 +67,18 @@
     "fecha_escritura": {
       "type": "string",
       "format": "date",
-      "description": "Fecha de firma de la escritura pública"
+      "description": "Fecha de firma de la escritura p\u00fablica"
     },
     "estado": {
       "type": "string",
-      "enum": ["Promesa", "Credito_en_estudio", "Aprobado", "Escritura", "Entregado", "Cancelado"],
+      "enum": [
+        "Promesa",
+        "Credito_en_estudio",
+        "Aprobado",
+        "Escritura",
+        "Entregado",
+        "Cancelado"
+      ],
       "default": "Promesa",
       "description": "Etapa actual del proceso de venta"
     },
@@ -75,5 +87,9 @@
       "description": "Notas internas del proceso"
     }
   },
-  "required": ["propiedad_id", "comprador_id", "precio_venta"]
+  "required": [
+    "propiedad_id",
+    "comprador_id",
+    "precio_venta"
+  ]
 }

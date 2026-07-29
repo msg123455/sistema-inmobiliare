@@ -1,6 +1,6 @@
 {
-  "name": "GastoFijo",
   "type": "object",
+  "name": "GastoFijo",
   "properties": {
     "concepto": {
       "type": "string",
@@ -8,6 +8,7 @@
     },
     "categoria": {
       "type": "string",
+      "description": "Categor\u00eda del gasto",
       "enum": [
         "nomina",
         "arriendo",
@@ -18,8 +19,7 @@
         "marketing",
         "otro"
       ],
-      "default": "otro",
-      "description": "Categor\u00eda del gasto"
+      "default": "otro"
     },
     "monto_mensual": {
       "type": "number",
@@ -27,8 +27,8 @@
     },
     "activo": {
       "type": "boolean",
-      "default": true,
-      "description": "Si el gasto est\u00e1 activo"
+      "description": "Si el gasto est\u00e1 activo",
+      "default": true
     }
   },
   "required": [

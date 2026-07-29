@@ -1,18 +1,10 @@
 {
-  "name": "Tarea",
   "type": "object",
+  "name": "Tarea",
   "properties": {
-    "contacto_id": {
-      "type": "string",
-      "description": "ID del Contacto vinculado. Campo destino: reemplaza a cliente_id."
-    },
     "cliente_id": {
       "type": "string",
-      "description": "OBSOLETO. Apuntaba a la entidad Cliente del modelo anterior. Se sigue escribiendo con el mismo valor que contacto_id porque todavia es required; se elimina tras el backfill."
-    },
-    "hora": {
-      "type": "string",
-      "description": "Hora de la tarea en formato HH:MM. El codigo ya la escribia sin estar declarada."
+      "description": "ID del cliente (referencia a Cliente)"
     },
     "titulo": {
       "type": "string",
@@ -24,13 +16,13 @@
     },
     "fecha_limite": {
       "type": "string",
-      "format": "date",
-      "description": "Fecha l\u00edmite para completar"
+      "description": "Fecha l\u00edmite para completar",
+      "format": "date"
     },
     "completada": {
       "type": "boolean",
-      "default": false,
-      "description": "Si la tarea est\u00e1 completada"
+      "description": "Si la tarea est\u00e1 completada",
+      "default": false
     },
     "asignado_a": {
       "type": "string",
@@ -38,13 +30,13 @@
     },
     "prioridad": {
       "type": "string",
+      "description": "Prioridad de la tarea",
       "enum": [
         "Baja",
         "Media",
         "Alta"
       ],
-      "default": "Media",
-      "description": "Prioridad de la tarea"
+      "default": "Media"
     }
   },
   "required": [

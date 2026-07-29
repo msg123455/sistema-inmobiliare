@@ -1,6 +1,6 @@
 {
-  "name": "ProyeccionEscenario",
   "type": "object",
+  "name": "ProyeccionEscenario",
   "properties": {
     "nombre": {
       "type": "string",
@@ -8,11 +8,11 @@
     },
     "modelo": {
       "type": "string",
+      "description": "Tipo de modelo de crecimiento",
       "enum": [
         "Inversionista",
         "Socio_comercial"
-      ],
-      "description": "Tipo de modelo de crecimiento"
+      ]
     },
     "parametros": {
       "type": "object",
@@ -26,8 +26,8 @@
     },
     "mes_inicio": {
       "type": "string",
-      "format": "date",
-      "description": "Mes de inicio de la proyecci\u00f3n"
+      "description": "Mes de inicio de la proyecci\u00f3n",
+      "format": "date"
     }
   },
   "required": [

@@ -1,10 +1,10 @@
 {
-  "name": "ConocimientoRAG",
   "type": "object",
+  "name": "ConocimientoRAG",
   "properties": {
     "titulo": {
       "type": "string",
-      "description": "Título del chunk de conocimiento"
+      "description": "T\u00edtulo del chunk de conocimiento"
     },
     "contenido": {
       "type": "string",
@@ -12,8 +12,16 @@
     },
     "categoria": {
       "type": "string",
-      "enum": ["avatar", "principios", "frases", "conversaciones", "antideteccion", "mercado", "general"],
-      "description": "Categoría del conocimiento"
+      "description": "Categor\u00eda del conocimiento",
+      "enum": [
+        "avatar",
+        "principios",
+        "frases",
+        "conversaciones",
+        "antideteccion",
+        "mercado",
+        "general"
+      ]
     },
     "etapas": {
       "type": "string",
@@ -21,13 +29,14 @@
     },
     "prioridad": {
       "type": "number",
-      "default": 5,
-      "description": "Prioridad de inyección 1-10 (10 = más importante)"
+      "description": "Prioridad de inyecci\u00f3n 1-10 (10 = m\u00e1s importante)",
+      "default": 5
     },
     "activo": {
       "type": "boolean",
-      "default": true,
-      "description": "Si está activo se inyecta en el prompt"
+      "description": "Si est\u00e1 activo se inyecta en el prompt",
+      "default": true
     }
-  }
+  },
+  "required": []
 }

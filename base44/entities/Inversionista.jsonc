@@ -1,6 +1,6 @@
 {
-  "name": "Inversionista",
   "type": "object",
+  "name": "Inversionista",
   "properties": {
     "nombre": {
       "type": "string",

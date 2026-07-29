@@ -1,6 +1,6 @@
 {
-  "name": "ContenidoSEO",
   "type": "object",
+  "name": "ContenidoSEO",
   "properties": {
     "nodo_id": {
       "type": "string",
@@ -8,11 +8,11 @@
     },
     "keyword_principal": {
       "type": "string",
-      "description": "Keyword objetivo del artículo"
+      "description": "Keyword objetivo del art\u00edculo"
     },
     "title": {
       "type": "string",
-      "description": "Title tag (máx 60 caracteres)"
+      "description": "Title tag (m\u00e1x 60 caracteres)"
     },
     "slug": {
       "type": "string",
@@ -20,11 +20,11 @@
     },
     "meta_description": {
       "type": "string",
-      "description": "Meta description (máx 160 caracteres)"
+      "description": "Meta description (m\u00e1x 160 caracteres)"
     },
     "content_sections": {
       "type": "string",
-      "description": "Secciones del artículo serializadas en JSON"
+      "description": "Secciones del art\u00edculo serializadas en JSON"
     },
     "faq_items": {
       "type": "string",
@@ -32,15 +32,15 @@
     },
     "schema_jsonld": {
       "type": "string",
-      "description": "Schema.org JSON-LD de la página"
+      "description": "Schema.org JSON-LD de la p\u00e1gina"
     },
     "cta_text": {
       "type": "string",
-      "description": "Llamado a la acción de cierre"
+      "description": "Llamado a la acci\u00f3n de cierre"
     },
     "aeo_data": {
       "type": "string",
-      "description": "Optimización para motores de respuesta (AI Overviews, ChatGPT) en JSON"
+      "description": "Optimizaci\u00f3n para motores de respuesta (AI Overviews, ChatGPT) en JSON"
     },
     "palabras": {
       "type": "number",
@@ -48,14 +48,20 @@
     },
     "estado": {
       "type": "string",
-      "enum": ["pendiente", "aprobado", "rechazado"],
-      "default": "pendiente",
-      "description": "Estado editorial del contenido"
+      "description": "Estado editorial del contenido",
+      "enum": [
+        "pendiente",
+        "aprobado",
+        "rechazado"
+      ],
+      "default": "pendiente"
     },
     "export_html": {
       "type": "string",
       "description": "HTML final listo para exportar al CMS"
     }
   },
-  "required": ["keyword_principal"]
+  "required": [
+    "keyword_principal"
+  ]
 }

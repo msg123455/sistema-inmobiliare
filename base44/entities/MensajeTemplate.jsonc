@@ -1,7 +1,7 @@
 {
   "name": "MensajeTemplate",
   "type": "object",
-  "description": "Plantilla de mensaje reutilizable por canal. Soporta variables {{nombre}} {{propiedad}} {{precio}} {{fecha}} {{agente}} {{ciudad}} y puede dispararse automáticamente ante un evento del pipeline.",
+  "description": "Plantilla de mensaje reutilizable por canal. Soporta variables {{nombre}} {{propiedad}} {{precio}} {{fecha}} {{agente}} {{ciudad}} y puede dispararse autom\u00e1ticamente ante un evento del pipeline.",
   "properties": {
     "nombre": {
       "type": "string",
@@ -9,9 +9,14 @@
     },
     "canal": {
       "type": "string",
-      "enum": ["WhatsApp", "Instagram", "Facebook", "Email"],
+      "enum": [
+        "WhatsApp",
+        "Instagram",
+        "Facebook",
+        "Email"
+      ],
       "default": "WhatsApp",
-      "description": "Canal por el que se envía"
+      "description": "Canal por el que se env\u00eda"
     },
     "trigger": {
       "type": "string",
@@ -25,7 +30,7 @@
         "contrato_proximo_vencer"
       ],
       "default": "manual",
-      "description": "Evento que dispara el envío"
+      "description": "Evento que dispara el env\u00edo"
     },
     "asunto": {
       "type": "string",
@@ -38,8 +43,11 @@
     "auto_envio": {
       "type": "boolean",
       "default": false,
-      "description": "Si true, se envía solo al dispararse el trigger sin intervención humana"
+      "description": "Si true, se env\u00eda solo al dispararse el trigger sin intervenci\u00f3n humana"
     }
   },
-  "required": ["nombre", "contenido"]
+  "required": [
+    "nombre",
+    "contenido"
+  ]
 }

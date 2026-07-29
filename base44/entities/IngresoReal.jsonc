@@ -1,6 +1,6 @@
 {
-  "name": "IngresoReal",
   "type": "object",
+  "name": "IngresoReal",
   "properties": {
     "cliente_id": {
       "type": "string",

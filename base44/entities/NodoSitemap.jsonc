@@ -1,29 +1,39 @@
 {
-  "name": "NodoSitemap",
   "type": "object",
+  "name": "NodoSitemap",
   "properties": {
     "keyword": {
       "type": "string",
-      "description": "Keyword objetivo de esta página"
+      "description": "Keyword objetivo de esta p\u00e1gina"
     },
     "page_type": {
       "type": "string",
-      "enum": ["pillar", "secondary", "third", "blog"],
-      "default": "blog",
-      "description": "Nivel del nodo dentro del cluster de contenido"
+      "description": "Nivel del nodo dentro del cluster de contenido",
+      "enum": [
+        "pillar",
+        "secondary",
+        "third",
+        "blog"
+      ],
+      "default": "blog"
     },
     "url": {
       "type": "string",
-      "description": "Ruta/slug propuesto para la página"
+      "description": "Ruta/slug propuesto para la p\u00e1gina"
     },
     "title_suggestion": {
       "type": "string",
-      "description": "Título sugerido para la página"
+      "description": "T\u00edtulo sugerido para la p\u00e1gina"
     },
     "intencion": {
       "type": "string",
-      "enum": ["informacional", "transaccional", "comercial", "navegacional"],
-      "description": "Intención de búsqueda detectada"
+      "description": "Intenci\u00f3n de b\u00fasqueda detectada",
+      "enum": [
+        "informacional",
+        "transaccional",
+        "comercial",
+        "navegacional"
+      ]
     },
     "cluster": {
       "type": "string",
@@ -31,19 +41,27 @@
     },
     "prioridad": {
       "type": "number",
-      "default": 5,
-      "description": "Prioridad de producción 1-10"
+      "description": "Prioridad de producci\u00f3n 1-10",
+      "default": 5
     },
     "research_data": {
       "type": "string",
-      "description": "Investigación del keyword serializada en JSON"
+      "description": "Investigaci\u00f3n del keyword serializada en JSON"
     },
     "estado": {
       "type": "string",
-      "enum": ["draft", "researched", "generating", "pending_approval", "published"],
-      "default": "draft",
-      "description": "Estado del nodo dentro del pipeline"
+      "description": "Estado del nodo dentro del pipeline",
+      "enum": [
+        "draft",
+        "researched",
+        "generating",
+        "pending_approval",
+        "published"
+      ],
+      "default": "draft"
     }
   },
-  "required": ["keyword"]
+  "required": [
+    "keyword"
+  ]
 }

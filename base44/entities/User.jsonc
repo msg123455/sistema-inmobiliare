@@ -1,6 +1,6 @@
 {
-  "name": "User",
   "type": "object",
+  "name": "User",
   "properties": {
     "role": {
       "type": "string",

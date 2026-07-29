@@ -1,6 +1,6 @@
 {
-  "name": "Meta",
   "type": "object",
+  "name": "Meta",
   "properties": {
     "titulo": {
       "type": "string",
@@ -8,12 +8,13 @@
     },
     "tipo": {
       "type": "string",
+      "description": "Tipo de meta",
       "enum": [
         "leads",
         "cierres",
-        "revenue_usd"
-      ],
-      "description": "Tipo de meta. Se elimino 'valvulas_instaladas', heredado del SaaS anterior. La UI cae a 'cierres' si encuentra filas viejas con ese tipo."
+        "revenue_usd",
+        "valvulas_instaladas"
+      ]
     },
     "valor_meta": {
       "type": "number",
@@ -21,8 +22,8 @@
     },
     "valor_actual": {
       "type": "number",
-      "default": 0,
-      "description": "Progreso actual"
+      "description": "Progreso actual",
+      "default": 0
     },
     "mes": {
       "type": "number",
@@ -42,8 +43,8 @@
     },
     "completada": {
       "type": "boolean",
-      "default": false,
-      "description": "Si la meta fue alcanzada"
+      "description": "Si la meta fue alcanzada",
+      "default": false
     }
   },
   "required": [

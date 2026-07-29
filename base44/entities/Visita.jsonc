@@ -9,7 +9,7 @@
     },
     "propiedad_titulo": {
       "type": "string",
-      "description": "Título de la propiedad, desnormalizado"
+      "description": "T\u00edtulo de la propiedad, desnormalizado"
     },
     "contacto_id": {
       "type": "string",
@@ -26,18 +26,26 @@
     },
     "tipo": {
       "type": "string",
-      "enum": ["Presencial", "Virtual"],
+      "enum": [
+        "Presencial",
+        "Virtual"
+      ],
       "default": "Presencial",
       "description": "Modalidad de la visita"
     },
     "duracion_minutos": {
       "type": "number",
       "default": 60,
-      "description": "Duración estimada en minutos"
+      "description": "Duraci\u00f3n estimada en minutos"
     },
     "estado": {
       "type": "string",
-      "enum": ["Programada", "Realizada", "Cancelada", "No_asistio"],
+      "enum": [
+        "Programada",
+        "Realizada",
+        "Cancelada",
+        "No_asistio"
+      ],
       "default": "Programada",
       "description": "Estado de la visita"
     },
@@ -46,5 +54,9 @@
       "description": "Resultado y observaciones tras la visita"
     }
   },
-  "required": ["propiedad_id", "contacto_id", "fecha_hora"]
+  "required": [
+    "propiedad_id",
+    "contacto_id",
+    "fecha_hora"
+  ]
 }

@@ -1,6 +1,6 @@
 {
-  "name": "Documento",
   "type": "object",
+  "name": "Documento",
   "properties": {
     "cliente_id": {
       "type": "string",
@@ -12,14 +12,14 @@
     },
     "categoria": {
       "type": "string",
+      "description": "Categor\u00eda del documento",
       "enum": [
         "evidencia",
         "recibo",
         "carta",
         "otro"
       ],
-      "default": "otro",
-      "description": "Categor\u00eda del documento"
+      "default": "otro"
     },
     "descripcion": {
       "type": "string",
