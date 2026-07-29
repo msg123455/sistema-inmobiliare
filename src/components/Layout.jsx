@@ -10,6 +10,8 @@ import {
 import { base44 } from '@/api/base44Client';
 import { Conversacion } from '@/api/base44Client';
 import NotificationBell from '@/components/NotificationBell';
+import ThemeToggle from '@/components/ThemeToggle';
+import { MARCA } from '@/lib/marca';
 import MobileTabBar from '@/components/MobileTabBar';
 import { useUserRole } from '@/hooks/useUserRole';
 
@@ -290,12 +292,13 @@ export default function Layout() {
           <div className="w-8 h-8 bg-primary rounded-[9px] flex items-center justify-center flex-shrink-0 shadow-sm">
             <Building2 className="w-4.5 h-4.5 text-primary-foreground" />
           </div>
-          <span className="text-[17px] font-semibold tracking-tight text-foreground hidden sm:inline">InmoGest</span>
+          <span className="text-[17px] font-semibold tracking-tight text-foreground hidden sm:inline">{MARCA.nombreCorto}</span>
         </Link>
 
         <div className="flex-1" />
 
         <div className="flex items-center gap-1.5">
+          <ThemeToggle />
           <NotificationBell />
         </div>
       </header>
@@ -322,7 +325,7 @@ export default function Layout() {
               <div className="w-7 h-7 bg-primary rounded-[8px] flex items-center justify-center">
                 <Building2 className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="text-[15px] font-semibold text-foreground">InmoGest</span>
+              <span className="text-[15px] font-semibold text-foreground">{MARCA.nombreCorto}</span>
             </div>
             <button
               onClick={() => setMobileOpen(false)}

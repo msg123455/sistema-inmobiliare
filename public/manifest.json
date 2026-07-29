@@ -1,0 +1,20 @@
+{
+  "name": "INMOBILIARE Julio Corredor",
+  "short_name": "INMOBILIARE",
+  "description": "Plataforma de gestion inmobiliaria: CRM, contratos, cartera y agentes IA.",
+  "lang": "es-CO",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f7f8",
+  "theme_color": "#007AFF",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
