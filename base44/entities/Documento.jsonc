@@ -2,9 +2,25 @@
   "name": "Documento",
   "type": "object",
   "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "Referencia a Contacto. Es el campo correcto para escrituras nuevas."
+    },
     "cliente_id": {
       "type": "string",
-      "description": "ID del cliente al que pertenece el documento"
+      "description": "LEGACY. Referencia a la entidad Cliente (codigo muerto). No usar en escrituras nuevas."
+    },
+    "reparacion_id": {
+      "type": "string",
+      "description": "Reparacion a la que pertenece la evidencia, si aplica"
+    },
+    "avaluo_id": {
+      "type": "string",
+      "description": "Avaluo al que pertenece el informe, si aplica"
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato al que pertenece el documento, si aplica"
     },
     "nombre": {
       "type": "string",
@@ -16,14 +32,17 @@
         "evidencia",
         "recibo",
         "carta",
+        "contrato",
+        "identificacion",
+        "informe",
         "otro"
       ],
       "default": "otro",
-      "description": "Categor\u00eda del documento"
+      "description": "Categoría del documento"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripci\u00f3n opcional del documento"
+      "description": "Descripción opcional del documento"
     },
     "tipo_mime": {
       "type": "string",
@@ -31,17 +50,21 @@
     },
     "tamanio_bytes": {
       "type": "number",
-      "description": "Tama\u00f1o del archivo en bytes"
+      "description": "Tamaño del archivo en bytes"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["borrador", "revision", "final"],
+      "default": "final",
+      "description": "Los borradores del copiloto de contratos nacen aqui. Nunca se autoenvian ni autofirman."
     },
     "contenido": {
       "type": "string",
-      "description": "URL del archivo subido (v\u00eda UploadFile)"
+      "description": "URL del archivo subido (vía UploadFile)"
     }
   },
   "required": [
-    "cliente_id",
     "nombre",
-    "categoria",
-    "contenido"
+    "categoria"
   ]
 }

@@ -1,0 +1,56 @@
+{
+  "name": "ContratoVenta",
+  "type": "object",
+  "properties": {
+    "numero_contrato": {
+      "type": "string",
+      "description": "Numero interno"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Inmueble vendido"
+    },
+    "vendedor_id": {
+      "type": "string",
+      "description": "Propietario vendedor"
+    },
+    "comprador_id": {
+      "type": "string",
+      "description": "Contacto comprador"
+    },
+    "valor_venta": {
+      "type": "number",
+      "description": "Precio pactado en pesos"
+    },
+    "comision_pct": {
+      "type": "number",
+      "description": "Comision en porcentaje"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Promesa",
+        "Escritura",
+        "Cerrado",
+        "Caido"
+      ],
+      "default": "Promesa",
+      "description": "Etapa del negocio"
+    },
+    "fecha_promesa": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de la promesa"
+    },
+    "fecha_escritura": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de escrituracion"
+    },
+    "asesor_id": {
+      "type": "string",
+      "description": "Asesor a cargo"
+    }
+  },
+  "required": []
+}

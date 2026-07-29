@@ -1,0 +1,41 @@
+{
+  "name": "RespuestaEncuesta",
+  "type": "object",
+  "properties": {
+    "encuesta_id": {
+      "type": "string",
+      "description": "Encuesta que respondio"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "Quien respondio"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Telefono de quien respondio"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Por donde respondio"
+    },
+    "respuestas_json": {
+      "type": "string",
+      "description": "Las respuestas serializadas"
+    },
+    "nps_score": {
+      "type": "number",
+      "description": "Puntaje de recomendacion de 0 a 10"
+    },
+    "completada": {
+      "type": "boolean",
+      "description": "Si termino la encuesta",
+      "default": false
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando respondio"
+    }
+  },
+  "required": []
+}

@@ -1,0 +1,64 @@
+{
+  "name": "ColaSalida",
+  "type": "object",
+  "properties": {
+    "canal": {
+      "type": "string",
+      "enum": [
+        "whatsapp",
+        "telegram"
+      ],
+      "description": "Canal de entrega"
+    },
+    "destino": {
+      "type": "string",
+      "description": "Numero con indicativo (WhatsApp) o chat id (Telegram)"
+    },
+    "globos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Los mensajes a entregar, en orden"
+    },
+    "enviar_en": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento a partir del cual se puede entregar"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "pendiente",
+        "enviando",
+        "enviado",
+        "fallido"
+      ],
+      "default": "pendiente",
+      "description": "Estado de la entrega"
+    },
+    "intentos": {
+      "type": "number",
+      "default": 0,
+      "description": "Reintentos consumidos"
+    },
+    "conversacion_id": {
+      "type": "string",
+      "description": "MemoriaChat.id de la conversacion"
+    },
+    "enviado_en": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando salio de verdad"
+    },
+    "error": {
+      "type": "string",
+      "description": "Ultimo error de entrega"
+    }
+  },
+  "required": [
+    "canal",
+    "destino"
+  ]
+}

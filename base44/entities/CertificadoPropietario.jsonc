@@ -1,0 +1,36 @@
+{
+  "name": "CertificadoPropietario",
+  "type": "object",
+  "properties": {
+    "propietario_id": {
+      "type": "string",
+      "description": "A quien se le envia"
+    },
+    "anio": {
+      "type": "number",
+      "description": "Ano gravable"
+    },
+    "url_pdf": {
+      "type": "string",
+      "description": "PDF del certificado"
+    },
+    "fecha_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se envio"
+    },
+    "estado_envio": {
+      "type": "string",
+      "enum": [
+        "Pendiente",
+        "Enviado",
+        "Fallido"
+      ],
+      "default": "Pendiente",
+      "description": "Como quedo el envio"
+    }
+  },
+  "required": [
+    "anio"
+  ]
+}

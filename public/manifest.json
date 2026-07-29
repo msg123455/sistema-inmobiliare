@@ -1,0 +1,18 @@
+{
+  "name": "Inmobiliare Julio Corredor",
+  "short_name": "Inmobiliare",
+  "description": "Gestión inmobiliaria de INMOBILIARE Julio Corredor desde 1960",
+  "lang": "es-CO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9FC",
+  "theme_color": "#5400CF",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

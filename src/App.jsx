@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster"
+import { ThemeProvider } from 'next-themes'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
@@ -138,14 +139,25 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    // El bloque `.dark` de brand.css llevaba tiempo muerto: next-themes estaba
+    // instalado pero nunca montado. `attribute` lleva ambos selectores para que
+    // funcionen tanto `.dark` (que es lo que lee Tailwind) como
+    // `[data-theme]`.
+    <ThemeProvider
+      attribute={['class', 'data-theme']}
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <AuthenticatedApp />
+          </Router>
+          <Toaster />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }
 

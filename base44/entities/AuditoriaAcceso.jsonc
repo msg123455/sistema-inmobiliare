@@ -1,0 +1,37 @@
+{
+  "name": "AuditoriaAcceso",
+  "type": "object",
+  "properties": {
+    "tipo": {
+      "type": "string",
+      "description": "verificacion, sesion_portal, consulta_pii"
+    },
+    "sujeto_id": {
+      "type": "string",
+      "description": "Sobre quien fue el acceso"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Desde que numero"
+    },
+    "exito": {
+      "type": "boolean",
+      "description": "Si el acceso se concedio",
+      "default": false
+    },
+    "detalle": {
+      "type": "string",
+      "description": "Que paso exactamente"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando"
+    }
+  },
+  "required": [
+    "tipo",
+    "telefono",
+    "fecha"
+  ]
+}

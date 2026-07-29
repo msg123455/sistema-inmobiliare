@@ -1,0 +1,16 @@
+{
+  "name": "continuarTurno",
+  "entry": "entry.ts",
+  "automations": [
+    {
+      "type": "scheduled",
+      "name": "cron_continuar_turno",
+      "description": "Reanuda los turnos que excedieron el presupuesto de 2 llamadas al modelo (MemoriaChat.tiene_turno_pendiente). Tope de 2 continuaciones; despues escala a un humano.",
+      "function_args": { "token": "${CRON_TOKEN}" },
+      "is_active": true,
+      "schedule_mode": "recurring",
+      "schedule_type": "cron",
+      "cron_expression": "* * * * *"
+    }
+  ]
+}

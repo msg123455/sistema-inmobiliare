@@ -94,6 +94,49 @@
       "items": { "type": "string" },
       "description": "URLs de fotos del inmueble"
     },
+    "valor_administracion": {
+      "type": "number",
+      "description": "Cuota de administración mensual en COP (columna Administracion de la hoja Inventario)"
+    },
+    "proveedor": {
+      "type": "string",
+      "enum": ["simi", "wasi", "csv", "manual"],
+      "default": "manual",
+      "description": "De donde vino el registro. Clave unica: proveedor + codigo_externo."
+    },
+    "codigo_externo": {
+      "type": "string",
+      "description": "Codigo del inmueble en el sistema de origen (Cod en la hoja Inventario)"
+    },
+    "zona": {
+      "type": "string",
+      "description": "Zona de la ciudad"
+    },
+    "procedencia": {
+      "type": "string",
+      "description": "Como llegó el inmueble al portafolio"
+    },
+    "propietario_id": {
+      "type": "string",
+      "description": "Dueño del inmueble"
+    },
+    "contrato_activo_id": {
+      "type": "string",
+      "description": "Contrato de arriendo vigente, si está arrendado"
+    },
+    "duplicado_de": {
+      "type": "string",
+      "description": "Si la misma dirección llegó de dos proveedores, apunta al registro maestro. Nunca se borra: los leads referencian su id."
+    },
+    "portales": {
+      "type": "object",
+      "description": "Publicación en portales externos (columnas METROCUADRADO, FINCARAIZ, MERCADOLIBRE de la hoja Inventario)",
+      "properties": {
+        "metrocuadrado": { "type": "string" },
+        "fincaraiz": { "type": "string" },
+        "mercadolibre": { "type": "string" }
+      }
+    },
     "publicado_wasi": {
       "type": "boolean",
       "default": false,

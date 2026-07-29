@@ -1,0 +1,86 @@
+{
+  "name": "Consignacion",
+  "type": "object",
+  "properties": {
+    "propietario_id": {
+      "type": "string",
+      "description": "Dueno que consigna"
+    },
+    "direccion": {
+      "type": "string",
+      "description": "Direccion del inmueble"
+    },
+    "tipo_inmueble": {
+      "type": "string",
+      "enum": [
+        "Apartamento",
+        "Casa",
+        "Local",
+        "Oficina",
+        "Bodega",
+        "Lote",
+        "Finca",
+        "Otro"
+      ],
+      "description": "Tipo"
+    },
+    "gestion": {
+      "type": "string",
+      "enum": [
+        "Venta",
+        "Arriendo",
+        "Administracion",
+        "Venta_y_Arriendo"
+      ],
+      "description": "Que quiere hacer"
+    },
+    "valor_esperado": {
+      "type": "number",
+      "description": "Precio de venta esperado"
+    },
+    "canon_esperado": {
+      "type": "number",
+      "description": "Canon mensual esperado"
+    },
+    "barrio": {
+      "type": "string",
+      "description": "Barrio"
+    },
+    "zona": {
+      "type": "string",
+      "description": "Zona de la ciudad"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Solicitada",
+        "En_Avaluo",
+        "Aprobada",
+        "Publicada",
+        "Rechazada"
+      ],
+      "default": "Solicitada",
+      "description": "Etapa"
+    },
+    "asesor_id": {
+      "type": "string",
+      "description": "Asesor a cargo"
+    },
+    "origen": {
+      "type": "string",
+      "description": "Por donde entro"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Propiedad creada, cuando se publica"
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se registro"
+    }
+  },
+  "required": [
+    "direccion"
+  ]
+}

@@ -6,6 +6,7 @@ module.exports = {
   	extend: {
   		fontFamily: {
   			sans: ['var(--font-sans)'],
+  			display: ['var(--font-display)'],
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
@@ -42,6 +43,21 @@ module.exports = {
   			destructive: {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
+  			},
+  			success: {
+  				DEFAULT: 'hsl(var(--success))',
+  				foreground: 'hsl(var(--success-foreground))'
+  			},
+  			warning: {
+  				DEFAULT: 'hsl(var(--warning))',
+  				foreground: 'hsl(var(--warning-foreground))'
+  			},
+  			marca: {
+  				morado: 'hsl(var(--marca-morado))',
+  				indigo: 'hsl(var(--marca-indigo))',
+  				azul: 'hsl(var(--marca-azul))',
+  				violeta: 'hsl(var(--marca-violeta))',
+  				magenta: 'hsl(var(--marca-magenta))'
   			},
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',

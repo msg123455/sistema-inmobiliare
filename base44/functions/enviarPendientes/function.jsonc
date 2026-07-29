@@ -1,0 +1,16 @@
+{
+  "name": "enviarPendientes",
+  "entry": "entry.ts",
+  "automations": [
+    {
+      "type": "scheduled",
+      "name": "cron_entrega_salida",
+      "description": "Worker de entrega: toma ColaSalida (estado=pendiente) y entrega a WhatsApp/Telegram simulando tipeo. La simulacion vive aqui y no en el webhook, que tiene 15s de presupuesto.",
+      "function_args": { "token": "${CRON_TOKEN}" },
+      "is_active": true,
+      "schedule_mode": "recurring",
+      "schedule_type": "cron",
+      "cron_expression": "* * * * *"
+    }
+  ]
+}

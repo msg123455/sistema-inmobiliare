@@ -1,0 +1,123 @@
+{
+  "name": "Reparacion",
+  "type": "object",
+  "properties": {
+    "numero_radicado": {
+      "type": "string",
+      "description": "Radicado que se le da al cliente"
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato de arriendo"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Inmueble"
+    },
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Quien reporta"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "Plomeria",
+        "Electrico",
+        "Gas",
+        "Cerrajeria",
+        "Electrodomestico",
+        "Estructural",
+        "Humedad",
+        "Otro"
+      ],
+      "description": "Que se dano"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Lo que reporta el cliente"
+    },
+    "ubicacion": {
+      "type": "string",
+      "description": "En que parte del inmueble"
+    },
+    "urgencia": {
+      "type": "string",
+      "enum": [
+        "Emergencia",
+        "Alta",
+        "Media",
+        "Baja"
+      ],
+      "default": "Media",
+      "description": "Urgencia real"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Reportada",
+        "En_proceso",
+        "Programada",
+        "Resuelta",
+        "Cerrada",
+        "Cancelada"
+      ],
+      "default": "Reportada",
+      "description": "Como va"
+    },
+    "proveedor_id": {
+      "type": "string",
+      "description": "Tecnico o proveedor asignado"
+    },
+    "costo_estimado": {
+      "type": "number",
+      "description": "Costo estimado en pesos"
+    },
+    "costo_final": {
+      "type": "number",
+      "description": "Costo real en pesos"
+    },
+    "asume": {
+      "type": "string",
+      "enum": [
+        "Propietario",
+        "Arrendatario",
+        "Inmobiliaria"
+      ],
+      "description": "Quien paga"
+    },
+    "fotos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Evidencia fotografica"
+    },
+    "sla_horas": {
+      "type": "number",
+      "description": "Horas de SLA segun la urgencia"
+    },
+    "fecha_limite": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando vence el SLA"
+    },
+    "fecha_reporte": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se reporto"
+    },
+    "fecha_resolucion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se resolvio"
+    },
+    "origen": {
+      "type": "string",
+      "description": "Por donde entro"
+    }
+  },
+  "required": [
+    "descripcion"
+  ]
+}

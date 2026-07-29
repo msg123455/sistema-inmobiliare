@@ -19,7 +19,7 @@ export default function MobileTabBar() {
   };
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-card/90 backdrop-blur-xl border-t border-border/60 pb-[env(safe-area-inset-bottom,0px)]">
+    <nav className="vidrio-ios pb-seguro md:hidden fixed bottom-0 left-0 right-0 z-30 border-t border-border/60">
       <div className="flex items-center justify-around h-14">
         {TABS.map((tab) => {
           const active = isActive(tab.path);
@@ -28,7 +28,8 @@ export default function MobileTabBar() {
             <Link
               key={tab.path}
               to={tab.path}
-              className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-lg transition-colors ${
+              aria-current={active ? 'page' : undefined}
+              className={`presionable flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-lg ${
                 active ? 'text-primary' : 'text-muted-foreground'
               }`}
             >

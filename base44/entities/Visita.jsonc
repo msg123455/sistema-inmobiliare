@@ -1,0 +1,53 @@
+{
+  "name": "Visita",
+  "type": "object",
+  "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "Quien visita"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Inmueble a visitar"
+    },
+    "asesor_id": {
+      "type": "string",
+      "description": "Asesor que acompana"
+    },
+    "fecha_visita": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se hace la visita"
+    },
+    "preferencia_horario": {
+      "type": "string",
+      "description": "Disponibilidad que dio el cliente"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Solicitada",
+        "Agendada",
+        "Realizada",
+        "Cancelada",
+        "No_asistio"
+      ],
+      "default": "Solicitada",
+      "description": "Como va"
+    },
+    "feedback": {
+      "type": "string",
+      "description": "Que opino el cliente despues de verla"
+    },
+    "origen": {
+      "type": "string",
+      "description": "Por donde entro"
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando la pidio"
+    }
+  },
+  "required": []
+}

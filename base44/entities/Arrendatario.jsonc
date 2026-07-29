@@ -1,0 +1,59 @@
+{
+  "name": "Arrendatario",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo"
+    },
+    "tipo_documento": {
+      "type": "string",
+      "enum": [
+        "CC",
+        "CE",
+        "NIT",
+        "PA"
+      ],
+      "default": "CC",
+      "description": "Tipo de documento"
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "Numero de documento, solo digitos"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "WhatsApp con indicativo, sin +"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo electronico"
+    },
+    "contrato_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Contratos de arriendo asociados"
+    },
+    "optin_whatsapp": {
+      "type": "boolean",
+      "description": "Autorizo contacto por WhatsApp",
+      "default": false
+    },
+    "fecha_optin": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando autorizo"
+    },
+    "fecha_actualizacion_datos": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Ultima vez que confirmo sus datos"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

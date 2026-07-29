@@ -119,6 +119,19 @@
       "type": "string",
       "description": "Motivo por el que se perdió el negocio (distinto de descalificación)"
     },
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Si este contacto ya es arrendatario nuestro"
+    },
+    "propietario_id": {
+      "type": "string",
+      "description": "Si este contacto ya es propietario nuestro"
+    },
+    "es_cliente_actual": {
+      "type": "boolean",
+      "default": false,
+      "description": "Señal de ruteo nivel A: un cliente actual que escribe sin decir a que viene va a cartera, no a ventas"
+    },
     "fuente_wasi": {
       "type": "boolean",
       "default": false,

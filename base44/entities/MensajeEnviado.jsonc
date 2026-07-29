@@ -1,0 +1,47 @@
+{
+  "name": "MensajeEnviado",
+  "type": "object",
+  "properties": {
+    "template_id": {
+      "type": "string",
+      "description": "Plantilla usada"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "A quien se envio"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Numero de destino"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Por donde se envio"
+    },
+    "contenido": {
+      "type": "string",
+      "description": "Lo que se envio"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Enviado",
+        "Entregado",
+        "Leido",
+        "Fallido"
+      ],
+      "default": "Enviado",
+      "description": "Estado de entrega"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error de entrega, si lo hubo"
+    },
+    "fecha_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se envio"
+    }
+  },
+  "required": []
+}

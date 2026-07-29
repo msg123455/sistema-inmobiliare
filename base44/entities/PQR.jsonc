@@ -1,0 +1,94 @@
+{
+  "name": "PQR",
+  "type": "object",
+  "properties": {
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Peticion",
+        "Queja",
+        "Reclamo",
+        "Sugerencia",
+        "Felicitacion"
+      ],
+      "description": "Que es"
+    },
+    "radicado": {
+      "type": "string",
+      "description": "Numero de radicado que se le da al cliente"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "Contacto asociado"
+    },
+    "contacto_nombre": {
+      "type": "string",
+      "description": "Quien radica"
+    },
+    "contacto_telefono": {
+      "type": "string",
+      "description": "Telefono de quien radica"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Por donde entro"
+    },
+    "asunto": {
+      "type": "string",
+      "description": "Resumen corto"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "El detalle completo"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Radicada",
+        "En_proceso",
+        "Respondida",
+        "Cerrada"
+      ],
+      "default": "Radicada",
+      "description": "Como va"
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "Baja",
+        "Media",
+        "Alta",
+        "Urgente"
+      ],
+      "default": "Media",
+      "description": "Prioridad"
+    },
+    "responsable_id": {
+      "type": "string",
+      "description": "Quien la atiende"
+    },
+    "fecha_limite_legal": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Plazo legal de respuesta. Se calcula al radicar; un cron escala antes de que venza."
+    },
+    "fecha_radicacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se radico"
+    },
+    "fecha_respuesta": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se respondio"
+    },
+    "respuesta": {
+      "type": "string",
+      "description": "La respuesta formal"
+    }
+  },
+  "required": [
+    "tipo",
+    "descripcion"
+  ]
+}

@@ -2,27 +2,31 @@
   "name": "Tarea",
   "type": "object",
   "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "Referencia a Contacto. Es el campo correcto: las entidades nuevas nunca usan cliente_id."
+    },
     "cliente_id": {
       "type": "string",
-      "description": "ID del cliente (referencia a Cliente)"
+      "description": "LEGACY. Referencia a la entidad Cliente (codigo muerto). No usar en escrituras nuevas; se retira cuando termine el backfill a contacto_id."
     },
     "titulo": {
       "type": "string",
-      "description": "T\u00edtulo de la tarea"
+      "description": "Título de la tarea"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripci\u00f3n detallada"
+      "description": "Descripción detallada"
     },
     "fecha_limite": {
       "type": "string",
       "format": "date",
-      "description": "Fecha l\u00edmite para completar"
+      "description": "Fecha límite para completar"
     },
     "completada": {
       "type": "boolean",
       "default": false,
-      "description": "Si la tarea est\u00e1 completada"
+      "description": "Si la tarea está completada"
     },
     "asignado_a": {
       "type": "string",
@@ -37,10 +41,13 @@
       ],
       "default": "Media",
       "description": "Prioridad de la tarea"
+    },
+    "origen_agente": {
+      "type": "string",
+      "description": "Agente de IA que creo la tarea, si vino de una conversacion"
     }
   },
   "required": [
-    "cliente_id",
     "titulo",
     "fecha_limite"
   ]

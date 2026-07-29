@@ -10,6 +10,10 @@
       "type": "number",
       "default": 15,
       "description": "Porcentaje de ahorro global por defecto (ej: 15 = 15%)"
+    },
+    "valor_json": {
+      "type": "string",
+      "description": "Valor serializado de la configuración. Ej: clave 'tarifas_avaluo' con {base, por_m2, tope}. Saca los numeros de negocio del codigo."
     }
   },
   "required": [

@@ -1,0 +1,75 @@
+{
+  "name": "ContratoArriendo",
+  "type": "object",
+  "properties": {
+    "numero_contrato": {
+      "type": "string",
+      "description": "Numero interno del contrato"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Inmueble arrendado"
+    },
+    "propietario_id": {
+      "type": "string",
+      "description": "Dueno del inmueble"
+    },
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Quien lo habita"
+    },
+    "arrendatario_telefono": {
+      "type": "string",
+      "description": "Telefono del arrendatario. Senal de ruteo del agente."
+    },
+    "direccion_inmueble": {
+      "type": "string",
+      "description": "Direccion del inmueble"
+    },
+    "canon": {
+      "type": "number",
+      "description": "Canon mensual en pesos"
+    },
+    "valor_administracion": {
+      "type": "number",
+      "description": "Administracion mensual en pesos"
+    },
+    "dia_pago": {
+      "type": "number",
+      "description": "Dia del mes en que vence el canon"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Inicio de vigencia"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date",
+      "description": "Fin de vigencia"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Activo",
+        "Por_vencer",
+        "Terminado",
+        "En_mora"
+      ],
+      "default": "Activo",
+      "description": "Estado del contrato"
+    },
+    "tiene_seguro": {
+      "type": "boolean",
+      "description": "Tiene poliza de arrendamiento",
+      "default": false
+    },
+    "comision_pct": {
+      "type": "number",
+      "description": "Comision de administracion, en porcentaje"
+    }
+  },
+  "required": [
+    "arrendatario_id"
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "name": "SimiConfig",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "description": "Clave unica (usar 'general')"
+    },
+    "api_key": {
+      "type": "string",
+      "description": "Credencial de la API de SIMI"
+    },
+    "usuario": {
+      "type": "string",
+      "description": "Usuario de SIMI"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "URL base de la API"
+    },
+    "activo": {
+      "type": "boolean",
+      "description": "Si la sincronizacion esta encendida",
+      "default": false
+    },
+    "ultima_sync": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Ultima sincronizacion completada"
+    }
+  },
+  "required": [
+    "clave"
+  ]
+}

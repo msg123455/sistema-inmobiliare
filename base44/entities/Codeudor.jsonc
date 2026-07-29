@@ -1,0 +1,57 @@
+{
+  "name": "Codeudor",
+  "type": "object",
+  "properties": {
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Arrendatario al que respalda"
+    },
+    "solicitud_id": {
+      "type": "string",
+      "description": "Solicitud de matricula donde entro"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo"
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "Numero de documento"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Telefono de contacto"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo electronico"
+    },
+    "parentesco": {
+      "type": "string",
+      "description": "Relacion con el arrendatario"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Codeudor",
+        "Coarrendatario"
+      ],
+      "default": "Codeudor",
+      "description": "Que rol cumple"
+    },
+    "estado_estudio": {
+      "type": "string",
+      "enum": [
+        "Pendiente",
+        "En_estudio",
+        "Aprobado",
+        "Rechazado"
+      ],
+      "default": "Pendiente",
+      "description": "Como va su estudio"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

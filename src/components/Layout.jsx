@@ -4,13 +4,15 @@ import { useQuery } from '@tanstack/react-query';
 import {
   LayoutGrid, Users, Settings, LogOut, Home as HomeIcon, Menu, X,
   ChevronRight, CalendarDays, ClipboardList,
-  Link2, Building2, UserCheck,
+  Link2, UserCheck,
   BarChart3, MessageSquare, Bot, LineChart, Megaphone, Globe, GraduationCap, SlidersHorizontal, Brain,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { Conversacion } from '@/api/base44Client';
 import NotificationBell from '@/components/NotificationBell';
 import MobileTabBar from '@/components/MobileTabBar';
+import ThemeToggle from '@/components/ThemeToggle';
+import { Imagotipo, Isotipo } from '@/components/Logo';
 import { useUserRole } from '@/hooks/useUserRole';
 
 const NAV_SECTIONS = [
@@ -145,7 +147,7 @@ export default function Layout() {
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
         <Link
           to="/"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] transition-all duration-200 ${
+          className={`presionable flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] ${
             location.pathname === '/'
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-foreground hover:bg-muted'
@@ -157,7 +159,7 @@ export default function Layout() {
 
         <Link
           to="/inbox"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] transition-all duration-200 ${
+          className={`presionable flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] ${
             location.pathname === '/inbox'
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-foreground hover:bg-muted'
@@ -166,7 +168,7 @@ export default function Layout() {
           <MessageSquare className="w-[19px] h-[19px] flex-shrink-0" />
           <span className="flex-1">Bandeja</span>
           {totalBadge > 0 && (
-            <span className="bg-red-500 text-white text-[11px] font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center">
+            <span className="bg-destructive text-destructive-foreground text-[11px] font-semibold rounded-full min-w-[20px] h-5 px-1.5 flex items-center justify-center tabular">
               {totalBadge > 9 ? '9+' : totalBadge}
             </span>
           )}
@@ -190,7 +192,7 @@ export default function Layout() {
             <div key={section.key}>
               <button
                 onClick={() => toggleSection(section.key)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] transition-all duration-200 ${
+                className={`w-full presionable flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] ${
                   sectionActive
                     ? 'text-foreground font-medium bg-muted'
                     : 'text-foreground hover:bg-muted'
@@ -212,7 +214,7 @@ export default function Layout() {
                       <Link
                         key={item.path}
                         to={item.path}
-                        className={`flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-[14px] transition-all duration-200 ${
+                        className={`presionable flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-[14px] ${
                           active
                             ? 'bg-primary/10 text-primary font-medium'
                             : 'text-muted-foreground hover:text-foreground hover:bg-muted'
@@ -235,7 +237,7 @@ export default function Layout() {
 
         <Link
           to="/configuracion"
-          className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] transition-all duration-200 ${
+          className={`presionable flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[15px] ${
             location.pathname === '/configuracion'
               ? 'bg-primary text-primary-foreground font-medium shadow-sm'
               : 'text-foreground hover:bg-muted'
@@ -246,7 +248,7 @@ export default function Layout() {
         </Link>
       </nav>
 
-      <div className="px-3 pb-4 pt-3 border-t border-border/60">
+      <div className="pb-seguro px-3 pb-4 pt-3 border-t border-border/60">
         {user && (
           <div className="px-2 mb-2">
             <div className="flex items-center gap-2 mb-0.5">
@@ -256,7 +258,7 @@ export default function Layout() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <p className="text-[13px] font-medium text-foreground truncate">{user.full_name}</p>
-                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${isAdmin ? 'bg-primary/10 text-primary' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'}`}>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 ${isAdmin ? 'bg-primary/10 text-primary' : 'bg-warning/15 text-warning'}`}>
                     {rol}
                   </span>
                 </div>
@@ -265,9 +267,15 @@ export default function Layout() {
             </div>
           </div>
         )}
+        {/* El selector de tema del header se oculta en móvil, donde no hay
+            espacio; aquí queda accesible en cualquier ancho. */}
+        <div className="sm:hidden px-2 pb-2">
+          <ThemeToggle />
+        </div>
+
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 text-[14px] text-red-500 hover:bg-red-500/5 rounded-[8px] transition-colors"
+          className="presionable w-full flex items-center gap-2 px-3 py-2 text-[14px] text-destructive hover:bg-destructive/10 rounded-[8px]"
         >
           <LogOut className="w-4 h-4" />
           Cerrar sesión
@@ -278,24 +286,26 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="flex items-center h-12 px-4 bg-card/80 backdrop-blur-xl border-b border-border/60 shrink-0 z-20 sticky top-0">
+      <header className="vidrio-ios pt-seguro flex items-center h-14 px-4 border-b border-border/60 shrink-0 z-20 sticky top-0">
         <button
           onClick={() => setMobileOpen(true)}
-          className="md:hidden p-1.5 rounded-lg hover:bg-muted text-foreground mr-2"
+          aria-label="Abrir menú"
+          className="presionable md:hidden p-1.5 rounded-lg hover:bg-muted text-foreground mr-2"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <Link to="/" className="flex items-center gap-2.5 mr-4">
-          <div className="w-8 h-8 bg-primary rounded-[9px] flex items-center justify-center flex-shrink-0 shadow-sm">
-            <Building2 className="w-4.5 h-4.5 text-primary-foreground" />
-          </div>
-          <span className="text-[17px] font-semibold tracking-tight text-foreground hidden sm:inline">InmoGest</span>
+        <Link to="/" className="presionable flex items-center mr-4" aria-label="Ir al inicio">
+          {/* Imagotipo completo en pantallas donde cabe por encima del tamaño
+              mínimo del manual; en móvil solo el isotipo. */}
+          <Imagotipo className="hidden sm:inline-flex text-[15px] text-foreground" />
+          <Isotipo className="sm:hidden h-7 w-auto text-primary" title="Inmobiliare Julio Corredor" />
         </Link>
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          <ThemeToggle className="hidden sm:inline-flex" />
           <NotificationBell />
         </div>
       </header>
@@ -317,16 +327,12 @@ export default function Layout() {
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           }`}
         >
-          <div className="flex items-center justify-between px-4 h-12 border-b border-border/60">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 bg-primary rounded-[8px] flex items-center justify-center">
-                <Building2 className="w-4 h-4 text-primary-foreground" />
-              </div>
-              <span className="text-[15px] font-semibold text-foreground">InmoGest</span>
-            </div>
+          <div className="pt-seguro flex items-center justify-between px-4 h-14 border-b border-border/60">
+            <Imagotipo className="text-[14px] text-foreground" />
             <button
               onClick={() => setMobileOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
+              aria-label="Cerrar menú"
+              className="presionable p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
             >
               <X className="w-5 h-5" />
             </button>

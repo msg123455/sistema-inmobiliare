@@ -1,0 +1,48 @@
+{
+  "name": "MensajeTemplate",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre interno"
+    },
+    "canal": {
+      "type": "string",
+      "enum": [
+        "WhatsApp",
+        "Email",
+        "SMS"
+      ],
+      "default": "WhatsApp",
+      "description": "Canal"
+    },
+    "meta_template_name": {
+      "type": "string",
+      "description": "Nombre de la plantilla aprobada en Meta"
+    },
+    "cuerpo": {
+      "type": "string",
+      "description": "Texto con variables {{1}}, {{2}}"
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Que representa cada variable"
+    },
+    "categoria": {
+      "type": "string",
+      "description": "Utility, Marketing o Authentication"
+    },
+    "activa": {
+      "type": "boolean",
+      "description": "Si esta en uso",
+      "default": true
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

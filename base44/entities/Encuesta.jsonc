@@ -1,0 +1,54 @@
+{
+  "name": "Encuesta",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre interno de la encuesta"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Satisfaccion",
+        "NPS",
+        "Bienvenida_Arrendatario",
+        "Bienvenida_Propietario",
+        "Post_Reparacion"
+      ],
+      "description": "Que mide"
+    },
+    "preguntas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "texto": {
+            "type": "string"
+          },
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "abierta",
+              "puntaje",
+              "si_no"
+            ]
+          }
+        }
+      },
+      "default": [],
+      "description": "Las preguntas, en orden"
+    },
+    "activa": {
+      "type": "boolean",
+      "description": "Si se esta enviando",
+      "default": true
+    }
+  },
+  "required": [
+    "nombre",
+    "tipo"
+  ]
+}

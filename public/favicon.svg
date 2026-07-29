@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-100 -114 200 228">
+  <!-- Isotipo Inmobiliare Julio Corredor. Mismas coordenadas que
+       src/components/Logo.jsx: cubo isométrico de arista 100, cuatro franjas
+       por cara. Morado de marca #5400CF (manual, pág. 9). -->
+  <g fill="#5400CF">
+    <polygon points="-86.60,-50.00 -74.23,-42.86 12.37,-92.86 0.00,-100.00"/>
+    <polygon points="-61.86,-35.71 -49.49,-28.57 37.12,-78.57 24.74,-85.71"/>
+    <polygon points="-37.12,-21.43 -24.74,-14.29 61.86,-64.29 49.49,-71.43"/>
+    <polygon points="-12.37,-7.14 0.00,0.00 86.60,-50.00 74.23,-57.14"/>
+    <polygon points="-86.60,-50 -86.60,-35.71 0,14.29 0,0"/>
+    <polygon points="-86.60,-21.43 -86.60,-7.14 0,42.86 0,28.57"/>
+    <polygon points="-86.60,7.14 -86.60,21.43 0,71.43 0,57.14"/>
+    <polygon points="-86.60,35.71 -86.60,50 0,100 0,85.71"/>
+    <polygon points="0,0 12.37,-7.14 12.37,92.86 0,100"/>
+    <polygon points="24.74,-14.29 37.12,-21.43 37.12,78.57 24.74,85.71"/>
+    <polygon points="49.49,-28.57 61.86,-35.71 61.86,64.29 49.49,71.43"/>
+    <polygon points="74.23,-42.86 86.60,-50 86.60,50 74.23,57.14"/>
+  </g>
+</svg>

@@ -1,89 +1,114 @@
-// Envía las respuestas de Valentina que quedaron ENCOLADAS con demora humana.
-// Los webhooks guardan e.pendiente_envio = { globos, enviar_en, canal, destino }.
-// Esta función corre cada minuto (cron) y manda las que ya cumplieron su hora.
-// GET/POST  /api/functions/enviarPendientes?token=SYNCWASI2026
-// IMPORTANTE: Base44 corta a ~15s → tope de leads por corrida y sin pausas largas.
+// Worker de entrega. Cron cada minuto.
+//
+// Antes parseaba 500 filas de Nota por corrida para encontrar las pocas que
+// tenian algo pendiente, lo que obligaba a un tope de 6 leads. Ahora consulta
+// ColaSalida por estado y el tope sube a algo realista.
+//
+// La simulacion de tipeo vive aqui, no en el webhook: el request de entrada
+// tiene 15s y no puede gastarlos durmiendo.
 
-const MAX_LEADS_POR_CORRIDA = 6;
+import { crearDb } from './_core/db.ts';
+import * as wa from './_core/canales/whatsapp.ts';
+import * as tg from './_core/canales/telegram.ts';
+
+const MAX_POR_CORRIDA = 40;
+const MAX_INTENTOS = 3;
+const PRESUPUESTO_MS = 11_000;   // margen sobre el corte de ~15s de Base44
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const rand = (a: number, b: number) => Math.floor(Math.random() * (b - a + 1)) + a;
 
 Deno.serve(async (req) => {
-  const BASE_URL  = 'https://ndsoftware.base44.app';
-  const base44Key = Deno.env.get('BASE44_API_KEY') || '';
-  const hdrs      = { 'api_key': base44Key, 'Content-Type': 'application/json' };
-  const waPhoneId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '';
-  const waToken   = Deno.env.get('WHATSAPP_API_TOKEN') || '';
-  const tgToken   = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
-
   const url = new URL(req.url);
   let body: any = {};
-  try { body = await req.json(); } catch {}
-  if ((url.searchParams.get('token') || body.token || '') !== 'SYNCWASI2026') {
+  try { body = await req.json(); } catch { /* GET desde el cron */ }
+
+  const esperado = Deno.env.get('CRON_TOKEN') || '';
+  const dado = url.searchParams.get('token') || body.token || '';
+  if (!esperado || dado !== esperado) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
-  if (!base44Key) {
-    return new Response(JSON.stringify({ error: 'BASE44_API_KEY no configurado' }), { status: 500 });
-  }
 
-  // El filtro por campo de Base44 no es confiable → cargar todo y filtrar en código
-  const rN = await fetch(`${BASE_URL}/api/entities/Nota?limit=500`, { headers: hdrs });
-  const notas: any[] = rN.ok ? await rN.json() : [];
+  const env = {
+    waPhoneId: Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '',
+    waToken:   Deno.env.get('WHATSAPP_API_TOKEN') || '',
+    tgToken:   Deno.env.get('TELEGRAM_BOT_TOKEN') || '',
+  };
+  const db = crearDb(Deno.env.get('BASE44_API_KEY') || '');
+
+  const t0 = Date.now();
   const ahora = Date.now();
+  const pendientes = (await db.list('ColaSalida', { estado: 'pendiente', limit: MAX_POR_CORRIDA }))
+    .filter((c: any) => new Date(c.enviar_en || 0).getTime() <= ahora)
+    .sort((a: any, b: any) => new Date(a.enviar_en).getTime() - new Date(b.enviar_en).getTime());
 
-  const enviarWa = async (destino: string, texto: string) => {
-    const r = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${waToken}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messaging_product: 'whatsapp', to: destino, type: 'text', text: { body: texto } }),
-    });
-    return r.ok;
-  };
-  const enviarTg = async (chatId: any, texto: string) => {
-    const r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: Number(chatId), text: texto }),
-    });
-    return r.ok;
-  };
+  let enviados = 0, globosEnviados = 0, fallidos = 0;
 
-  let enviados = 0, globosEnviados = 0;
-  const detalle: any[] = [];
+  for (const item of pendientes) {
+    if (Date.now() - t0 > PRESUPUESTO_MS) break;   // el resto lo toma la corrida siguiente
 
-  for (const n of notas) {
-    if (enviados >= MAX_LEADS_POR_CORRIDA) break; // tope por el limite de 15s
-    let e: any;
-    try { e = JSON.parse(n.texto || '{}'); } catch { continue; }
-    const p = e.pendiente_envio;
-    if (!p || !Array.isArray(p.globos) || p.globos.length === 0) continue;
-    if (Number(p.enviar_en || 0) > ahora) continue; // aun no es su hora
-
-    let ok = false;
-    if (p.canal === 'telegram' && tgToken) {
-      ok = true;
-      for (const g of p.globos) { if (!(await enviarTg(p.destino, g))) ok = false; globosEnviados++; }
-    } else if (p.canal === 'whatsapp' && waPhoneId && waToken) {
-      ok = true;
-      for (const g of p.globos) { if (!(await enviarWa(p.destino, g))) ok = false; globosEnviados++; }
+    const globos: string[] = Array.isArray(item.globos) ? item.globos : [];
+    if (!globos.length) {
+      await db.actualizar('ColaSalida', item.id, { ...item, estado: 'enviado', error: 'sin globos' });
+      continue;
     }
 
-    // Poner la HORA REAL de envío en el último mensaje de Valentina (para el panel)
-    if (ok && Array.isArray(e.historial)) {
-      for (let k = e.historial.length - 1; k >= 0; k--) {
-        if (e.historial[k].role === 'assistant') { e.historial[k].ts = new Date().toISOString(); break; }
-      }
-    }
-    // Limpiar el pendiente y guardar (evita reenvíos). Si falló, queda en el detalle.
-    e.pendiente_envio = null;
+    // Marcar como en curso antes de enviar: si la funcion muere a mitad, la
+    // corrida siguiente no reenvia lo que ya salio.
+    await db.actualizar('ColaSalida', item.id, { ...item, estado: 'enviando', intentos: (item.intentos || 0) + 1 });
+
+    let ok = true;
     try {
-      await fetch(`${BASE_URL}/api/entities/Nota/${n.id}`, {
-        method: 'PUT', headers: hdrs,
-        body: JSON.stringify({ ...n, texto: JSON.stringify(e), fecha_nota: new Date().toISOString() }),
-      });
-    } catch (err) { console.error('Nota clear error:', err?.message || err); }
+      if (item.canal === 'telegram' && env.tgToken) {
+        await tg.marcarEscribiendo(item.destino, env);
+        for (const g of globos) {
+          await sleep(pausaDe(g, t0));
+          if (!(await tg.enviar(item.destino, g, env))) ok = false;
+          globosEnviados++;
+        }
+      } else if (item.canal === 'whatsapp' && env.waPhoneId && env.waToken) {
+        for (const g of globos) {
+          await sleep(pausaDe(g, t0));
+          if (!(await wa.enviar(item.destino, g, env))) ok = false;
+          globosEnviados++;
+        }
+      } else {
+        ok = false;
+      }
+    } catch (e) {
+      console.error('entrega error:', (e as Error).message);
+      ok = false;
+    }
 
-    enviados++;
-    detalle.push({ tel: n.cliente_id, canal: p.canal, globos: p.globos.length, ok });
+    const intentos = (item.intentos || 0) + 1;
+    if (ok) {
+      await db.actualizar('ColaSalida', item.id, { ...item, estado: 'enviado', intentos, enviado_en: new Date().toISOString(), error: '' });
+      enviados++;
+    } else if (intentos >= MAX_INTENTOS) {
+      await db.actualizar('ColaSalida', item.id, { ...item, estado: 'fallido', intentos, error: 'agotados los reintentos' });
+      fallidos++;
+    } else {
+      // Vuelve a la cola con backoff.
+      await db.actualizar('ColaSalida', item.id, {
+        ...item, estado: 'pendiente', intentos,
+        enviar_en: new Date(Date.now() + intentos * 60_000).toISOString(),
+        error: 'reintentando',
+      });
+      fallidos++;
+    }
   }
 
-  return new Response(JSON.stringify({ ok: true, leads_enviados: enviados, globos: globosEnviados, detalle }, null, 2),
-    { status: 200, headers: { 'Content-Type': 'application/json' } });
+  return new Response(
+    JSON.stringify({ ok: true, en_cola: pendientes.length, enviados, globos: globosEnviados, fallidos }, null, 2),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  );
 });
+
+// Pausa proporcional al largo del mensaje, con variacion. Se recorta si la
+// corrida se esta quedando sin presupuesto: entregar tarde es mejor que no
+// entregar.
+function pausaDe(texto: string, t0: number): number {
+  const gastado = Date.now() - t0;
+  if (gastado > PRESUPUESTO_MS * 0.7) return 250;
+  return Math.min(Math.max(texto.length * 22, 700), 2400) + rand(-200, 400);
+}

@@ -1,0 +1,232 @@
+// agenteInbound — LA funcion conversacional. Sirve WhatsApp y Telegram.
+//
+// Reemplaza webhookWhatsApp + webhookTelegram, que eran dos archivos de ~1500
+// lineas con 947 de diferencia entre si: un fork drifted que obligaba a
+// arreglarlo todo dos veces.
+//
+// Ruta:  normalizar -> dedup -> cargarEstado -> ROUTE -> cargarCtx
+//        -> runAgent -> park (ColaSalida + estado) -> 200
+//
+// Los dos cambios estructurales frente al motor viejo son rutear ANTES de
+// cargar, y encolar siempre en vez de entregar inline.
+
+import { crearDb } from './_core/db.ts';
+import { encolar, notificarEquipo } from './_core/cola.ts';
+import { armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
+import { correrAgente } from './_core/llm.ts';
+import { decidirAgente } from './_core/router.ts';
+import { cargarEstado, ctxDe, guardarEstado } from './_core/state.ts';
+import { toolsDe } from './_core/tools/index.ts';
+import type { CtxTool, Entrada } from './_core/protocol.ts';
+import * as wa from './_core/canales/whatsapp.ts';
+import * as tg from './_core/canales/telegram.ts';
+
+const MODELO_PRIMARIO = 'claude-sonnet-5';
+const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
+const MODELO_ROUTER   = 'claude-haiku-4-5-20251001';
+
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+
+  // Handshake de verificacion de Meta.
+  if (req.method === 'GET') {
+    const token = url.searchParams.get('hub.verify_token');
+    const esperado = Deno.env.get('WHATSAPP_VERIFY_TOKEN') || '';
+    if (url.searchParams.get('hub.mode') === 'subscribe' && esperado && token === esperado) {
+      return new Response(url.searchParams.get('hub.challenge') || '', { status: 200 });
+    }
+    return new Response('Forbidden', { status: 403 });
+  }
+  if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
+
+  let body: any;
+  try { body = await req.json(); } catch { return new Response('OK', { status: 200 }); }
+
+  const env = {
+    base44Key:   Deno.env.get('BASE44_API_KEY') || '',
+    anthropicKey: Deno.env.get('ANTHROPIC_API_KEY') || '',
+    openaiKey:   Deno.env.get('OPENAI_API_KEY') || '',
+    waToken:     Deno.env.get('WHATSAPP_API_TOKEN') || '',
+    waPhoneId:   body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '',
+    tgToken:     Deno.env.get('TELEGRAM_BOT_TOKEN') || '',
+  };
+
+  // ── 1. Normalizar. El payload se olfatea; no hay dos webhooks. ────────────
+  let entrada: Entrada | null = null;
+  try {
+    if (wa.esWhatsApp(body)) entrada = await wa.normalizar(body, env);
+    else if (tg.esTelegram(body)) entrada = await tg.normalizar(body, env);
+  } catch (e) {
+    console.error('normalizar error:', (e as Error).message);
+  }
+  if (!entrada?.texto || !entrada.tel) return new Response('OK', { status: 200 });
+
+  // Siempre 200: si Meta no lo recibe rapido, reintenta y duplica el turno.
+  try {
+    await procesar(entrada, env);
+  } catch (e) {
+    console.error('agenteInbound error:', (e as Error).message, (e as Error).stack);
+  }
+  return new Response('OK', { status: 200 });
+});
+
+async function procesar(entrada: Entrada, env: Record<string, string>) {
+  const t0 = Date.now();
+  const marca = (fase: string) => console.log(`[t+${Date.now() - t0}ms] ${fase}`);
+
+  const db = crearDb(env.base44Key);
+
+  // ── 2. Estado + dedup ────────────────────────────────────────────────────
+  const { id: memoriaId, estado } = await cargarEstado(db, entrada.canal, entrada.tel);
+  marca('estado cargado');
+
+  if (entrada.msgId && estado.msg_ids.includes(entrada.msgId)) {
+    console.log(`dedup: ${entrada.msgId} ya procesado`);
+    return;
+  }
+  if (entrada.msgId) estado.msg_ids.push(entrada.msgId);
+
+  estado.historial.push({ role: 'user', content: entrada.texto, ts: new Date().toISOString() });
+
+  // Si habia un turno aparcado y el cliente vuelve a escribir, el turno viejo
+  // queda obsoleto: se descarta y se arranca con el historial actualizado. Sin
+  // esto, continuarTurno respondia a un mensaje que el cliente ya reemplazo.
+  if (estado.turno_pendiente) {
+    console.log('turno pendiente descartado: llego mensaje nuevo del cliente');
+    estado.turno_pendiente = null;
+  }
+
+  // Control manual desde la Bandeja: se registra el mensaje pero el bot calla.
+  if (estado.pausada) {
+    await guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, { ultimo_mensaje: entrada.texto });
+    console.log('IA en pausa (control manual) — no responde');
+    return;
+  }
+
+  // ── 3. ROUTE antes de cargar ─────────────────────────────────────────────
+  const decision = await decidirAgente(db, estado, entrada, {
+    anthropicKey: env.anthropicKey,
+    modeloRouter: MODELO_ROUTER,
+  });
+  marca(`ruteo -> ${decision.agente} (nivel ${decision.nivel}: ${decision.motivo})`);
+
+  if (decision.agente !== estado.agente_activo || !estado.agente_historial.length) {
+    estado.agente_activo = decision.agente;
+    estado.agente_historial.push({
+      agente: decision.agente, desde: new Date().toISOString(), motivo: decision.motivo,
+    });
+  }
+
+  // ── 4. Cargar SOLO lo que este agente necesita, en paralelo ──────────────
+  const [base, ctxAgenteCargado, contacto] = await Promise.all([
+    cargarBase(db, estado.agente_activo),
+    cargarContexto(db, estado.agente_activo, estado, entrada),
+    asegurarContacto(db, entrada, estado),
+  ]);
+  marca('contexto cargado');
+
+  if (contacto) estado.compartido.contacto_id = contacto.id;
+  if (!base.prompt) console.error(`Sin fila AgentePrompt activa para "${estado.agente_activo}" — usando prompt minimo`);
+
+  const scratch = ctxDe(estado, estado.agente_activo);
+  Object.assign(scratch, ctxAgenteCargado);
+
+  // ── 5. Correr el agente ──────────────────────────────────────────────────
+  const tools = toolsDe(estado.agente_activo, base.prompt?.tools_habilitadas);
+  const ctx: CtxTool = {
+    db, estado, entrada,
+    ctxAgente: scratch,
+    config: base.config,
+    salida: { globos: [], finTurno: false },
+    efectos: { transferir: null, escalado: null, notificar: [] },
+  };
+
+  const mensajes = estado.turno_pendiente?.mensajes ?? historialParaModelo(estado);
+  const res = await correrAgente({
+    apiKey: env.anthropicKey,
+    modelos: [String(base.prompt?.modelo || MODELO_PRIMARIO), MODELO_FALLBACK],
+    system: armarSystem(base, estado.agente_activo, estado, scratch),
+    mensajes,
+    tools,
+    ctx,
+    maxTokens: Number(base.prompt?.max_tokens) || 3000,
+    effort: base.prompt?.effort || 'low',
+  });
+  marca(`agente corrio (${res.llamadas} llamada${res.llamadas === 1 ? '' : 's'} al modelo)`);
+
+  // ── 6. Turno pendiente: lo reanuda el cron continuarTurno ────────────────
+  const continuaciones = estado.turno_pendiente?.continuaciones ?? 0;
+  if (res.pendiente && continuaciones < 2) {
+    estado.turno_pendiente = {
+      mensajes: res.pendiente.mensajes,
+      continuaciones: continuaciones + 1,
+      agente: estado.agente_activo,
+    };
+  } else {
+    if (res.pendiente) {
+      // Se agotaron las continuaciones: escalar en vez de dejar al cliente colgado.
+      console.error('Presupuesto de continuaciones agotado — escalando');
+      estado.pausada = true;
+      ctx.efectos.notificar.push(
+        `El agente ${estado.agente_activo} no logro cerrar el turno tras 2 continuaciones.\n` +
+        `Cliente: wa.me/${entrada.tel}\nRevisar desde la Bandeja.`,
+      );
+    }
+    estado.turno_pendiente = null;
+  }
+
+  // ── 7. Park: encolar + guardar estado + retornar ─────────────────────────
+  const globos = res.globos.filter(Boolean);
+  if (globos.length) {
+    estado.historial.push({
+      role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString(),
+    });
+    await encolar(db, {
+      canal: entrada.canal,
+      destino: entrada.destino,
+      globos,
+      demoraMin: Number(base.config.demora_respuesta_min) || 0,
+      conversacionId: memoriaId || '',
+    });
+  }
+
+  await Promise.all([
+    guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, {
+      ultimo_mensaje: entrada.texto,
+      ultima_respuesta: globos.join(' | '),
+      contacto_id: contacto?.id,
+    }),
+    notificarEquipo(base.config, entrada.tel, ctx.efectos.notificar),
+  ]);
+  marca('guardado');
+}
+
+// El historial es COMPARTIDO: todo agente ve el hilo completo, incluidos los
+// marcadores de transferencia. Es lo que hace que un handoff no pierda contexto.
+function historialParaModelo(estado: { historial: Array<{ role: string; content: string }> }) {
+  const msgs = estado.historial.slice(-16).map((m) => ({ role: m.role, content: String(m.content) }));
+  // La API exige que el primer mensaje sea de usuario.
+  while (msgs.length && msgs[0].role !== 'user') msgs.shift();
+  return msgs.length ? msgs : [{ role: 'user', content: '(el cliente inicio la conversacion)' }];
+}
+
+async function asegurarContacto(db: ReturnType<typeof crearDb>, entrada: Entrada, estado: { compartido: Record<string, unknown> }) {
+  const tel = entrada.tel.replace(/\D/g, '');
+  const existente = await db.uno('Contacto', { telefono: tel });
+  if (existente) {
+    await db.actualizar('Contacto', existente.id, {
+      ...existente, ultima_actividad: new Date().toISOString(), en_conversacion: true,
+    });
+    return existente;
+  }
+  const ahora = new Date().toISOString();
+  return await db.crear('Contacto', {
+    nombre: String(estado.compartido.nombre || '') || `Contacto ${tel.slice(-4)}`,
+    telefono: tel,
+    canal_adquisicion: entrada.canal === 'telegram' ? 'Telegram' : 'WhatsApp',
+    etapa_pipeline: 'Lead',
+    fecha_primer_contacto: ahora.split('T')[0],
+    ultima_actividad: ahora,
+    en_conversacion: true,
+  });
+}

@@ -1,0 +1,57 @@
+{
+  "name": "AgentePrompt",
+  "type": "object",
+  "properties": {
+    "agente": {
+      "type": "string",
+      "description": "Id del agente: recepcion, ventas, consignacion, cartera, mantenimiento, avaluos, pqr, matricula, encuestas. Usa 'identidad_marca' para el bloque comun a todos."
+    },
+    "version": {
+      "type": "number",
+      "description": "Version del prompt. Sube al editar para poder volver atras."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "El system prompt del agente. Maximo ~80 lineas."
+    },
+    "tools_habilitadas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Recorta el set de tools del agente. Vacio = todas las suyas. Nunca puede ampliarlo."
+    },
+    "modelo": {
+      "type": "string",
+      "description": "Modelo de Anthropic. Por defecto claude-sonnet-5."
+    },
+    "effort": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "default": "low",
+      "description": "Profundidad de razonamiento. low para chat, medium si el agente falla en tareas complejas."
+    },
+    "max_tokens": {
+      "type": "number",
+      "description": "Tope de tokens de salida por turno"
+    },
+    "activo": {
+      "type": "boolean",
+      "description": "Solo una fila activa por agente",
+      "default": true
+    },
+    "notas": {
+      "type": "string",
+      "description": "Para el equipo: que se cambio y por que"
+    }
+  },
+  "required": [
+    "agente",
+    "prompt"
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "name": "LiquidacionPropietario",
+  "type": "object",
+  "properties": {
+    "propietario_id": {
+      "type": "string",
+      "description": "A quien se le gira"
+    },
+    "periodo": {
+      "type": "string",
+      "description": "Mes en formato AAAA-MM"
+    },
+    "ingresos_brutos": {
+      "type": "number",
+      "description": "Canones recaudados"
+    },
+    "comision_inmobiliaria": {
+      "type": "number",
+      "description": "Nuestra comision"
+    },
+    "retenciones": {
+      "type": "number",
+      "description": "Retenciones de ley"
+    },
+    "descuentos_reparaciones": {
+      "type": "number",
+      "description": "Reparaciones que asume el propietario"
+    },
+    "neto_a_pagar": {
+      "type": "number",
+      "description": "Lo que se gira"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Borrador",
+        "Aprobada",
+        "Pagada"
+      ],
+      "default": "Borrador",
+      "description": "Estado del giro"
+    },
+    "fecha_pago": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se giro"
+    }
+  },
+  "required": [
+    "periodo"
+  ]
+}

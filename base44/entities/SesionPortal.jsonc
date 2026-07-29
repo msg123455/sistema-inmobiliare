@@ -1,0 +1,64 @@
+{
+  "name": "SesionPortal",
+  "type": "object",
+  "properties": {
+    "token_hash": {
+      "type": "string",
+      "description": "SHA-256 del token. El token en claro NUNCA se guarda."
+    },
+    "tipo": {
+      "type": "string",
+      "description": "Seccion del portal a la que da acceso"
+    },
+    "sujeto_id": {
+      "type": "string",
+      "description": "Id del arrendatario, propietario o solicitud"
+    },
+    "sujeto_tipo": {
+      "type": "string",
+      "enum": [
+        "arrendatario",
+        "propietario",
+        "solicitud_matricula"
+      ],
+      "description": "Que tipo de sujeto es"
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato asociado, si aplica"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Telefono al que se envio. El token solo vale para este numero."
+    },
+    "expira": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Vence a los 15 minutos"
+    },
+    "usado": {
+      "type": "boolean",
+      "description": "Un solo uso",
+      "default": false
+    },
+    "usado_en": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se consumio"
+    },
+    "ip": {
+      "type": "string",
+      "description": "IP desde la que se consumio"
+    },
+    "creada": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se emitio"
+    }
+  },
+  "required": [
+    "token_hash",
+    "telefono",
+    "expira"
+  ]
+}

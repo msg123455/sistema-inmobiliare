@@ -19,6 +19,10 @@
       "type": "string",
       "description": "Etapas donde aplica: todas, calentamiento, descubrimiento, calificacion, propuesta, cierre (separadas por coma)"
     },
+    "agentes": {
+      "type": "string",
+      "description": "Agentes que reciben este chunk, separados por coma (ventas, cartera, mantenimiento...). 'todos' para todos. Sin esto, cartera recibia 4.5KB de psicologia de ventas en cada consulta de saldo."
+    },
     "prioridad": {
       "type": "number",
       "default": 5,

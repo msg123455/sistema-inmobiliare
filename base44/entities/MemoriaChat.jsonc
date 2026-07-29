@@ -2,9 +2,13 @@
   "name": "MemoriaChat",
   "type": "object",
   "properties": {
+    "clave": {
+      "type": "string",
+      "description": "Clave unica indexada de la conversacion: wa:573001234567 o tg:12345. Es la via de busqueda; reemplaza el scan de 500 filas del motor viejo."
+    },
     "telefono": {
       "type": "string",
-      "description": "Teléfono/ID único del lead (clave de búsqueda)"
+      "description": "Telefono o chat id, solo digitos"
     },
     "contacto_id": {
       "type": "string",
@@ -12,15 +16,29 @@
     },
     "nombre": {
       "type": "string",
-      "description": "Nombre del lead si ya se conoce"
+      "description": "Nombre del cliente si ya se conoce"
     },
     "canal": {
       "type": "string",
       "description": "Canal de la conversación (WhatsApp, Telegram)"
     },
+    "agente_activo": {
+      "type": "string",
+      "description": "Agente que lleva la conversacion ahora mismo"
+    },
+    "pausada": {
+      "type": "boolean",
+      "default": false,
+      "description": "Control manual desde la Bandeja: si es true la IA no responde. UNICA fuente de verdad de la pausa."
+    },
+    "tiene_turno_pendiente": {
+      "type": "boolean",
+      "default": false,
+      "description": "El turno excedio el presupuesto de llamadas al modelo. Lo consulta el cron continuarTurno."
+    },
     "estado_json": {
       "type": "string",
-      "description": "Estado completo de la conversación: historial, datos capturados, etapa, calificación"
+      "description": "Estado completo de la conversación (v2): identidad, historial compartido, ctx por agente"
     },
     "ultimo_mensaje": {
       "type": "string",
@@ -28,7 +46,7 @@
     },
     "ultima_respuesta": {
       "type": "string",
-      "description": "Última respuesta que dio Valentina"
+      "description": "Última respuesta que dio el agente"
     },
     "fecha_ultimo_mensaje": {
       "type": "string",
@@ -38,11 +56,11 @@
     "calificado": {
       "type": "boolean",
       "default": false,
-      "description": "Si el lead ya fue calificado y asignado a broker"
+      "description": "Si el lead ya fue calificado y asignado"
     },
     "broker_asignado": {
       "type": "string",
-      "description": "Nombre del broker asignado (si calificado)"
+      "description": "Nombre del asesor asignado (si calificado)"
     }
   },
   "required": ["telefono"]

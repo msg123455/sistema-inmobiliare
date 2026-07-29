@@ -1,0 +1,83 @@
+{
+  "name": "PagoCanon",
+  "type": "object",
+  "properties": {
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato al que corresponde"
+    },
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Quien paga"
+    },
+    "periodo": {
+      "type": "string",
+      "description": "Mes en formato AAAA-MM"
+    },
+    "valor_canon": {
+      "type": "number",
+      "description": "Canon del periodo"
+    },
+    "valor_administracion": {
+      "type": "number",
+      "description": "Administracion del periodo"
+    },
+    "valor_total": {
+      "type": "number",
+      "description": "Total a pagar"
+    },
+    "valor_pagado": {
+      "type": "number",
+      "description": "Lo que efectivamente pago"
+    },
+    "saldo": {
+      "type": "number",
+      "description": "Lo que falta"
+    },
+    "fecha_vencimiento": {
+      "type": "string",
+      "format": "date",
+      "description": "Cuando vence"
+    },
+    "fecha_pago": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando pago"
+    },
+    "medio": {
+      "type": "string",
+      "enum": [
+        "PSE",
+        "Consignacion",
+        "Efectivo",
+        "Transferencia",
+        "Otro"
+      ],
+      "description": "Como pago"
+    },
+    "referencia": {
+      "type": "string",
+      "description": "Referencia del pago"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Pendiente",
+        "Pagado",
+        "Parcial",
+        "Mora"
+      ],
+      "default": "Pendiente",
+      "description": "Estado del periodo"
+    },
+    "dias_mora": {
+      "type": "number",
+      "default": 0,
+      "description": "Dias de mora acumulados"
+    }
+  },
+  "required": [
+    "contrato_id",
+    "periodo"
+  ]
+}

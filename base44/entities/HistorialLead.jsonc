@@ -1,0 +1,30 @@
+{
+  "name": "HistorialLead",
+  "type": "object",
+  "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "Lead al que corresponde"
+    },
+    "evento": {
+      "type": "string",
+      "description": "Que paso: Calificado, Contactado, Visita, Cambio_estado"
+    },
+    "detalle": {
+      "type": "string",
+      "description": "Descripcion del evento"
+    },
+    "asesor_id": {
+      "type": "string",
+      "description": "Quien lo hizo"
+    },
+    "fecha": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando"
+    }
+  },
+  "required": [
+    "contacto_id"
+  ]
+}

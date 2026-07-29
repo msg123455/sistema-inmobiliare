@@ -1,0 +1,156 @@
+/* ============================================================================
+   MARCA — INMOBILIARE Julio Corredor desde 1960
+   Fuente: Manual de Marca Inmobiliare Julio Corredor
+
+   Este es el UNICO archivo que hay que tocar para re-skinear la aplicacion.
+   Nada de aqui depende de un componente; todo se consume via hsl(var(--*)).
+
+   Nota sobre el manual: la pagina 14 anota el morado como "RGB 54,0,207" y la
+   pagina 18 como "WEB: 6600CC". Ambas se contradicen con el hex 5400CF, que
+   es RGB(84,0,207) y aparece consistente en las paginas 9 y 18. Se toma
+   #5400CF como autoridad. Igual, "RGB: 2221,221,221" del gris DDDDDD es un
+   dedazo por 221,221,221.
+   ============================================================================ */
+
+:root {
+  /* ── Tipografia ───────────────────────────────────────────────────────────
+     DM Sans es la tipografia principal del manual (Regular, Medium, Bold, con
+     italicas). Va auto-hospedada via @fontsource: el CSP de index.html
+     (`style-src 'self'`) bloquea Google Fonts, asi que un @import remoto
+     fallaria en silencio y caeria al fallback del sistema. */
+  --font-sans: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont,
+               'SF Pro Text', system-ui, sans-serif;
+  --font-display: 'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont,
+                  'SF Pro Display', system-ui, sans-serif;
+
+  /* ── Colores del logo (manual, pag. 9 y 14) ───────────────────────────────
+     Se guardan en HSL sin envolver para poder componer opacidades con Tailwind
+     (`bg-primary/10`). El valor hex va al lado para poder cotejarlo contra el
+     manual sin tener que convertir nada. */
+  --marca-morado:      264 100% 41%;  /* #5400CF — morado principal */
+  --marca-negro:         0   0%  0%;  /* #000000 */
+  --marca-gris-claro:    0   0% 81%;  /* #CECECE */
+  --marca-gris-isotipo:  0   0% 46%;  /* #757575 — isotipo en gris */
+
+  /* ── Paleta monocromatica (manual, pag. 18) ───────────────────────────────
+     "puede ser evolucionada y modificada sin perder la linea grafica". */
+  --marca-indigo:      244 100% 29%;  /* #0A0094 */
+  --marca-azul:        225 100% 41%;  /* #0033CF */
+  --marca-violeta:     283 100% 41%;  /* #9600CF */
+  --marca-magenta:     299 100% 41%;  /* #CC00CF */
+  --marca-gris-humo:     0   0% 87%;  /* #DDDDDD */
+  --marca-gris-medio:    0   0% 40%;  /* #666666 */
+
+  /* ── Radios (lenguaje iOS) ─────────────────────────────────────────────── */
+  --radius: 0.875rem;
+
+  /* ── Semanticos: claro ────────────────────────────────────────────────────
+     El morado #5400CF da 9.2:1 contra blanco, asi que sirve tanto de relleno
+     con texto blanco encima como de color de texto sobre fondo claro. */
+  --background: 264 20% 98%;
+  --foreground: 264 30% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 264 30% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 264 30% 10%;
+
+  --primary: var(--marca-morado);
+  --primary-foreground: 0 0% 100%;
+  --secondary: 264 25% 96%;
+  --secondary-foreground: 264 30% 10%;
+  --muted: 264 20% 96%;
+  --muted-foreground: 264 8% 45%;
+  --accent: 264 30% 95%;
+  --accent-foreground: var(--marca-morado);
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 145 63% 38%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 45%;
+  --warning-foreground: 0 0% 100%;
+
+  --border: 264 15% 90%;
+  --input: 264 15% 90%;
+  --ring: var(--marca-morado);
+
+  /* Series de datos.
+     La paleta del manual abarca de 225° a 299°: 74 grados de tono para cinco
+     categorias. Solo con tono las series contiguas se confunden, asi que se
+     alternan tambien en luminosidad — cada par vecino se diferencia por dos
+     canales, no por uno. Eso ademas las mantiene distinguibles impresas en
+     escala de grises.
+     Cinco es el techo de esta rampa: para mas series hay que cambiar de
+     codificacion (posicion, etiqueta directa), no estirar el morado. */
+  --chart-1: 264 100% 41%;  /* morado de marca, el ancla */
+  --chart-2: 225 100% 45%;  /* azul */
+  --chart-3: 299 100% 41%;  /* magenta */
+  --chart-4: 244 100% 28%;  /* indigo profundo */
+  --chart-5: 283  70% 62%;  /* violeta claro */
+
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 264 30% 10%;
+  --sidebar-primary: var(--marca-morado);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 264 25% 96%;
+  --sidebar-accent-foreground: 264 30% 10%;
+  --sidebar-border: 264 15% 90%;
+  --sidebar-ring: var(--marca-morado);
+
+  /* Superficie translucida de las barras (efecto iOS) */
+  --superficie-vidrio: 0 0% 100%;
+}
+
+/* ── Semanticos: oscuro ─────────────────────────────────────────────────────
+   El #5400CF puro sobre fondo oscuro da 1.9:1 y es ilegible. En oscuro el
+   morado sube a 72% de luminosidad (#AA70FF, 5.9:1), que es la misma marca
+   corrida en la rampa, no un color distinto. El manual lo permite: la paleta
+   "puede ser evolucionada conservando el mismo lenguaje". */
+.dark,
+:root[data-theme='dark'] {
+  --background: 264 18% 7%;
+  --foreground: 264 10% 96%;
+  --card: 264 16% 11%;
+  --card-foreground: 264 10% 96%;
+  --popover: 264 16% 11%;
+  --popover-foreground: 264 10% 96%;
+
+  --primary: 264 100% 72%;
+  --primary-foreground: 264 40% 8%;
+  --secondary: 264 14% 17%;
+  --secondary-foreground: 264 10% 96%;
+  --muted: 264 14% 17%;
+  --muted-foreground: 264 8% 62%;
+  --accent: 264 20% 20%;
+  --accent-foreground: 264 100% 80%;
+
+  --destructive: 0 72% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 145 55% 48%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 55%;
+  --warning-foreground: 264 40% 8%;
+
+  --border: 264 12% 22%;
+  --input: 264 12% 22%;
+  --ring: 264 100% 72%;
+
+  /* Mismo criterio que en claro: tono y luminosidad alternados. Todo sube de
+     luminosidad porque el fondo es oscuro. */
+  --chart-1: 264 100% 72%;
+  --chart-2: 225 100% 66%;
+  --chart-3: 299 100% 74%;
+  --chart-4: 244  95% 84%;
+  --chart-5: 283  60% 56%;
+
+  --sidebar-background: 264 18% 9%;
+  --sidebar-foreground: 264 10% 96%;
+  --sidebar-primary: 264 100% 72%;
+  --sidebar-primary-foreground: 264 40% 8%;
+  --sidebar-accent: 264 14% 17%;
+  --sidebar-accent-foreground: 264 10% 96%;
+  --sidebar-border: 264 12% 22%;
+  --sidebar-ring: 264 100% 72%;
+
+  --superficie-vidrio: 264 16% 11%;
+}

@@ -36,6 +36,21 @@ export const HistorialLead = base44.entities.HistorialLead;
 export const ConfigAgente = base44.entities.ConfigAgente;
 export const ConocimientoRAG = base44.entities.ConocimientoRAG;
 
+// Arquitectura multi-agente
+export const MemoriaChat = base44.entities.MemoriaChat;
+export const AgentePrompt = base44.entities.AgentePrompt;
+export const ColaSalida = base44.entities.ColaSalida;
+export const Asesor = base44.entities.Asesor;
+
+// Operación
+export const Arrendatario = base44.entities.Arrendatario;
+export const Consignacion = base44.entities.Consignacion;
+export const Reparacion = base44.entities.Reparacion;
+export const Avaluo = base44.entities.Avaluo;
+export const PQR = base44.entities.PQR;
+export const SolicitudMatricula = base44.entities.SolicitudMatricula;
+export const PagoCanon = base44.entities.PagoCanon;
+
 // SEO Pipeline entities
 export const NodoSitemap = base44.entities.NodoSitemap;
 export const ContenidoSEO = base44.entities.ContenidoSEO;

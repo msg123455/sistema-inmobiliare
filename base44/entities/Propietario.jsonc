@@ -1,0 +1,68 @@
+{
+  "name": "Propietario",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo o razon social"
+    },
+    "tipo_documento": {
+      "type": "string",
+      "enum": [
+        "CC",
+        "CE",
+        "NIT",
+        "PA"
+      ],
+      "default": "CC",
+      "description": "Tipo de documento"
+    },
+    "numero_documento": {
+      "type": "string",
+      "description": "Numero de documento, solo digitos"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "WhatsApp con indicativo, sin +"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo electronico"
+    },
+    "direccion": {
+      "type": "string",
+      "description": "Direccion de correspondencia"
+    },
+    "banco": {
+      "type": "string",
+      "description": "Banco para el giro"
+    },
+    "tipo_cuenta": {
+      "type": "string",
+      "enum": [
+        "Ahorros",
+        "Corriente"
+      ],
+      "description": "Tipo de cuenta"
+    },
+    "numero_cuenta": {
+      "type": "string",
+      "description": "Numero de cuenta para el giro"
+    },
+    "propiedades_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Inmuebles que tiene con nosotros"
+    },
+    "origen": {
+      "type": "string",
+      "description": "Como llego"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

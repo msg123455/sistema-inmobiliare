@@ -1,0 +1,52 @@
+{
+  "name": "CodigoBarras",
+  "type": "object",
+  "properties": {
+    "arrendatario_id": {
+      "type": "string",
+      "description": "A quien se le envia"
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato al que corresponde"
+    },
+    "periodo": {
+      "type": "string",
+      "description": "Mes en formato AAAA-MM"
+    },
+    "url_pdf": {
+      "type": "string",
+      "description": "PDF del recibo"
+    },
+    "codigo": {
+      "type": "string",
+      "description": "Codigo de barras"
+    },
+    "valor": {
+      "type": "number",
+      "description": "Valor a pagar"
+    },
+    "fecha_envio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se envio"
+    },
+    "canal_envio": {
+      "type": "string",
+      "description": "Por donde se envio"
+    },
+    "estado_envio": {
+      "type": "string",
+      "enum": [
+        "Pendiente",
+        "Enviado",
+        "Fallido"
+      ],
+      "default": "Pendiente",
+      "description": "Como quedo el envio"
+    }
+  },
+  "required": [
+    "periodo"
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "name": "SolicitudMatricula",
+  "type": "object",
+  "properties": {
+    "numero_solicitud": {
+      "type": "string",
+      "description": "Numero que se le da al cliente. Sirve de segundo factor."
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato resultante, cuando se firma"
+    },
+    "arrendatario_id": {
+      "type": "string",
+      "description": "Arrendatario creado, cuando se aprueba"
+    },
+    "nombre_solicitante": {
+      "type": "string",
+      "description": "Nombre del arrendatario principal"
+    },
+    "documento_solicitante": {
+      "type": "string",
+      "description": "Cedula del arrendatario principal"
+    },
+    "email_solicitante": {
+      "type": "string",
+      "description": "Correo del arrendatario principal"
+    },
+    "telefono_contacto": {
+      "type": "string",
+      "description": "Telefono desde el que se hizo el tramite"
+    },
+    "direccion_inmueble": {
+      "type": "string",
+      "description": "Inmueble que va a arrendar"
+    },
+    "participantes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string"
+          },
+          "documento": {
+            "type": "string"
+          },
+          "telefono": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string"
+          },
+          "parentesco": {
+            "type": "string"
+          }
+        }
+      },
+      "default": [],
+      "description": "Codeudores y coarrendatarios"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Iniciada",
+        "En_captura",
+        "Pendiente_documentos",
+        "En_estudio",
+        "Aprobada",
+        "Rechazada"
+      ],
+      "default": "Iniciada",
+      "description": "Etapa del tramite"
+    },
+    "origen": {
+      "type": "string",
+      "description": "Por donde entro"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando arranco"
+    },
+    "fecha_cierre_captura": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando termino la captura de datos"
+    }
+  },
+  "required": [
+    "numero_solicitud"
+  ]
+}

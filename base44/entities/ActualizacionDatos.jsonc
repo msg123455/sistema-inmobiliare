@@ -1,0 +1,47 @@
+{
+  "name": "ActualizacionDatos",
+  "type": "object",
+  "properties": {
+    "arrendatario_id": {
+      "type": "string",
+      "description": "A quien se le pidio"
+    },
+    "campos_solicitados": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Que datos se pidieron"
+    },
+    "campos_actualizados": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Que datos actualizo"
+    },
+    "registro_optin": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp de autorizacion de datos"
+    },
+    "registro_whatsapp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp de autorizacion de WhatsApp"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Solicitada",
+        "Parcial",
+        "Completada"
+      ],
+      "default": "Solicitada",
+      "description": "Como va"
+    }
+  },
+  "required": []
+}

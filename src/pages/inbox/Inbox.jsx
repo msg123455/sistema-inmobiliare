@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Nota } from '@/api/base44Client';
+import { MemoriaChat } from '@/api/base44Client';
+import { appParams } from '@/lib/app-params';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -28,29 +29,42 @@ function formatHora(iso) {
   } catch { return ''; }
 }
 
-function parsarNota(nota) {
+// Lee el estado v2 de MemoriaChat. Los datos del lead viven en ctx[agente],
+// no sueltos en la raíz: el estado plano era del agente de ventas aunque nadie
+// lo dijera. `pausada` sale de la columna, no del JSON — es lo que escribe el
+// botón de control manual y lo que lee el agente.
+function parsarMemoria(fila) {
+  const vacio = { historial: [], datos: {}, calificado: false, descalificado: false, motivo_desc: '', asesor: '' };
   try {
-    const estado = JSON.parse(nota.texto || '{}');
+    const e = JSON.parse(fila.estado_json || '{}');
+    const agente = fila.agente_activo || e.agente_activo || 'ventas';
+    const ctx = (e.ctx && e.ctx[agente]) || e.ctx?.ventas || {};
     return {
-      historial:      estado.historial      || [],
-      datos:          estado.datos          || {},
-      calificado:     estado.calificado     || false,
-      descalificado:  estado.descalificado  || false,
-      motivo_desc:    estado.motivo_desc    || '',
-      broker:         estado.broker         || '',
-      pausada:        estado.pausada        || false,
+      historial:     e.historial || [],
+      datos:         { ...(ctx.datos || {}), ...(e.compartido || {}) },
+      calificado:    ctx.calificado    || false,
+      descalificado: ctx.descalificado || false,
+      motivo_desc:   ctx.motivo_desc   || '',
+      asesor:        ctx.asesor || ctx.broker || fila.broker_asignado || '',
+      verificado:    !!e.identidad?.verificado,
     };
   } catch {
-    return { historial: [], datos: {}, calificado: false, descalificado: false, motivo_desc: '', broker: '', pausada: false };
+    return vacio;
   }
 }
+
+const NOMBRE_AGENTE = {
+  recepcion: 'Recepción', ventas: 'Ventas', consignacion: 'Consignación',
+  cartera: 'Cartera', mantenimiento: 'Mantenimiento', avaluos: 'Avalúos',
+  pqr: 'PQR', matricula: 'Matrícula', encuestas: 'Encuestas',
+};
 
 function stripEmojis(text) {
   if (!text) return '';
   return text.replace(/[\u{1F000}-\u{1F9FF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F1E0}-\u{1F1FF}\u{2B00}-\u{2BFF}\u{2700}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim();
 }
 
-// Expande cada respuesta de Valentina en sus globos (como se envía partida a WhatsApp),
+// Expande cada respuesta del agente en sus globos (como se envía partida a WhatsApp),
 // para que en la Bandeja se vea igual que le llega al cliente.
 function expandirGlobos(historial) {
   const out = [];
@@ -65,7 +79,7 @@ function estadoBadge(conv) {
   if (conv.pausada)       return <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs flex items-center gap-1"><Hand className="w-3 h-3" />Control manual</Badge>;
   if (conv.descalificado) return <Badge className="bg-red-500/10 text-red-600 border-red-500/20 text-xs flex items-center gap-1"><XCircle className="w-3 h-3" />Descalificado</Badge>;
   if (conv.calificado)    return <Badge className="bg-green-500/10 text-green-600 border-green-500/20 text-xs flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Calificado</Badge>;
-  return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-xs flex items-center gap-1"><Bot className="w-3 h-3" />IA activa</Badge>;
+  return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-xs flex items-center gap-1"><Bot className="w-3 h-3" />{NOMBRE_AGENTE[conv.agente] || 'IA activa'}</Badge>;
 }
 
 export default function Inbox() {
@@ -76,24 +90,24 @@ export default function Inbox() {
   const [enviando, setEnviando] = useState(false);
   const [pausando, setPausando] = useState(false);
 
-  const { data: notas = [], isLoading } = useQuery({
-    queryKey: ['notas_inbox'],
-    queryFn: () => Nota.list('-fecha_nota'),
+  const { data: memorias = [], isLoading } = useQuery({
+    queryKey: ['memoria_inbox'],
+    queryFn: () => MemoriaChat.list('-fecha_ultimo_mensaje'),
     refetchInterval: 15000,
   });
 
-  const refetchNotas = () => qc.invalidateQueries({ queryKey: ['notas_inbox'] });
+  const refetchMemorias = () => qc.invalidateQueries({ queryKey: ['memoria_inbox'] });
 
-  // Pausar / reactivar la IA para una conversación (flag `pausada` dentro de la Nota)
+  // Pausar / reactivar la IA. Escribe la columna `pausada` de MemoriaChat, que
+  // es exactamente la que lee agenteInbound: un solo almacén, un solo escritor
+  // del flag, sin round-trip por JSON.
   const togglePausa = async (conv) => {
     setPausando(true);
     try {
-      let estado = {};
-      try { estado = JSON.parse(conv.rawTexto || '{}'); } catch {}
-      estado.pausada = !conv.pausada;
-      await Nota.update(conv.notaId, { texto: JSON.stringify(estado), fecha_nota: new Date().toISOString() });
-      await refetchNotas();
-      toast.success(estado.pausada ? 'Tomaste el control — Valentina está en pausa' : 'Valentina reactivada');
+      const nueva = !conv.pausada;
+      await MemoriaChat.update(conv.id, { pausada: nueva });
+      await refetchMemorias();
+      toast.success(nueva ? 'Tomaste el control — el agente está en pausa' : 'Agente reactivado');
     } catch {
       toast.error('No se pudo cambiar el estado');
     } finally { setPausando(false); }
@@ -106,15 +120,19 @@ export default function Inbox() {
     if (!texto) return;
     setEnviando(true);
     try {
-      const r = await fetch('https://ndsoftware.base44.app/api/functions/enviarMensajeManual', {
+      const base = String(appParams.appBaseUrl || '').replace(/\/+$/, '');
+      const r = await fetch(`${base}/api/functions/enviarMensajeManual`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: 'SYNCWASI2026', tel: conv.tel, mensaje: texto }),
+        body: JSON.stringify({
+          tel: conv.tel, canal: conv.canal, mensaje: texto,
+          token: import.meta.env.VITE_BANDEJA_TOKEN,
+        }),
       });
       const res = await r.json().catch(() => ({}));
       if (!r.ok || res?.error) throw new Error(res?.error || `Error ${r.status}`);
       setMensaje('');
-      await refetchNotas();
+      await refetchMemorias();
       toast.success('Mensaje enviado');
     } catch (err) {
       const m = String(err?.message || '');
@@ -126,27 +144,29 @@ export default function Inbox() {
     } finally { setEnviando(false); }
   };
 
-  const conversaciones = notas
-    .filter(n => n.cliente_id && n.texto)
-    .map(n => {
-      const parsed = parsarNota(n);
+  const conversaciones = memorias
+    .filter(m => m.telefono && m.estado_json)
+    .map(m => {
+      const parsed = parsarMemoria(m);
       const lastMsg = parsed.historial[parsed.historial.length - 1];
       return {
-        tel:          n.cliente_id,
-        notaId:       n.id,
-        rawTexto:     n.texto,
-        fecha:        n.fecha_nota,
-        nombre:       parsed.datos.nombre || null,
+        id:           m.id,
+        tel:          m.telefono,
+        canal:        String(m.canal || 'WhatsApp').toLowerCase().includes('telegram') ? 'telegram' : 'whatsapp',
+        agente:       m.agente_activo || 'ventas',
+        fecha:        m.fecha_ultimo_mensaje,
+        nombre:       parsed.datos.nombre || m.nombre || null,
         operacion:    parsed.datos.operacion || '',
         tipo_prop:    parsed.datos.tipo_prop || '',
         ciudad:       parsed.datos.ciudad || '',
         barrio:       parsed.datos.barrio || '',
         presupuesto:  parsed.datos.presupuesto || null,
-        broker:       parsed.broker || '',
+        asesor:       parsed.asesor,
+        verificado:   parsed.verificado,
         calificado:   parsed.calificado,
         descalificado: parsed.descalificado,
         motivo_desc:  parsed.motivo_desc,
-        pausada:      parsed.pausada,
+        pausada:      !!m.pausada,
         historial:    parsed.historial,
         lastMsg:      lastMsg?.content || '',
         lastRole:     lastMsg?.role    || '',
@@ -172,7 +192,7 @@ export default function Inbox() {
             </div>
             <div>
               <h2 className="font-semibold text-foreground text-[15px] leading-tight">Bandeja WhatsApp</h2>
-              <p className="text-[11px] text-muted-foreground">Valentina · Agente IA</p>
+              <p className="text-[11px] text-muted-foreground">Agentes IA</p>
             </div>
           </div>
           <div className="relative">
@@ -262,7 +282,7 @@ export default function Inbox() {
               <p className="font-semibold text-foreground text-[15px] truncate">{seleccionada.nombre || `+${seleccionada.tel}`}</p>
               <p className="text-xs text-muted-foreground flex items-center gap-2">
                 <Phone className="w-3 h-3" /> +{seleccionada.tel}
-                {seleccionada.calificado && <span className="hidden sm:inline">· Broker: {seleccionada.broker}</span>}
+                {seleccionada.calificado && <span className="hidden sm:inline">· Asesor: {seleccionada.asesor}</span>}
               </p>
             </div>
             <div className="flex-shrink-0 hidden sm:block">{estadoBadge(seleccionada)}</div>
@@ -291,7 +311,7 @@ export default function Inbox() {
               )}
               {seleccionada.calificado && (
                 <span className="flex items-center gap-1 text-green-700 font-medium">
-                  <Building2 className="w-3 h-3" /> Broker: {seleccionada.broker}
+                  <Building2 className="w-3 h-3" /> Asesor: {seleccionada.asesor}
                 </span>
               )}
               {seleccionada.descalificado && (
@@ -328,7 +348,7 @@ export default function Inbox() {
                         {esIA && (esHumano ? <User className="w-3 h-3 text-white/70" /> : <Bot className="w-3 h-3 text-primary-foreground/70" />)}
                         {esIA && <CheckCheck className="w-3 h-3 text-white/70" />}
                         <span className={`text-[10px] ${esIA ? 'text-white/70' : 'text-muted-foreground/70'}`}>
-                          {esHumano ? 'Tú (manual)' : esIA ? 'Valentina' : (seleccionada.nombre || 'Lead')}
+                          {esHumano ? 'Tú (manual)' : esIA ? (NOMBRE_AGENTE[seleccionada.agente] || 'Agente') : (seleccionada.nombre || 'Lead')}
                           {msg.ts ? ` · ${formatHora(msg.ts)}` : ''}
                         </span>
                       </div>
@@ -362,15 +382,15 @@ export default function Inbox() {
                   </Button>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-amber-600 flex items-center gap-1"><Hand className="w-3 h-3" /> Control manual — Valentina en pausa</span>
+                  <span className="text-[11px] text-amber-600 flex items-center gap-1"><Hand className="w-3 h-3" /> Control manual — el agente está en pausa</span>
                   <Button variant="ghost" size="sm" className="h-7 text-xs text-primary" onClick={() => togglePausa(seleccionada)} disabled={pausando}>
-                    <Play className="w-3 h-3 mr-1" /> Reactivar Valentina
+                    <Play className="w-3 h-3 mr-1" /> Reactivar agente
                   </Button>
                 </div>
               </>
             ) : (
               <div className="flex items-center justify-between">
-                <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Bot className="w-3.5 h-3.5 text-primary" /> Valentina responde automáticamente</span>
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Bot className="w-3.5 h-3.5 text-primary" /> El agente de {NOMBRE_AGENTE[seleccionada.agente] || 'Recepción'} responde automáticamente</span>
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => togglePausa(seleccionada)} disabled={pausando}>
                   <Hand className="w-3.5 h-3.5 mr-1" /> Tomar control
                 </Button>

@@ -1,0 +1,59 @@
+{
+  "name": "CampanaSocial",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre de la campana"
+    },
+    "red": {
+      "type": "string",
+      "enum": [
+        "Instagram",
+        "Facebook",
+        "TikTok",
+        "LinkedIn"
+      ],
+      "description": "Red social"
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Inmueble que promociona"
+    },
+    "contenido": {
+      "type": "string",
+      "description": "Texto del post"
+    },
+    "media_urls": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Imagenes o videos"
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Borrador",
+        "Programada",
+        "Publicada",
+        "Fallida"
+      ],
+      "default": "Borrador",
+      "description": "Estado"
+    },
+    "fecha_publicacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se publica"
+    },
+    "post_url": {
+      "type": "string",
+      "description": "URL del post publicado"
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}

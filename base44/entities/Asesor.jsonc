@@ -1,0 +1,76 @@
+{
+  "name": "Asesor",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "WhatsApp con indicativo, sin +"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo corporativo"
+    },
+    "dominio_email": {
+      "type": "string",
+      "description": "inmobiliarelatam.com, juliocorredor.co o propiedadesjuliocorredor.com"
+    },
+    "genero": {
+      "type": "string",
+      "enum": [
+        "F",
+        "M"
+      ],
+      "description": "Para el vocabulario correcto al presentarlo"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Venta",
+        "Arriendo",
+        "Ambos",
+        "Avaluos",
+        "Cartera"
+      ],
+      "default": "Ambos",
+      "description": "Que maneja"
+    },
+    "zonas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": [],
+      "description": "Barrios o zonas asignadas. Vacio = todas."
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Activo",
+        "No_Disponible",
+        "Vacaciones"
+      ],
+      "default": "Activo",
+      "description": "Disponibilidad"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "Email con el que entra al sistema"
+    },
+    "meta_mensual": {
+      "type": "number",
+      "description": "Meta comercial del mes"
+    },
+    "ultima_asignacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Ultimo lead recibido. Alimenta el round-robin."
+    }
+  },
+  "required": [
+    "nombre"
+  ]
+}
