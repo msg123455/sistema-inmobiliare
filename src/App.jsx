@@ -56,6 +56,7 @@ import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
 
 // IA Agente + Lead management
 import Inbox from '@/pages/inbox/Inbox.jsx';
+import BandejaAgentes from '@/pages/inbox/BandejaAgentes.jsx';
 import ContactoDetalle from '@/pages/crm/ContactoDetalle.jsx';
 import AnalyticsLeads from '@/pages/analytics/AnalyticsLeads.jsx';
 import ConfigAgenteIA from '@/pages/agente/ConfigAgente.jsx';
@@ -97,7 +98,8 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Dashboard />} />
 
         {/* Bandeja IA */}
-        <Route path="/inbox" element={<Inbox />} />
+        <Route path="/inbox" element={<BandejaAgentes />} />
+        <Route path="/inbox/:agente" element={<Inbox />} />
 
         {/* CRM */}
         <Route path="/crm" element={<Navigate to="/crm/pipeline" replace />} />

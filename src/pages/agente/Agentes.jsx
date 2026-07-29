@@ -11,23 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Bot, Pencil, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { EncabezadoModulo, FilaCard, Vacio, Cargando, Metrica } from '@/components/modulo';
+import { AGENTES } from '@/lib/agentes';
 
 const AgentePrompt = base44.entities.AgentePrompt;
 
-// Los nueve agentes de la arquitectura. El catalogo vive aqui para poder mostrar
-// los que todavia no tienen fila creada: si solo listaramos lo que hay en la
-// tabla, un agente sin prompt seria invisible justo cuando hay que escribirselo.
-const AGENTES = [
-  { clave: 'recepcion',    nombre: 'Recepción',    resumen: 'Orquestador. Desambigua y rutea.' },
-  { clave: 'ventas',       nombre: 'Ventas',       resumen: 'Busca inmuebles, califica leads, agenda visitas.' },
-  { clave: 'consignacion', nombre: 'Consignación', resumen: 'Capta inmuebles para venta o administración.' },
-  { clave: 'cartera',      nombre: 'Cartera',      resumen: 'Estado de cuenta y pagos. Requiere verificación.' },
-  { clave: 'mantenimiento',nombre: 'Mantenimiento',resumen: 'Reparaciones y emergencias.' },
-  { clave: 'avaluos',      nombre: 'Avalúos',      resumen: 'Cotiza y agenda avalúos.' },
-  { clave: 'pqr',          nombre: 'PQR',          resumen: 'Radica peticiones y reclamos. Plazo legal.' },
-  { clave: 'matricula',    nombre: 'Matrícula',    resumen: 'Intake del F117 y participantes.' },
-  { clave: 'encuestas',    nombre: 'Encuestas',    resumen: 'NPS y satisfacción.' },
-];
 
 const MODELOS = [
   { id: 'claude-sonnet-4-5', etiqueta: 'Sonnet 4.5 — conversación' },
@@ -159,7 +146,7 @@ export default function Agentes() {
               <FilaCard key={a.clave} onClick={() => setEditando(a)}>
                 <div className="flex items-center gap-4 flex-wrap">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${fila?.activo ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                    <Bot className="w-4 h-4" />
+                    <a.icono className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-[180px]">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">

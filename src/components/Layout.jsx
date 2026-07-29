@@ -63,7 +63,7 @@ const NAV_SECTIONS = [
     icon: Bot,
     basePath: '/agente',
     items: [
-      { label: 'Bandeja WhatsApp', path: '/inbox', icon: MessageSquare },
+      { label: 'Bandejas por agente', path: '/inbox', icon: MessageSquare },
       { label: 'Agentes', path: '/agente/agentes', icon: Bot },
       { label: 'Configurar IA', path: '/agente/configuracion', icon: Bot },
       { label: 'Autoeducación', path: '/agente/autoeducacion', icon: GraduationCap },
