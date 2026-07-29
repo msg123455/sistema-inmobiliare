@@ -270,6 +270,66 @@ Deno.serve(async (req) => {
   if (!base) return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500 });
 
   const sobrescribir = (url.searchParams.get('sobrescribir') || body.sobrescribir) === 'true';
+  const diagnostico = (url.searchParams.get('diagnostico') || body.diagnostico) === 'true';
+  const purgar = (url.searchParams.get('purgar') || body.purgar) === 'true';
+
+  // ── Diagnostico / purga de chunks ajenos ───────────────────────────────────
+  //
+  // POR QUE EXISTE: la app se clono de un tenant vivo de ND Inmobiliaria, y el
+  // sembrador anterior (seedConocimiento) dejo 15 chunks en ConocimientoRAG que
+  // ninguno traia el campo `agentes` —o sea que todos caen en 'todos'— y uno de
+  // ellos afirma "DATOS REALES DE ND INMOBILIARIA (usar siempre, jamas
+  // contradecir): fundada por Natalia Duque...". Eso viaja en el mismo system
+  // prompt que el bloque identidad_marca de INMOBILIARE: el modelo recibe dos
+  // identidades de empresa contradictorias, y ademas cartera y PQR reciben
+  // psicologia de ventas para estrato 6.
+  //
+  // Este bloque los encuentra y, con purgar=true, los borra. Los chunks propios
+  // (los de CHUNKS) nunca se tocan.
+  const canonicos = new Set(CHUNKS.map((c) => c.titulo));
+
+  if (diagnostico || purgar) {
+    const r = await fetch(`${base}/api/entities/ConocimientoRAG?limit=200`, { headers: hdrs });
+    if (!r.ok) {
+      return new Response(JSON.stringify({ error: `No se pudo listar: ${r.status}` }), { status: 500 });
+    }
+    const todos = (await r.json()) as any[];
+    const ajenos = todos.filter((c) => !canonicos.has(c.titulo));
+
+    const detalle = ajenos.map((c) => ({
+      id: c.id,
+      titulo: c.titulo,
+      agentes: c.agentes || '(vacio -> llega a TODOS los agentes)',
+      chars: String(c.contenido || '').length,
+      activo: c.activo,
+    }));
+
+    if (!purgar) {
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          modo: 'diagnostico',
+          total: todos.length,
+          canonicos: todos.length - ajenos.length,
+          ajenos: ajenos.length,
+          detalle,
+          nota: 'Para borrarlos: volver a llamar con purgar=true',
+        }, null, 2),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    const borrados: any[] = [];
+    for (const c of ajenos) {
+      const d = await fetch(`${base}/api/entities/ConocimientoRAG/${c.id}`, { method: 'DELETE', headers: hdrs });
+      borrados.push({ titulo: c.titulo, ok: d.ok, status: d.status });
+    }
+    return new Response(
+      JSON.stringify({ ok: true, modo: 'purga', borrados: borrados.length, detalle: borrados }, null, 2),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
   const resultado: any[] = [];
 
   for (const c of CHUNKS) {
