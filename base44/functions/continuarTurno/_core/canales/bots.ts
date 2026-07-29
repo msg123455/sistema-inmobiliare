@@ -18,7 +18,7 @@ import { esAgente, type Agente } from '../protocol.ts';
  *
  *   TELEGRAM_BOT_RECEPCION, TELEGRAM_BOT_VENTAS, TELEGRAM_BOT_CONSIGNACION,
  *   TELEGRAM_BOT_CARTERA, TELEGRAM_BOT_MANTENIMIENTO, TELEGRAM_BOT_AVALUOS,
- *   TELEGRAM_BOT_PQR, TELEGRAM_BOT_MATRICULA, TELEGRAM_BOT_ENCUESTAS
+ *   TELEGRAM_BOT_PQR, TELEGRAM_BOT_MATRICULA
  *
  * TELEGRAM_BOT_TOKEN sigue sirviendo como bot unico/compartido: si un agente no
  * tiene bot propio, se responde por ese. Asi se puede ir agente por agente sin
@@ -34,7 +34,6 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
   avaluos:       'TELEGRAM_BOT_AVALUOS',
   pqr:           'TELEGRAM_BOT_PQR',
   matricula:     'TELEGRAM_BOT_MATRICULA',
-  encuestas:     'TELEGRAM_BOT_ENCUESTAS',
 };
 
 /** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */

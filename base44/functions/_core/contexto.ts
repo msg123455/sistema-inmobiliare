@@ -110,15 +110,6 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-
-  encuestas: async (db, _estado, entrada) => {
-    const pend = (await db.list('RespuestaEncuesta', {
-      telefono: entrada.tel.replace(/\D/g, ''), completada: false, limit: 1,
-    }))[0] || null;
-    if (!pend) return { encuesta: null };
-    const enc = await db.uno('Encuesta', { id: pend.encuesta_id });
-    return { encuesta_id: pend.encuesta_id, encuesta: enc, respuestas: [] };
-  },
 };
 
 export async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {

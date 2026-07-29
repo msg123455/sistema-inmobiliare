@@ -14,8 +14,8 @@ import { CONSIGNACION } from './consignacion.ts';
 import { AVALUOS } from './avaluos.ts';
 import { PQR } from './pqr.ts';
 import { MATRICULA } from './matricula.ts';
-import { ENCUESTAS } from './encuestas.ts';
 
+// encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
   ventas:        VENTAS,
@@ -25,7 +25,6 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
   avaluos:       AVALUOS,
   pqr:           PQR,
   matricula:     MATRICULA,
-  encuestas:     ENCUESTAS,
 };
 
 export function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {

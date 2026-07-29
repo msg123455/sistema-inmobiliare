@@ -5,9 +5,23 @@ import type { Db } from './db.ts';
 
 // ─── Agentes ────────────────────────────────────────────────────────────────
 
+// 'encuestas' quedo FUERA del roster a proposito. Sus tools y su prompt existen
+// y funcionan, pero al agente no le llega nunca un turno y no tendria nada que
+// preguntar: no hay frase de router ni boton que lo active, nada crea la
+// RespuestaEncuesta pendiente que su cargador de contexto busca, y no existe la
+// funcion que despache encuestas. Dejarlo en la lista solo le daba al
+// clasificador LLM una etiqueta a la que podia mandar a un cliente para que se
+// quedara en el aire.
+//
+// Para reactivarlo hacen falta cuatro cosas: (1) una funcion que despache
+// encuestas y cree RespuestaEncuesta{completada:false}, (2) definir la forma de
+// Encuesta.preguntas, (3) sacar `respuestas: []` del cargador en contexto.ts,
+// porque el Object.assign de agenteInbound lo reescribe en cada turno y borra
+// lo que el cliente ya habia contestado, y (4) una frase o boton de router.
+// El codigo de tools/encuestas.ts se conserva para ese momento.
 export const AGENTES = [
   'recepcion', 'ventas', 'consignacion', 'cartera', 'mantenimiento',
-  'avaluos', 'pqr', 'matricula', 'encuestas',
+  'avaluos', 'pqr', 'matricula',
 ] as const;
 
 export type Agente = typeof AGENTES[number];
@@ -24,8 +38,7 @@ export const ETIQUETAS_AGENTE: Record<Agente, string> = {
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
   pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
-  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
-  encuestas:    'esta respondiendo una encuesta de satisfaccion que le enviamos',
+  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────
