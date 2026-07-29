@@ -76,7 +76,10 @@ export const enviarLinkPortal: Tool = {
   ...definirTool(
     'enviar_link_portal',
     'Manda un link seguro al portal del cliente. Usalo para todo lo que sea un documento, una tabla o un historial: el chat es para cifras sueltas, el portal para el detalle. El link vence en 15 minutos y sirve una sola vez.',
-    { seccion: enumStr('A donde debe llegar', ['estado-cuenta', 'pagos', 'documentos', 'contrato', 'mis-datos', 'liquidaciones']) },
+    // El enum debe listar SOLO secciones que existan como ruta en el portal.
+    // Ofrecer una que no existe manda al cliente a un link que no lo lleva a
+    // donde el agente le dijo: 'documentos' y 'mis-datos' se sacaron por eso.
+    { seccion: enumStr('A donde debe llegar', ['estado-cuenta', 'pagos', 'contrato', 'reparaciones', 'liquidaciones']) },
     { retorna: true },
   ),
   ejecutar: async (input, c: CtxTool) => {

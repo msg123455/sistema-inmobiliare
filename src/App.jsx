@@ -54,6 +54,14 @@ import Campanas from '@/pages/marketing/Campanas.jsx';
 import WasiIntegracion from '@/pages/integraciones/WasiIntegracion.jsx';
 import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
 
+// Portal del cliente (arrendatarios y propietarios) — arbol aparte, sin auth de staff
+import PortalLayout from '@/pages/portal/PortalLayout.jsx';
+import PortalEntrar from '@/pages/portal/PortalEntrar.jsx';
+import {
+  PortalInicio, PortalEstadoCuenta, PortalPagos,
+  PortalContrato, PortalReparaciones, PortalLiquidaciones,
+} from '@/pages/portal/paginas.jsx';
+
 // IA Agente + Lead management
 import Inbox from '@/pages/inbox/Inbox.jsx';
 import BandejaAgentes from '@/pages/inbox/BandejaAgentes.jsx';
@@ -173,19 +181,55 @@ const AuthenticatedApp = () => {
   );
 };
 
+/**
+ * Arbol de rutas del portal del cliente.
+ *
+ * Vive FUERA de AuthProvider a proposito. AuthProvider llama checkAppState() al
+ * montar y, si no hay sesion de staff, redirige al login de Base44: un
+ * arrendatario que abre su link de WhatsApp terminaria en la pantalla de acceso
+ * de la inmobiliaria. El portal se autentica solo, con el token de un uso que
+ * canjea portalAuth.
+ */
+function PortalApp() {
+  return (
+    <Routes>
+      <Route path="entrar" element={<PortalEntrar />} />
+      <Route element={<PortalLayout />}>
+        <Route index element={<PortalInicio />} />
+        <Route path="estado-cuenta" element={<PortalEstadoCuenta />} />
+        <Route path="pagos" element={<PortalPagos />} />
+        <Route path="contrato" element={<PortalContrato />} />
+        <Route path="reparaciones" element={<PortalReparaciones />} />
+        <Route path="liquidaciones" element={<PortalLiquidaciones />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/portal" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
   return (
     // Los tokens .dark ya existian en index.css pero nadie ponia la clase en <html>,
     // asi que el modo oscuro estaba muerto. next-themes la aplica y la persiste.
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-      <AuthProvider>
-        <QueryClientProvider client={queryClientInstance}>
-          <Router>
-            <AuthenticatedApp />
-          </Router>
-          <Toaster />
-        </QueryClientProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClientInstance}>
+        <Router>
+          <Routes>
+            {/* Clientes externos: sin AuthProvider (ver PortalApp) */}
+            <Route path="/portal/*" element={<PortalApp />} />
+            {/* Staff */}
+            <Route
+              path="/*"
+              element={
+                <AuthProvider>
+                  <AuthenticatedApp />
+                </AuthProvider>
+              }
+            />
+          </Routes>
+        </Router>
+        <Toaster />
+      </QueryClientProvider>
     </ThemeProvider>
   )
 }
