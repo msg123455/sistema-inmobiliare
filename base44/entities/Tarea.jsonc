@@ -2,9 +2,17 @@
   "name": "Tarea",
   "type": "object",
   "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto vinculado. Campo destino: reemplaza a cliente_id."
+    },
     "cliente_id": {
       "type": "string",
-      "description": "ID del cliente (referencia a Cliente)"
+      "description": "OBSOLETO. Apuntaba a la entidad Cliente del modelo anterior. Se sigue escribiendo con el mismo valor que contacto_id porque todavia es required; se elimina tras el backfill."
+    },
+    "hora": {
+      "type": "string",
+      "description": "Hora de la tarea en formato HH:MM. El codigo ya la escribia sin estar declarada."
     },
     "titulo": {
       "type": "string",

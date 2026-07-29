@@ -6,7 +6,7 @@ const TABS = [
   { label: 'Inicio', path: '/', icon: LayoutGrid },
   { label: 'Bandeja', path: '/inbox', icon: MessageSquare },
   { label: 'CRM', path: '/crm/pipeline', icon: Users },
-  { label: 'Finanzas', path: '/finanzas/flujo-caja', icon: DollarSign },
+  { label: 'Finanzas', path: '/finanzas/gastos', icon: DollarSign },
   { label: 'Ajustes', path: '/configuracion', icon: Settings },
 ];
 

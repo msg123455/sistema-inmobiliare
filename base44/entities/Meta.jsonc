@@ -11,10 +11,9 @@
       "enum": [
         "leads",
         "cierres",
-        "revenue_usd",
-        "valvulas_instaladas"
+        "revenue_usd"
       ],
-      "description": "Tipo de meta"
+      "description": "Tipo de meta. Se elimino 'valvulas_instaladas', heredado del SaaS anterior. La UI cae a 'cierres' si encuentra filas viejas con ese tipo."
     },
     "valor_meta": {
       "type": "number",

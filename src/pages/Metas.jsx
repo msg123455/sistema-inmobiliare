@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, Target, CheckCircle2, X, Edit2, Trash2, DollarSign, Users, Package } from 'lucide-react';
+import { Plus, Target, CheckCircle2, X, Edit2, Trash2, DollarSign, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -9,7 +9,6 @@ const TIPOS = {
   leads:               { label: 'Leads nuevos',        icon: Users,         color: '#8b5cf6', unit: '' },
   cierres:             { label: 'Cierres (Activo)',     icon: CheckCircle2,  color: '#10b981', unit: '' },
   revenue_usd:         { label: 'Ingresos USD',         icon: DollarSign,    color: '#3b82f6', unit: '$' },
-  valvulas_instaladas: { label: 'Válvulas instaladas',  icon: Package,       color: '#f59e0b', unit: '' },
 };
 
 const MONTHS_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -24,14 +23,12 @@ export default function Metas() {
   const [filterAnio, setFilterAnio] = useState(new Date().getFullYear());
 
   const { data: metas = [] } = useQuery({ queryKey: ['metas'], queryFn: () => base44.entities.Meta.list() });
-  const { data: clientes = [] } = useQuery({ queryKey: ['clientes'], queryFn: () => base44.entities.Cliente.list() });
+  const { data: contactos = [] } = useQuery({ queryKey: ['contactos'], queryFn: () => base44.entities.Contacto.list() });
 
   const autoActual = useMemo(() => ({
-    leads:               clientes.filter(c => c.etapa_pipeline === 'Lead').length,
-    cierres:             clientes.filter(c => c.etapa_pipeline === 'Activo').length,
-    valvulas_instaladas: clientes.filter(c => c.etapa_pipeline === 'Activo')
-                           .reduce((s, c) => s + Object.values(c.valvulas_cantidades || {}).reduce((a, b) => a + b, 0), 0),
-  }), [clientes]);
+    leads:   contactos.filter(c => c.etapa_pipeline === 'Lead').length,
+    cierres: contactos.filter(c => c.etapa_pipeline === 'Activo').length,
+  }), [contactos]);
 
   const filtered = metas.filter(m => m.mes === filterMes && m.anio === filterAnio);
 
@@ -89,7 +86,7 @@ export default function Metas() {
 
       {/* Auto-metrics hint */}
       <div className="bg-muted/30 rounded-xl px-4 py-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
-        <span>Datos actuales del sistema: <strong className="text-foreground">{autoActual.leads}</strong> leads · <strong className="text-foreground">{autoActual.cierres}</strong> clientes activos · <strong className="text-foreground">{autoActual.valvulas_instaladas}</strong> válvulas instaladas</span>
+        <span>Datos actuales del sistema: <strong className="text-foreground">{autoActual.leads}</strong> leads · <strong className="text-foreground">{autoActual.cierres}</strong> contactos activos</span>
       </div>
 
       {showForm && (

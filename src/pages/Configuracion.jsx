@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Edit2, Trash2, Settings, ShieldCheck, Shield } from 'lucide-react';
+import { Settings, ShieldCheck, Shield } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import MyProfile from '@/components/perfiles/MyProfile';
 import TeamList from '@/components/perfiles/TeamList';
@@ -11,24 +11,16 @@ import IntegracionesTab from '@/components/config/IntegracionesTab';
 import { useUserRole } from '@/hooks/useUserRole';
 
 export default function Configuracion() {
-  const [showNewValvula, setShowNewValvula] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [formData, setFormData] = useState({ nombre: '', pulgadas: '', costo_compra: '' });
   const [currentUser, setCurrentUser] = useState(null);
   const [porcentajeInput, setPorcentajeInput] = useState('');
   const [savingConfig, setSavingConfig] = useState(false);
-  
+
   const queryClientHook = useQueryClient();
   const { isAdmin } = useUserRole();
 
   useEffect(() => {
     base44.auth.me().then(setCurrentUser).catch(() => {});
   }, []);
-
-  const { data: valvulas = [], isLoading, refetch } = useQuery({
-    queryKey: ['valvulas'],
-    queryFn: () => base44.entities.Valvula.list(),
-  });
 
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['users'],
@@ -60,30 +52,7 @@ export default function Configuracion() {
     setSavingConfig(false);
   };
 
-  const handleSave = async () => {
-    if (editingId) {
-      await base44.entities.Valvula.update(editingId, { nombre: formData.nombre, pulgadas: parseFloat(formData.pulgadas), costo_compra: parseFloat(formData.costo_compra) });
-    } else {
-      await base44.entities.Valvula.create({ nombre: formData.nombre, pulgadas: parseFloat(formData.pulgadas), costo_compra: parseFloat(formData.costo_compra) });
-    }
-    setFormData({ nombre: '', pulgadas: '', costo_compra: '' });
-    setShowNewValvula(false);
-    setEditingId(null);
-    refetch();
-  };
-
-  const handleEdit = (valvula) => {
-    setFormData({ nombre: valvula.nombre, pulgadas: valvula.pulgadas, costo_compra: valvula.costo_compra });
-    setEditingId(valvula.id);
-    setShowNewValvula(true);
-  };
-
-  const handleDelete = async (id) => {
-    await base44.entities.Valvula.delete(id);
-    refetch();
-  };
-
-  if (isLoading || loadingUsers || loadingConfig) {
+  if (loadingUsers || loadingConfig) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
@@ -95,14 +64,13 @@ export default function Configuracion() {
     <div className="space-y-6">
       <div>
         <h1 className="text-[28px] font-bold tracking-tight text-foreground">Configuración</h1>
-        <p className="text-[15px] text-muted-foreground mt-0.5">Válvulas, perfil y equipo</p>
+        <p className="text-[15px] text-muted-foreground mt-0.5">Perfil, equipo e integraciones</p>
       </div>
 
-      <Tabs defaultValue="valvulas" className="w-full">
+      <Tabs defaultValue="perfiles" className="w-full">
         <TabsList className="flex gap-1 bg-muted/40 rounded-xl p-1 h-auto">
-          <TabsTrigger value="valvulas" className="px-3.5 py-2 rounded-lg text-sm font-medium">Válvulas</TabsTrigger>
-          <TabsTrigger value="general" className="px-3.5 py-2 rounded-lg text-sm font-medium">General</TabsTrigger>
           <TabsTrigger value="perfiles" className="px-3.5 py-2 rounded-lg text-sm font-medium">Perfiles</TabsTrigger>
+          <TabsTrigger value="general" className="px-3.5 py-2 rounded-lg text-sm font-medium">General</TabsTrigger>
           <TabsTrigger value="integraciones" className="px-3.5 py-2 rounded-lg text-sm font-medium">Integraciones</TabsTrigger>
         </TabsList>
 
@@ -144,75 +112,6 @@ export default function Configuracion() {
           </div>
         </TabsContent>
 
-        <TabsContent value="valvulas" className="mt-4 space-y-4">
-      <div className="flex justify-end">
-        <Button onClick={() => setShowNewValvula(true)} size="sm" className="gap-1.5 rounded-lg">
-          <Plus className="w-4 h-4" /> Nueva Válvula
-        </Button>
-      </div>
-
-      <div className="bg-card rounded-xl overflow-hidden">
-        {valvulas.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-12">No hay válvulas registradas</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border/40">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Nombre</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Pulgadas</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Costo</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/30">
-                {[...valvulas].sort((a, b) => b.pulgadas - a.pulgadas).map((valvula) => (
-                  <tr key={valvula.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 text-foreground font-medium">{valvula.nombre}</td>
-                    <td className="px-4 py-3 text-foreground">{valvula.pulgadas}"</td>
-                    <td className="px-4 py-3 text-foreground">${valvula.costo_compra?.toFixed(2)}</td>
-                    <td className="px-4 py-3 flex gap-1 justify-end">
-                      <button onClick={() => handleEdit(valvula)} className="p-1.5 hover:bg-muted rounded-lg transition-colors">
-                        <Edit2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => handleDelete(valvula.id)} className="p-1.5 hover:bg-destructive/10 rounded-lg transition-colors">
-                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {showNewValvula && (
-        <div className="bg-card rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-foreground mb-4">{editingId ? 'Editar Válvula' : 'Nueva Válvula'}</h2>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Nombre</label>
-              <Input value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} placeholder="Válvula Estándar" className="mt-1 rounded-lg" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Pulgadas</label>
-                <Input type="number" step="0.5" value={formData.pulgadas} onChange={(e) => setFormData({ ...formData, pulgadas: e.target.value })} placeholder="1.5" className="mt-1 rounded-lg" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground">Costo ($)</label>
-                <Input type="number" value={formData.costo_compra} onChange={(e) => setFormData({ ...formData, costo_compra: e.target.value })} placeholder="1200" className="mt-1 rounded-lg" />
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button onClick={handleSave} className="flex-1 rounded-lg">{editingId ? 'Actualizar' : 'Crear'}</Button>
-              <Button onClick={() => { setShowNewValvula(false); setEditingId(null); setFormData({ nombre: '', pulgadas: '', costo_compra: '' }); }} variant="outline" className="flex-1 rounded-lg">Cancelar</Button>
-            </div>
-          </div>
-        </div>
-      )}
-        </TabsContent>
         <TabsContent value="integraciones" className="mt-4">
           <IntegracionesTab />
         </TabsContent>
