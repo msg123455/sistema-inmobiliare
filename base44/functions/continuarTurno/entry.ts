@@ -102,6 +102,9 @@ async function reanudar(db: ReturnType<typeof crearDb>, anthropicKey: string, fi
     estado.historial.push({ role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString() });
     await encolar(db, {
       canal: entrada.canal, destino: entrada.destino, globos,
+      // Igual que en agenteInbound: la continuacion sale por el bot del agente
+      // que la escribio, no por el compartido.
+      agente: estado.agente_activo,
       demoraMin: 0, conversacionId: memoriaId || '',
     });
   }

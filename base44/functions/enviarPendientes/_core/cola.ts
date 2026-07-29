@@ -10,13 +10,14 @@ import type { Canal } from './protocol.ts';
 
 export async function encolar(
   db: Db,
-  datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string },
+  datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string; agente?: string },
 ) {
   const globos = datos.globos.map((g) => String(g).trim()).filter(Boolean);
   if (!globos.length) return null;
   return await db.crear('ColaSalida', {
     canal: datos.canal,
     destino: datos.destino,
+    agente: datos.agente || '',
     globos,
     enviar_en: new Date(Date.now() + (datos.demoraMin || 0) * 60_000).toISOString(),
     estado: 'pendiente',

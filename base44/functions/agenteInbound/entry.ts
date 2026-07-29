@@ -17,9 +17,10 @@ import { correrAgente } from './_core/llm.ts';
 import { decidirAgente } from './_core/router.ts';
 import { cargarEstado, ctxDe, guardarEstado } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
-import type { CtxTool, Entrada } from './_core/protocol.ts';
+import type { Agente, CtxTool, Entrada } from './_core/protocol.ts';
 import * as wa from './_core/canales/whatsapp.ts';
 import * as tg from './_core/canales/telegram.ts';
+import { agenteDeUrl, tokenDeAgente } from './_core/canales/bots.ts';
 
 const MODELO_PRIMARIO = 'claude-sonnet-5';
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
@@ -42,13 +43,19 @@ Deno.serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return new Response('OK', { status: 200 }); }
 
+  // Bot dedicado: cada agente puede tener el suyo, y la URL del webhook dice
+  // cual es (?agente=ventas). Si viene, esa conversacion pertenece a ese agente
+  // y el router no decide.
+  const agenteBot = agenteDeUrl(url);
+
   const env = {
     base44Key:   Deno.env.get('BASE44_API_KEY') || '',
     anthropicKey: Deno.env.get('ANTHROPIC_API_KEY') || '',
     openaiKey:   Deno.env.get('OPENAI_API_KEY') || '',
     waToken:     Deno.env.get('WHATSAPP_API_TOKEN') || '',
     waPhoneId:   body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '',
-    tgToken:     Deno.env.get('TELEGRAM_BOT_TOKEN') || '',
+    // El token depende del bot que recibio: se necesita ya para bajar media.
+    tgToken:     tokenDeAgente(agenteBot),
   };
 
   // ── 1. Normalizar. El payload se olfatea; no hay dos webhooks. ────────────
@@ -63,14 +70,14 @@ Deno.serve(async (req) => {
 
   // Siempre 200: si Meta no lo recibe rapido, reintenta y duplica el turno.
   try {
-    await procesar(entrada, env);
+    await procesar(entrada, env, agenteBot);
   } catch (e) {
     console.error('agenteInbound error:', (e as Error).message, (e as Error).stack);
   }
   return new Response('OK', { status: 200 });
 });
 
-async function procesar(entrada: Entrada, env: Record<string, string>) {
+async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot: Agente | null = null) {
   const t0 = Date.now();
   const marca = (fase: string) => console.log(`[t+${Date.now() - t0}ms] ${fase}`);
 
@@ -104,10 +111,12 @@ async function procesar(entrada: Entrada, env: Record<string, string>) {
   }
 
   // ── 3. ROUTE antes de cargar ─────────────────────────────────────────────
-  const decision = await decidirAgente(db, estado, entrada, {
-    anthropicKey: env.anthropicKey,
-    modeloRouter: MODELO_ROUTER,
-  });
+  const decision = agenteBot
+    ? { agente: agenteBot, nivel: 0, motivo: 'bot dedicado' }
+    : await decidirAgente(db, estado, entrada, {
+      anthropicKey: env.anthropicKey,
+      modeloRouter: MODELO_ROUTER,
+    });
   marca(`ruteo -> ${decision.agente} (nivel ${decision.nivel}: ${decision.motivo})`);
 
   if (decision.agente !== estado.agente_activo || !estado.agente_historial.length) {
@@ -183,6 +192,8 @@ async function procesar(entrada: Entrada, env: Record<string, string>) {
     });
     await encolar(db, {
       canal: entrada.canal,
+      // Para que la respuesta salga por el bot del agente que la escribio.
+      agente: estado.agente_activo,
       destino: entrada.destino,
       globos,
       demoraMin: Number(base.config.demora_respuesta_min) || 0,

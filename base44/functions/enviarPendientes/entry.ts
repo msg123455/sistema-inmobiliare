@@ -10,6 +10,7 @@
 import { crearDb } from './_core/db.ts';
 import * as wa from './_core/canales/whatsapp.ts';
 import * as tg from './_core/canales/telegram.ts';
+import { tokenDeAgente } from './_core/canales/bots.ts';
 
 const MAX_POR_CORRIDA = 40;
 const MAX_INTENTOS = 3;
@@ -59,11 +60,16 @@ Deno.serve(async (req) => {
 
     let ok = true;
     try {
-      if (item.canal === 'telegram' && env.tgToken) {
-        await tg.marcarEscribiendo(item.destino, env);
+      if (item.canal === 'telegram') {
+        // El bot que responde es el del agente que escribio el mensaje: si le
+        // contestara el bot compartido, el cliente veria la respuesta en otro
+        // chat del que escribio.
+        const tgEnv = { tgToken: tokenDeAgente(item.agente) };
+        if (!tgEnv.tgToken) throw new Error(`sin token de Telegram para "${item.agente || 'compartido'}"`);
+        await tg.marcarEscribiendo(item.destino, tgEnv);
         for (const g of globos) {
           await sleep(pausaDe(g, t0));
-          if (!(await tg.enviar(item.destino, g, env))) ok = false;
+          if (!(await tg.enviar(item.destino, g, tgEnv))) ok = false;
           globosEnviados++;
         }
       } else if (item.canal === 'whatsapp' && env.waPhoneId && env.waToken) {

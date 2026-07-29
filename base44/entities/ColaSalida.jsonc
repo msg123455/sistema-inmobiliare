@@ -14,6 +14,10 @@
       "type": "string",
       "description": "Numero con indicativo (WhatsApp) o chat id (Telegram)"
     },
+    "agente": {
+      "type": "string",
+      "description": "Agente que genero la respuesta. En Telegram decide por CUAL bot se entrega: cada agente puede tener el suyo. Vacio = bot compartido."
+    },
     "globos": {
       "type": "array",
       "items": {
