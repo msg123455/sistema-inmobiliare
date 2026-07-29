@@ -6,6 +6,8 @@ import {
   ChevronRight, CalendarDays, ClipboardList,
   Link2, UserCheck,
   BarChart3, MessageSquare, Bot, LineChart, Megaphone, Globe, GraduationCap, SlidersHorizontal, Brain, Upload,
+  Building2, Wrench, Ruler, MessageSquareWarning, ClipboardCheck,
+  Wallet, Barcode, Receipt, Briefcase,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { Conversacion } from '@/api/base44Client';
@@ -32,12 +34,37 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    key: 'operacion',
+    label: 'Operación',
+    icon: Wrench,
+    basePath: '/operacion',
+    items: [
+      { label: 'Consignaciones', path: '/operacion/consignaciones', icon: Building2 },
+      { label: 'Reparaciones', path: '/operacion/reparaciones', icon: Wrench },
+      { label: 'Avalúos', path: '/operacion/avaluos', icon: Ruler },
+      { label: 'PQR', path: '/operacion/pqr', icon: MessageSquareWarning },
+      { label: 'Matrículas', path: '/operacion/matriculas', icon: ClipboardCheck },
+    ],
+  },
+  {
+    key: 'cartera',
+    label: 'Cartera',
+    icon: Wallet,
+    basePath: '/cartera',
+    items: [
+      { label: 'Recaudo', path: '/cartera/recaudo', icon: Wallet },
+      { label: 'Envíos', path: '/cartera/envios', icon: Barcode },
+      { label: 'Liquidaciones', path: '/cartera/liquidaciones', icon: Receipt },
+    ],
+  },
+  {
     key: 'ia_agente',
     label: 'IA Agente',
     icon: Bot,
     basePath: '/agente',
     items: [
       { label: 'Bandeja WhatsApp', path: '/inbox', icon: MessageSquare },
+      { label: 'Agentes', path: '/agente/agentes', icon: Bot },
       { label: 'Configurar IA', path: '/agente/configuracion', icon: Bot },
       { label: 'Autoeducación', path: '/agente/autoeducacion', icon: GraduationCap },
       { label: 'Aprendizajes', path: '/agente/aprendizajes', icon: Brain },
@@ -64,6 +91,17 @@ const NAV_SECTIONS = [
     ],
   },
   {
+    key: 'equipo',
+    label: 'Equipo',
+    icon: Briefcase,
+    basePath: '/equipo',
+    items: [
+      { label: 'Asesores', path: '/equipo/asesores', icon: UserCheck },
+      { label: 'Calendario', path: '/equipo/calendario', icon: CalendarDays },
+      { label: 'Metas', path: '/equipo/metas', icon: BarChart3 },
+    ],
+  },
+  {
     key: 'integraciones',
     label: 'Integraciones',
     icon: Link2,
@@ -79,6 +117,10 @@ const COMERCIAL_PATHS = [
   '/',
   '/crm/pipeline', '/crm/propiedades', '/crm/contactos', '/crm/visitas', '/crm/tareas',
   '/contratos/arriendos', '/contratos/ventas',
+  // Operacion: la ve el asesor porque es su dia a dia. Cartera no: liquidaciones
+  // y recaudo son plata del negocio y van por AdminOnly.
+  '/operacion/consignaciones', '/operacion/reparaciones', '/operacion/avaluos',
+  '/operacion/pqr', '/operacion/matriculas',
   '/configuracion',
 ];
 

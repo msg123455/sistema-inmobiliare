@@ -23,6 +23,21 @@ import Propietarios from '@/pages/crm/Propietarios.jsx';
 import Visitas from '@/pages/crm/Visitas.jsx';
 import TareasCRM from '@/pages/crm/Tareas.jsx';
 
+// Operación
+import Consignaciones from '@/pages/operacion/Consignaciones.jsx';
+import Reparaciones from '@/pages/operacion/Reparaciones.jsx';
+import Avaluos from '@/pages/operacion/Avaluos.jsx';
+import PQR from '@/pages/operacion/PQR.jsx';
+import Matriculas from '@/pages/operacion/Matriculas.jsx';
+
+// Cartera
+import Recaudo from '@/pages/cartera/Recaudo.jsx';
+import Envios from '@/pages/cartera/Envios.jsx';
+import Liquidaciones from '@/pages/cartera/Liquidaciones.jsx';
+
+// Equipo
+import Asesores from '@/pages/equipo/Asesores.jsx';
+
 // Contratos
 import ContratosArriendo from '@/pages/contratos/ContratosArriendo.jsx';
 import ContratosVenta from '@/pages/contratos/ContratosVenta.jsx';
@@ -47,6 +62,7 @@ import ConfigAgenteIA from '@/pages/agente/ConfigAgente.jsx';
 import Autoeducacion from '@/pages/agente/Autoeducacion.jsx';
 import ConfigEvaluadorPage from '@/pages/agente/ConfigEvaluador.jsx';
 import Aprendizajes from '@/pages/agente/Aprendizajes.jsx';
+import Agentes from '@/pages/agente/Agentes.jsx';
 
 function AdminOnly({ children }) {
   const { isAdmin, isLoading } = useUserRole();
@@ -93,6 +109,18 @@ const AuthenticatedApp = () => {
         <Route path="/crm/visitas" element={<Visitas />} />
         <Route path="/crm/tareas" element={<TareasCRM />} />
 
+        {/* Operación */}
+        <Route path="/operacion/consignaciones" element={<Consignaciones />} />
+        <Route path="/operacion/reparaciones" element={<Reparaciones />} />
+        <Route path="/operacion/avaluos" element={<Avaluos />} />
+        <Route path="/operacion/pqr" element={<PQR />} />
+        <Route path="/operacion/matriculas" element={<Matriculas />} />
+
+        {/* Cartera */}
+        <Route path="/cartera/recaudo" element={<Recaudo />} />
+        <Route path="/cartera/envios" element={<Envios />} />
+        <Route path="/cartera/liquidaciones" element={<AdminOnly><Liquidaciones /></AdminOnly>} />
+
         {/* Contratos */}
         <Route path="/contratos/arriendos" element={<ContratosArriendo />} />
         <Route path="/contratos/ventas" element={<ContratosVenta />} />
@@ -122,12 +150,14 @@ const AuthenticatedApp = () => {
         <Route path="/agente/configuracion" element={<AdminOnly><ConfigAgenteIA /></AdminOnly>} />
         <Route path="/agente/autoeducacion" element={<AdminOnly><Autoeducacion /></AdminOnly>} />
         <Route path="/agente/config-evaluador" element={<AdminOnly><ConfigEvaluadorPage /></AdminOnly>} />
+        <Route path="/agente/agentes" element={<AdminOnly><Agentes /></AdminOnly>} />
         <Route path="/agente/aprendizajes" element={<AdminOnly><Aprendizajes /></AdminOnly>} />
         <Route path="/analytics/leads" element={<AnalyticsLeads />} />
 
         {/* Equipo - Admin only */}
         <Route path="/equipo/calendario" element={<AdminOnly><Calendario /></AdminOnly>} />
         <Route path="/equipo/metas" element={<AdminOnly><Metas /></AdminOnly>} />
+        <Route path="/equipo/asesores" element={<AdminOnly><Asesores /></AdminOnly>} />
 
         {/* Sistema */}
         <Route path="/configuracion" element={<Configuracion />} />
