@@ -330,7 +330,7 @@ export default function Layout() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      <header className="vidrio-ios pt-seguro flex items-center h-14 px-4 border-b border-border/60 shrink-0 z-20 sticky top-0">
+      <header className="vidrio-ios pt-seguro fixed top-0 left-0 right-0 flex items-center h-14 px-4 border-b border-border/60 z-[9999]">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Abrir menú"
@@ -346,13 +346,15 @@ export default function Layout() {
           <Isotipo className="sm:hidden h-7 w-auto text-primary" title={MARCA.nombre} />
         </Link>
 
-        <div className="flex-1" />
+        <div className="flex-1 pointer-events-none" />
 
         <div className="flex items-center gap-2">
           <ThemeToggle className="hidden sm:inline-flex" />
           <NotificationBell />
         </div>
       </header>
+
+      <div className="h-14 shrink-0" />
 
       <div className="flex flex-1 overflow-hidden">
         <div className="hidden md:flex w-60 bg-card flex-col border-r border-border/60">

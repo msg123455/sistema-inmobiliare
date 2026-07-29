@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { base44, NodoSitemap, ContenidoSEO, ConfigSEO } from '@/api/base44Client';
+import { base44, NodoSitemap, ContenidoSEO, ConfigSEO, Propiedad } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
