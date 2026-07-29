@@ -30,26 +30,36 @@ const desdeB64url = (s: string): Uint8Array => {
 };
 
 async function verificar(jwt: string): Promise<Record<string, any> | null> {
-  const partes = jwt.split('.');
-  if (partes.length !== 3) return null;
-  const [header, cuerpo, firma] = partes;
-
-  const clave = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(JWT_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
-  );
-  // crypto.subtle.verify compara en tiempo constante: no filtra por timing.
-  const ok = await crypto.subtle.verify(
-    'HMAC', clave, desdeB64url(firma), new TextEncoder().encode(`${header}.${cuerpo}`),
-  );
-  if (!ok) return null;
-
+  // TODO el cuerpo va dentro del try: desdeB64url usa atob, que LANZA con
+  // base64 invalido. Un token corrupto en sessionStorage, o cualquiera que
+  // mande "aaa.bbb.!!!", hacia estallar esta funcion antes de devolver null.
+  // Como el handler la llama fuera de su try, eso salia como 500 en vez de un
+  // 401 limpio: el usuario veia un error opaco en lugar de que lo mandaran a
+  // pedir otro enlace.
   try {
+    const partes = jwt.split('.');
+    if (partes.length !== 3) return null;
+    const [header, cuerpo, firma] = partes;
+
+    const clave = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(JWT_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['verify'],
+    );
+    // crypto.subtle.verify compara en tiempo constante: no filtra por timing.
+    // Se verifica SIEMPRE con HS256 sin mirar el `alg` del header: asi un token
+    // con "alg":"none" no tiene por donde colarse.
+    const ok = await crypto.subtle.verify(
+      'HMAC', clave, desdeB64url(firma), new TextEncoder().encode(`${header}.${cuerpo}`),
+    );
+    if (!ok) return null;
+
     const payload = JSON.parse(new TextDecoder().decode(desdeB64url(cuerpo)));
     if (!payload.exp || payload.exp * 1000 < Date.now()) return null;
     if (!payload.sub) return null;
     return payload;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // ── Acceso a datos ───────────────────────────────────────────────────────────
