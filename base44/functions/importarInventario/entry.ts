@@ -147,9 +147,12 @@ function desdeFilaSimi(fila: Record<string, unknown>, proveedor: string) {
     zona: txt(campo(fila, 'Zona')),
     ciudad,
     procedencia: txt(campo(fila, 'Procedencia')),
-    portal_metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado')),
-    portal_fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz')),
-    portal_mercadolibre: txt(campo(fila, 'MERCADOLIBRE', 'Mercadolibre', 'MercadoLibre')),
+    // Propiedad.portales es un objeto anidado, no tres campos planos.
+    portales: {
+      metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado')),
+      fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz')),
+      mercadolibre: txt(campo(fila, 'MERCADOLIBRE', 'Mercadolibre', 'MercadoLibre')),
+    },
   };
 }
 

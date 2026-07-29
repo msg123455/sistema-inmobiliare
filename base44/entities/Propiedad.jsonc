@@ -2,41 +2,6 @@
   "type": "object",
   "name": "Propiedad",
   "properties": {
-    "proveedor": {
-      "type": "string",
-      "description": "De donde salio el inmueble. Junto con codigo_externo forma la clave unica que evita duplicados al sincronizar.",
-      "enum": [
-        "simi",
-        "wasi",
-        "csv",
-        "manual"
-      ],
-      "default": "manual"
-    },
-    "codigo_externo": {
-      "type": "string",
-      "description": "Codigo del inmueble en el sistema de origen (columna Cod en el inventario de SIMI). Unico dentro de un mismo proveedor."
-    },
-    "zona": {
-      "type": "string",
-      "description": "Zona de la ciudad: Norte, Noroccidente, Centro, Chapinero..."
-    },
-    "procedencia": {
-      "type": "string",
-      "description": "Origen comercial del inmueble (propietario directo, corredor externo, etc.)"
-    },
-    "portal_metrocuadrado": {
-      "type": "string",
-      "description": "ID de publicacion en Metrocuadrado. Vacio si no esta publicado."
-    },
-    "portal_fincaraiz": {
-      "type": "string",
-      "description": "ID de publicacion en Fincaraiz. Vacio si no esta publicado."
-    },
-    "portal_mercadolibre": {
-      "type": "string",
-      "description": "ID de publicacion en MercadoLibre. Vacio si no esta publicado."
-    },
     "titulo": {
       "type": "string",
       "description": "T\u00edtulo del inmueble"
