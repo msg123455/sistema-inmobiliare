@@ -11,7 +11,7 @@
 // cargar, y encolar siempre en vez de entregar inline.
 
 import { crearDb } from './_core/db.ts';
-import { encolar, notificarEquipo } from './_core/cola.ts';
+import { encolar, entregarYa, notificarEquipo } from './_core/cola.ts';
 import { armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { correrAgente } from './_core/llm.ts';
 import { decidirAgente } from './_core/router.ts';
@@ -190,15 +190,23 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     estado.historial.push({
       role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString(),
     });
-    await encolar(db, {
+    const demoraMin = Number(base.config.demora_respuesta_min) || 0;
+    const item = await encolar(db, {
       canal: entrada.canal,
       // Para que la respuesta salga por el bot del agente que la escribio.
       agente: estado.agente_activo,
       destino: entrada.destino,
       globos,
-      demoraMin: Number(base.config.demora_respuesta_min) || 0,
+      demoraMin,
       conversacionId: memoriaId || '',
     });
+    // Sin demora configurada, entregar de una: esperar al cron son hasta 60s y
+    // en un chat eso se lee como que el bot no responde. Si falla queda
+    // pendiente y el cron reintenta.
+    if (item && demoraMin === 0) {
+      const entregado = await entregarYa(db, item, env, { wa, tg }, tokenDeAgente);
+      marca(entregado ? 'entregado inline' : 'encolado (entrega inline fallo)');
+    }
   }
 
   await Promise.all([

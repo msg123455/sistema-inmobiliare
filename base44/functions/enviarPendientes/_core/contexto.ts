@@ -6,6 +6,7 @@
 
 import type { Db } from './db.ts';
 import { type Agente, type Entrada, type Estado } from './protocol.ts';
+import { IDENTIDAD_MARCA, PROMPTS } from './prompts.ts';
 
 const MAX_RAG_CHARS = 3000;
 
@@ -138,8 +139,8 @@ export function armarSystem(
   ctxAgente: Record<string, any>,
 ): string {
   const partes: string[] = [];
-  if (base.identidadMarca) partes.push(base.identidadMarca);
-  partes.push(String(base.prompt?.prompt || `Eres el agente de ${agente}. Ayuda al cliente con lo que necesita y responde siempre con la herramienta responder.`));
+  partes.push(base.identidadMarca || IDENTIDAD_MARCA);
+  partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
   if (base.rag) partes.push(base.rag);
 
   const nombre = String(estado.compartido.nombre || '');

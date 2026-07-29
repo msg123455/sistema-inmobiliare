@@ -8,6 +8,48 @@
 import type { Db } from './db.ts';
 import type { Canal } from './protocol.ts';
 
+/**
+ * Entrega un item de la cola YA, sin esperar al cron.
+ *
+ * El cron corre cada minuto, asi que sin esto una respuesta podia tardar hasta
+ * 60s en salir: en un chat eso se lee como que el bot no funciona. Aqui se
+ * intenta la entrega inmediata y, si falla, el item queda pendiente y el cron
+ * la reintenta. La simulacion de tipeo sigue viviendo en el cron, no aqui: este
+ * camino corre dentro del webhook, que tiene presupuesto.
+ */
+export async function entregarYa(
+  db: Db,
+  item: any,
+  env: { waToken?: string; waPhoneId?: string },
+  canales: { wa: any; tg: any },
+  tokenTelegram: (agente?: string | null) => string,
+) {
+  if (!item?.id) return false;
+  const globos: string[] = Array.isArray(item.globos) ? item.globos : [];
+  if (!globos.length) return false;
+
+  try {
+    let ok = true;
+    if (item.canal === 'telegram') {
+      const tgEnv = { tgToken: tokenTelegram(item.agente) };
+      if (!tgEnv.tgToken) return false;
+      for (const g of globos) if (!(await canales.tg.enviar(item.destino, g, tgEnv))) ok = false;
+    } else if (item.canal === 'whatsapp' && env.waPhoneId && env.waToken) {
+      for (const g of globos) if (!(await canales.wa.enviar(item.destino, g, env))) ok = false;
+    } else {
+      return false;
+    }
+    if (!ok) return false;
+    await db.actualizar('ColaSalida', item.id, {
+      ...item, estado: 'enviado', enviado_en: new Date().toISOString(), intentos: (item.intentos || 0) + 1,
+    });
+    return true;
+  } catch (e) {
+    console.error('entregarYa error:', (e as Error).message);
+    return false;
+  }
+}
+
 export async function encolar(
   db: Db,
   datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string; agente?: string },

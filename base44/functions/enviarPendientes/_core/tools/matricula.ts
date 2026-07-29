@@ -2,7 +2,6 @@
 // El intake es por WhatsApp; los documentos van al portal (§D.3).
 
 import { definirTool, str, strOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
-import { crearSesionPortal } from '../identidad.ts';
 
 export const iniciarMatricula: Tool = {
   ...definirTool(

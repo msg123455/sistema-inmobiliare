@@ -1,4 +1,4 @@
-import { definirTool, str, strOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
 // En Colombia la PQR tiene plazos legales de respuesta. La fecha se calcula al
 // crear y un cron escala antes de que venza: no puede depender de que alguien

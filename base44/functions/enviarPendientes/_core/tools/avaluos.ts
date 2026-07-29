@@ -1,4 +1,4 @@
-import { definirTool, str, strOpc, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
 // Tarifas base. Viven en AppConfig para que no haya que desplegar para cambiar
 // un precio; estos son el respaldo si la fila no existe.

@@ -1,6 +1,5 @@
-import { definirTool, str, strOpc, num, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, strOpc, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe } from '../state.ts';
-import { limpiar } from './comunes.ts';
 import type { Db } from '../db.ts';
 
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba

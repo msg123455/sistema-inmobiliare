@@ -1,4 +1,4 @@
-import { definirTool, str, strOpc, num, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, num, type Tool, type CtxTool } from '../protocol.ts';
 
 export const registrarRespuesta: Tool = {
   ...definirTool(

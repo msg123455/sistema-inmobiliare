@@ -1,0 +1,28 @@
+{
+  // Chequeo de tipos de las funciones backend (Deno).
+  //
+  // `npm run build` compila el frontend con Vite y nunca miraba base44/functions:
+  // un error de tipos ahi no rompia nada hasta el deploy. Esto lo cierra.
+  //
+  // Solo se revisa el arbol canonico _core y los tres entry.ts. Las copias que
+  // sync-core.mjs deja dentro de cada funcion son identicas por construccion, y
+  // revisarlas multiplicaria los mismos errores por cuatro.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noUnusedLocals": true,
+    "types": []
+  },
+  "include": [
+    "base44/functions/deno.d.ts",
+    "base44/functions/_core/**/*.ts",
+    "base44/functions/agenteInbound/entry.ts",
+    "base44/functions/enviarPendientes/entry.ts",
+    "base44/functions/continuarTurno/entry.ts"
+  ]
+}
