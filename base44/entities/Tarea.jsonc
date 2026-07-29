@@ -23,6 +23,10 @@
       "format": "date",
       "description": "Fecha límite para completar"
     },
+    "hora": {
+      "type": "string",
+      "description": "Hora opcional de la tarea en formato HH:mm"
+    },
     "completada": {
       "type": "boolean",
       "default": false,
