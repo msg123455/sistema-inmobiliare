@@ -74,6 +74,19 @@ export const cotizarAvaluo: Tool = {
       };
     }
     const valor = Math.min(t.tope, t.base + area * t.por_m2);
+
+    // Se guarda la cifra que se le dijo al cliente. Si solo se devuelve al
+    // modelo, el cliente cuelga con un precio que no esta en ningun registro y
+    // el perito no tiene contra que contrastar cuando llame.
+    const avaluoId = String(c.ctxAgente.avaluo_id || '');
+    if (avaluoId) {
+      await c.db.actualizar('Avaluo', avaluoId, {
+        valor_servicio: valor,
+        area_m2: area,
+        tipo_inmueble: String(input.tipo_inmueble),
+      });
+    }
+
     return {
       valor_servicio: valor,
       instruccion: `Di la cifra redondeada ($${valor.toLocaleString('es-CO')}) en una frase, aclarando que es el valor del servicio de avaluo y que incluye la visita y el informe. Es un estimado sujeto a confirmacion.`,
