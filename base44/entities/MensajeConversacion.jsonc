@@ -1,0 +1,15 @@
+{
+  "name": "MensajeConversacion",
+  "fields": [
+    { "name": "conversacion_id",     "type": "string",  "required": true },
+    { "name": "contacto_id",         "type": "string",  "required": true },
+    { "name": "canal",               "type": "string",  "default": "WhatsApp" },
+    { "name": "direccion",           "type": "string",  "enum": ["Entrante","Saliente"], "required": true },
+    { "name": "contenido",           "type": "string",  "required": true },
+    { "name": "tipo_contenido",      "type": "string",  "enum": ["Texto","Imagen","Audio","Documento"], "default": "Texto" },
+    { "name": "fecha",               "type": "datetime","required": true },
+    { "name": "enviado_por_ia",      "type": "boolean", "default": false },
+    { "name": "leido",               "type": "boolean", "default": false },
+    { "name": "mensaje_id_externo",  "type": "string"  }
+  ]
+}

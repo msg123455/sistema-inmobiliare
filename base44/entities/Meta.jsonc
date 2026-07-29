@@ -1,0 +1,101 @@
+{
+  "name": "Meta",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "T\u00edtulo de la meta"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "leads",
+        "cierres",
+        "revenue_usd",
+        "valvulas_instaladas"
+      ],
+      "description": "Tipo de meta"
+    },
+    "valor_meta": {
+      "type": "number",
+      "description": "Valor objetivo"
+    },
+    "valor_actual": {
+      "type": "number",
+      "default": 0,
+      "description": "Progreso actual"
+    },
+    "mes": {
+      "type": "number",
+      "description": "Mes objetivo (1-12)"
+    },
+    "anio": {
+      "type": "number",
+      "description": "A\u00f1o objetivo"
+    },
+    "asignado_a": {
+      "type": "string",
+      "description": "Email del responsable"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n o contexto de la meta"
+    },
+    "completada": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la meta fue alcanzada"
+    }
+  },
+  "required": [
+    "titulo",
+    "tipo",
+    "valor_meta",
+    "mes",
+    "anio"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    }
+  }
+}

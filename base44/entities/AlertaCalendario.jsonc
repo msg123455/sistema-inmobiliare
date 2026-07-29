@@ -1,0 +1,46 @@
+{
+  "name": "AlertaCalendario",
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "ID \u00fanico del evento en Google Calendar"
+    },
+    "titulo": {
+      "type": "string",
+      "description": "T\u00edtulo del evento"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n del evento"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora de inicio del evento"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora de fin del evento"
+    },
+    "ubicacion": {
+      "type": "string",
+      "description": "Ubicaci\u00f3n del evento"
+    },
+    "enlace_meet": {
+      "type": "string",
+      "description": "Link de Google Meet si existe"
+    },
+    "leido": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la alerta ha sido le\u00edda"
+    }
+  },
+  "required": [
+    "event_id",
+    "titulo",
+    "fecha_inicio"
+  ]
+}

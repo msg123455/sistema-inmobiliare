@@ -1,0 +1,69 @@
+{
+  "name": "CampanaAds",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre interno de la campaña (ej: Rosales Compra Enero)"
+    },
+    "que_promociona": {
+      "type": "string",
+      "description": "Qué se está promocionando exactamente (oferta, tipo de inmueble, gancho del anuncio)"
+    },
+    "trigger_mensaje": {
+      "type": "string",
+      "description": "Frase distintiva del PRIMER mensaje del anuncio (ej: 'quiero mas informacion' o 'mi nombre es y estoy buscando'). Sirve para reconocer por qué anuncio entró el lead."
+    },
+    "mensaje_bienvenida": {
+      "type": "string",
+      "description": "Info del inmueble que Valentina manda de una en el primer mensaje. Si se deja vacío, se arma con los inmuebles seleccionados."
+    },
+    "link_ficha": {
+      "type": "string",
+      "description": "Link EXACTO de la ficha técnica del inmueble (pégalo a mano). Tiene prioridad sobre el link que trae WASI, por si ese está mal."
+    },
+    "contexto_agente": {
+      "type": "string",
+      "description": "Contexto que Valentina debe manejar sobre esta campaña para dar respuestas alineadas"
+    },
+    "zona": {
+      "type": "string",
+      "description": "Zona o barrio que promociona la campaña"
+    },
+    "rango_precio": {
+      "type": "string",
+      "description": "Rango de precio de la oferta (texto libre, ej: desde $2.000M)"
+    },
+    "operacion": {
+      "type": "string",
+      "enum": ["Venta", "Arriendo", "Ambos"],
+      "description": "Tipo de operación que promociona"
+    },
+    "inmuebles": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "IDs de las propiedades (entidad Propiedad) que promociona esta campaña"
+    },
+    "activa": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la campaña está activa (el agente inyecta su contexto)"
+    },
+    "meta_ad_id": {
+      "type": "string",
+      "description": "ID del anuncio o campaña en Meta, para atribución por lead (Fase B)"
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de inicio de la campaña"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha de fin de la campaña"
+    }
+  },
+  "required": ["nombre"]
+}

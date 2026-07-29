@@ -1,0 +1,38 @@
+{
+  "name": "GastoFijo",
+  "type": "object",
+  "properties": {
+    "concepto": {
+      "type": "string",
+      "description": "Concepto del gasto"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "nomina",
+        "arriendo",
+        "servicios",
+        "software",
+        "transporte",
+        "legal",
+        "marketing",
+        "otro"
+      ],
+      "default": "otro",
+      "description": "Categor\u00eda del gasto"
+    },
+    "monto_mensual": {
+      "type": "number",
+      "description": "Monto mensual en USD"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si el gasto est\u00e1 activo"
+    }
+  },
+  "required": [
+    "concepto",
+    "monto_mensual"
+  ]
+}

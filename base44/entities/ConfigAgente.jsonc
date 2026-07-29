@@ -1,0 +1,111 @@
+{
+  "name": "ConfigAgente",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "description": "Clave única (usar 'general')"
+    },
+    "nombre_agente": {
+      "type": "string",
+      "default": "Valentina",
+      "description": "Nombre del agente de IA"
+    },
+    "nombre_inmobiliaria": {
+      "type": "string",
+      "description": "Nombre de la inmobiliaria"
+    },
+    "instrucciones_sistema": {
+      "type": "string",
+      "description": "System prompt con personalidad, flujo y reglas del agente"
+    },
+    "conocimiento_base": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "FAQs, políticas y datos que el agente debe conocer (RAG)"
+    },
+    "saludo_inicial": {
+      "type": "string",
+      "description": "Mensaje de saludo inicial. Usa {{nombre}}, {{agente}}, {{inmobiliaria}}"
+    },
+    "horario_inicio": {
+      "type": "string",
+      "default": "08:00",
+      "description": "Hora inicio de atención (HH:MM)"
+    },
+    "horario_fin": {
+      "type": "string",
+      "default": "20:00",
+      "description": "Hora fin de atención (HH:MM)"
+    },
+    "fuera_de_horario_mensaje": {
+      "type": "string",
+      "description": "Mensaje automático fuera del horario de atención"
+    },
+    "escalar_triggers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Palabras clave que disparan escalación a un humano"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si el agente responde automáticamente"
+    },
+    "demora_respuesta_min": {
+      "type": "number",
+      "default": 0,
+      "description": "Minutos que espera el agente antes de responder (0 = al instante, más humano si es 2). Requiere el cron enviarPendientes corriendo."
+    },
+    "aprendizajes": {
+      "type": "string",
+      "description": "Bloque de reglas aprendidas y APROBADAS que se inyectan al prompt de Valentina (Fase B autoeducación)"
+    },
+    "numero_notificaciones": {
+      "type": "string",
+      "description": "Número (WhatsApp, con código de país, sin +) que recibe la notificación de lead calificado. Si está vacío, se usa el teléfono del broker asignado. NUNCA se envía al lead."
+    },
+    "telegram_notif_chat": {
+      "type": "string",
+      "description": "Chat ID de Telegram del equipo que recibe la notificación de lead calificado. Si está configurado, tiene prioridad sobre WhatsApp (Telegram no tiene ventana de 24h). NUNCA se envía al chat del lead."
+    },
+    "brokers": {
+      "type": "array",
+      "default": [],
+      "description": "Lista de asesores/brokers con su tipo de inmueble y barrios asignados",
+      "items": {
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": "string",
+            "description": "Nombre del asesor"
+          },
+          "telefono": {
+            "type": "string",
+            "description": "Teléfono con código de país, sin + (ej: 573105771576)"
+          },
+          "genero": {
+            "type": "string",
+            "enum": ["F", "M"],
+            "description": "Género del broker, para el vocabulario correcto (nuestra asesora / nuestro asesor)"
+          },
+          "tipo_inmueble": {
+            "type": "string",
+            "enum": ["vivienda", "comercial", "ambos"],
+            "default": "ambos",
+            "description": "Tipo de inmueble que maneja este asesor"
+          },
+          "barrios": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": [],
+            "description": "Barrios asignados (vacío = todos los del tipo)"
+          }
+        }
+      }
+    }
+  },
+  "required": ["clave"]
+}

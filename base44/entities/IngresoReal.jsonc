@@ -1,0 +1,76 @@
+{
+  "name": "IngresoReal",
+  "type": "object",
+  "properties": {
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente al que pertenece este ingreso"
+    },
+    "anio": {
+      "type": "number",
+      "description": "A\u00f1o del ingreso (ej: 2025)"
+    },
+    "mes": {
+      "type": "number",
+      "description": "Mes del ingreso (1-12)"
+    },
+    "monto_real_usd": {
+      "type": "number",
+      "description": "Monto real recibido en USD"
+    },
+    "notas": {
+      "type": "string",
+      "description": "Observaciones del ingreso real"
+    }
+  },
+  "required": [
+    "cliente_id",
+    "anio",
+    "mes",
+    "monto_real_usd"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    }
+  }
+}

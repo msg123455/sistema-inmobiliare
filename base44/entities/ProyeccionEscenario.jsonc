@@ -1,0 +1,37 @@
+{
+  "name": "ProyeccionEscenario",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del escenario de proyecci\u00f3n"
+    },
+    "modelo": {
+      "type": "string",
+      "enum": [
+        "Inversionista",
+        "Socio_comercial"
+      ],
+      "description": "Tipo de modelo de crecimiento"
+    },
+    "parametros": {
+      "type": "object",
+      "description": "Par\u00e1metros del escenario (JSON libre)",
+      "additionalProperties": true
+    },
+    "resultados": {
+      "type": "object",
+      "description": "Resultados calculados (JSON con proyecciones)",
+      "additionalProperties": true
+    },
+    "mes_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Mes de inicio de la proyecci\u00f3n"
+    }
+  },
+  "required": [
+    "nombre",
+    "modelo"
+  ]
+}

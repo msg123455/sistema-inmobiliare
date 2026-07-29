@@ -1,0 +1,131 @@
+{
+  "name": "Propiedad",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "Título del inmueble"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripción del inmueble"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": ["Apartamento", "Casa", "Local", "Oficina", "Bodega", "Lote", "Finca", "Otro"],
+      "default": "Apartamento",
+      "description": "Tipo de inmueble"
+    },
+    "operacion": {
+      "type": "string",
+      "enum": ["Venta", "Arriendo", "Venta_y_Arriendo"],
+      "default": "Venta",
+      "description": "Tipo de operación"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["Disponible", "Reservado", "Vendido", "Arrendado", "No_disponible"],
+      "default": "Disponible",
+      "description": "Estado del inmueble"
+    },
+    "precio_venta": {
+      "type": "number",
+      "description": "Precio de venta en COP"
+    },
+    "canon_arriendo": {
+      "type": "number",
+      "description": "Canon de arriendo mensual en COP"
+    },
+    "administracion": {
+      "type": "number",
+      "description": "Cuota de administración mensual en COP"
+    },
+    "comision_pct": {
+      "type": "number",
+      "default": 3,
+      "description": "Porcentaje de comisión"
+    },
+    "area_m2": {
+      "type": "number",
+      "description": "Área en metros cuadrados"
+    },
+    "habitaciones": {
+      "type": "number",
+      "description": "Número de habitaciones"
+    },
+    "banos": {
+      "type": "number",
+      "description": "Número de baños"
+    },
+    "parqueaderos": {
+      "type": "number",
+      "description": "Número de parqueaderos"
+    },
+    "estrato": {
+      "type": "number",
+      "description": "Estrato socioeconómico (1-6)"
+    },
+    "piso": {
+      "type": "number",
+      "description": "Número de piso"
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad del inmueble"
+    },
+    "barrio": {
+      "type": "string",
+      "description": "Barrio o zona"
+    },
+    "direccion": {
+      "type": "string",
+      "description": "Dirección completa"
+    },
+    "latitud": {
+      "type": "number",
+      "description": "Latitud GPS"
+    },
+    "longitud": {
+      "type": "number",
+      "description": "Longitud GPS"
+    },
+    "fotos": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "URLs de fotos del inmueble"
+    },
+    "publicado_wasi": {
+      "type": "boolean",
+      "default": false,
+      "description": "Publicado en WASI.co"
+    },
+    "publicado_instagram": {
+      "type": "boolean",
+      "default": false,
+      "description": "Publicado en Instagram"
+    },
+    "publicado_facebook": {
+      "type": "boolean",
+      "default": false,
+      "description": "Publicado en Facebook"
+    },
+    "fuente_wasi": {
+      "type": "boolean",
+      "default": false,
+      "description": "Importado desde WASI"
+    },
+    "wasi_id": {
+      "type": "string",
+      "description": "ID de la propiedad en WASI.co"
+    },
+    "link_wasi": {
+      "type": "string",
+      "description": "URL de la propiedad en WASI.co"
+    },
+    "link_instagram": {
+      "type": "string",
+      "description": "URL del post/reel de Instagram del inmueble (video). Valentina lo envia cuando piden ver el inmueble en video."
+    }
+  },
+  "required": ["titulo", "ciudad"]
+}

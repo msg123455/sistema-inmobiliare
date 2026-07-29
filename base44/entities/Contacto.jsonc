@@ -1,0 +1,133 @@
+{
+  "name": "Contacto",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre completo del contacto"
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo electrónico"
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Número de teléfono / WhatsApp"
+    },
+    "tipo_interes": {
+      "type": "string",
+      "enum": ["Compra", "Arriendo", "Compra_y_Arriendo", "Otro"],
+      "description": "Tipo de operación que busca"
+    },
+    "etapa_pipeline": {
+      "type": "string",
+      "enum": ["Lead", "Visita_Agendada", "Oferta", "Negociacion", "Promesa", "Escritura", "Activo", "Perdido"],
+      "default": "Lead",
+      "description": "Etapa en el pipeline de ventas"
+    },
+    "pipeline_tipo": {
+      "type": "string",
+      "enum": ["Venta", "Arriendo", "Ambos"],
+      "description": "Tipo de pipeline"
+    },
+    "temperatura": {
+      "type": "string",
+      "enum": ["Frio", "Tibio", "Caliente", "Urgente"],
+      "description": "Temperatura del lead"
+    },
+    "score_lead": {
+      "type": "number",
+      "description": "Score del lead (0-100)"
+    },
+    "presupuesto_max": {
+      "type": "number",
+      "description": "Presupuesto máximo en COP"
+    },
+    "ciudad_interes": {
+      "type": "string",
+      "description": "Ciudad de interés"
+    },
+    "habitaciones_min": {
+      "type": "number",
+      "description": "Mínimo de habitaciones requeridas"
+    },
+    "asignado_a": {
+      "type": "string",
+      "description": "Broker o asesor asignado"
+    },
+    "canal_adquisicion": {
+      "type": "string",
+      "description": "Canal por el que llegó el contacto"
+    },
+    "fecha_primer_contacto": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha del primer contacto"
+    },
+    "ultima_actividad": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Última actividad registrada"
+    },
+    "en_conversacion": {
+      "type": "boolean",
+      "default": false,
+      "description": "Está actualmente en conversación con Valentina"
+    },
+    "ia_calificado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Fue calificado por Valentina (IA)"
+    },
+    "notas": {
+      "type": "string",
+      "description": "Notas adicionales / resumen de Valentina"
+    },
+    "estado_seguimiento": {
+      "type": "string",
+      "description": "Ciclo de vida post-entrega: Asignado, Contactado, Cita_Agendada, Visita_Realizada, No_Contesta, Paro_De_Contestar, Cerrado_Ganado, Cerrado_Perdido"
+    },
+    "broker_telefono": {
+      "type": "string",
+      "description": "Teléfono del broker asignado"
+    },
+    "fecha_asignacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuándo se entregó el lead al broker"
+    },
+    "fecha_ultimo_avance": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Último cambio de estado de seguimiento (para detectar enfriamiento)"
+    },
+    "recordatorios_broker": {
+      "type": "number",
+      "default": 0,
+      "description": "Cuántos recordatorios se han enviado al broker por este lead"
+    },
+    "descalificado": {
+      "type": "boolean",
+      "default": false,
+      "description": "El lead fue descalificado (no encaja: ciudad/presupuesto fuera de rango)"
+    },
+    "motivo_descalificacion": {
+      "type": "string",
+      "description": "Motivo por el que el lead fue descalificado"
+    },
+    "motivo_perdida": {
+      "type": "string",
+      "description": "Motivo por el que se perdió el negocio (distinto de descalificación)"
+    },
+    "fuente_wasi": {
+      "type": "boolean",
+      "default": false,
+      "description": "Lead proveniente de WASI"
+    },
+    "wasi_lead_id": {
+      "type": "string",
+      "description": "ID del lead en WASI.co"
+    }
+  },
+  "required": ["nombre"]
+}

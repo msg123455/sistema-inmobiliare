@@ -1,0 +1,23 @@
+{
+  "name": "Nota",
+  "type": "object",
+  "properties": {
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente (referencia a Cliente)"
+    },
+    "texto": {
+      "type": "string",
+      "description": "Contenido de la nota"
+    },
+    "fecha_nota": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora de la nota"
+    }
+  },
+  "required": [
+    "cliente_id",
+    "texto"
+  ]
+}

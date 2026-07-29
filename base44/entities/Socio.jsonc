@@ -1,0 +1,48 @@
+{
+  "name": "Socio",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del socio o inversionista"
+    },
+    "tipo": {
+      "type": "string",
+      "enum": [
+        "Inversionista",
+        "Comercial"
+      ],
+      "description": "Tipo de socio"
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "Email de contacto"
+    },
+    "porcentaje_participacion": {
+      "type": "number",
+      "description": "Porcentaje de participaci\u00f3n o commission en %"
+    },
+    "valvulas_financiadas": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de v\u00e1lvulas financiadas (para inversionistas)"
+    },
+    "clientes_referidos": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de clientes referidos (para socios comerciales)"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si el socio est\u00e1 activo"
+    }
+  },
+  "required": [
+    "nombre",
+    "tipo",
+    "email",
+    "porcentaje_participacion"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "name": "ConfigSEO",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "default": "general",
+      "description": "Clave única de configuración (usar 'general')"
+    },
+    "nombre_inmobiliaria": {
+      "type": "string",
+      "description": "Nombre de la inmobiliaria para el contenido SEO"
+    },
+    "ciudad_principal": {
+      "type": "string",
+      "default": "Bogotá",
+      "description": "Ciudad principal de operación"
+    },
+    "zonas": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Barrios y zonas que maneja la inmobiliaria (universo de keywords)"
+    },
+    "website_url": {
+      "type": "string",
+      "description": "URL del sitio web (para construir slugs y enlaces internos)"
+    },
+    "whatsapp_numero": {
+      "type": "string",
+      "description": "Número de WhatsApp para los CTA del contenido"
+    },
+    "anos_experiencia": {
+      "type": "string",
+      "description": "Años de trayectoria en el mercado"
+    },
+    "descripcion_marca": {
+      "type": "string",
+      "description": "Descripción de la empresa que se inyecta en los prompts"
+    },
+    "rango_venta_min": {
+      "type": "number",
+      "description": "Piso de precio en venta (COP)"
+    },
+    "rango_arriendo_min": {
+      "type": "number",
+      "description": "Piso de canon en arriendo (COP)"
+    },
+    "interlinks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "URLs internas disponibles para enlazado interno"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si el módulo SEO está activo"
+    }
+  },
+  "required": ["clave"]
+}

@@ -1,0 +1,40 @@
+{
+  "name": "ConfigEvaluador",
+  "type": "object",
+  "properties": {
+    "contexto_valentina": {
+      "type": "string",
+      "description": "Como debe trabajar Valentina; el juez evalua contra estas reglas"
+    },
+    "criterio_calificacion": {
+      "type": "string",
+      "description": "Que mide la dimension Calificacion"
+    },
+    "criterio_humanizacion": {
+      "type": "string",
+      "description": "Que mide la dimension Humanizacion"
+    },
+    "criterio_rapidez": {
+      "type": "string",
+      "description": "Que mide la dimension Rapidez"
+    },
+    "criterio_cierre": {
+      "type": "string",
+      "description": "Que mide la dimension Cierre"
+    },
+    "instrucciones": {
+      "type": "string",
+      "description": "Instrucciones extra para el juez (como puntuar, formato, etc.)"
+    },
+    "modelo": {
+      "type": "string",
+      "description": "Modelo del juez para InvokeLLM (ej. claude_opus_4_1 = Opus 4.8)"
+    },
+    "pausa_ms": {
+      "type": "number",
+      "default": 4000,
+      "description": "Pausa en ms entre evaluaciones para que Base44 no degrade Opus a Sonnet"
+    }
+  },
+  "required": []
+}

@@ -1,0 +1,93 @@
+{
+  "name": "EvaluacionChat",
+  "type": "object",
+  "properties": {
+    "cliente_id": {
+      "type": "string",
+      "description": "Telefono o chatId del lead cuya conversacion se evaluo (uno por lead, se refresca)"
+    },
+    "nombre_lead": {
+      "type": "string",
+      "description": "Nombre del lead capturado por Valentina, si lo tiene"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Canal de la conversacion (whatsapp / telegram)"
+    },
+    "num_mensajes": {
+      "type": "number",
+      "default": 0,
+      "description": "Cantidad de mensajes del historial al momento de evaluar (para no re-evaluar si no crecio)"
+    },
+    "score_total": {
+      "type": "number",
+      "default": 0,
+      "description": "Puntaje global 0 a 100 (promedio de las cuatro dimensiones)"
+    },
+    "score_calificacion": {
+      "type": "number",
+      "default": 0,
+      "description": "Que tan bien califico el lead y saco los datos clave (0 a 100)"
+    },
+    "score_humanizacion": {
+      "type": "number",
+      "default": 0,
+      "description": "Que tan humana sono, sin guiones largos ni lenguaje IA (0 a 100)"
+    },
+    "score_rapidez": {
+      "type": "number",
+      "default": 0,
+      "description": "Que tan directo avanzo sin preguntas inutiles (0 a 100)"
+    },
+    "score_cierre": {
+      "type": "number",
+      "default": 0,
+      "description": "Que tan bien cerro hacia la broker cuando debia (0 a 100)"
+    },
+    "veredicto": {
+      "type": "string",
+      "description": "Resumen de una frase del desempeno de Valentina en esa conversacion"
+    },
+    "fortalezas": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Que hizo bien Valentina"
+    },
+    "errores": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Que hizo mal Valentina"
+    },
+    "lecciones": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Mejoras concretas sugeridas para el prompt de Valentina (Fase B las revisa y aprueba)"
+    },
+    "transcript": {
+      "type": "string",
+      "description": "La transcripcion exacta que el juez reviso (una linea por mensaje: Lead / Valentina)"
+    },
+    "anotaciones": {
+      "type": "string",
+      "description": "JSON con comentarios anclados por mensaje: [{ msg, tipo, comentario }]"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["pendiente", "aprobada", "rechazada", "aplicada"],
+      "default": "pendiente",
+      "description": "Estado de las lecciones para Fase B (aprender). En Fase A quedan pendiente"
+    },
+    "modelo_juez": {
+      "type": "string",
+      "description": "Modelo que realizo la evaluacion (para transparencia)"
+    },
+    "fecha_evaluacion": {
+      "type": "string",
+      "description": "Fecha y hora ISO en que se corrio la evaluacion"
+    }
+  },
+  "required": ["cliente_id"]
+}

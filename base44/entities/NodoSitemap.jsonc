@@ -1,0 +1,49 @@
+{
+  "name": "NodoSitemap",
+  "type": "object",
+  "properties": {
+    "keyword": {
+      "type": "string",
+      "description": "Keyword objetivo de esta página"
+    },
+    "page_type": {
+      "type": "string",
+      "enum": ["pillar", "secondary", "third", "blog"],
+      "default": "blog",
+      "description": "Nivel del nodo dentro del cluster de contenido"
+    },
+    "url": {
+      "type": "string",
+      "description": "Ruta/slug propuesto para la página"
+    },
+    "title_suggestion": {
+      "type": "string",
+      "description": "Título sugerido para la página"
+    },
+    "intencion": {
+      "type": "string",
+      "enum": ["informacional", "transaccional", "comercial", "navegacional"],
+      "description": "Intención de búsqueda detectada"
+    },
+    "cluster": {
+      "type": "string",
+      "description": "Keyword semilla que agrupa este cluster"
+    },
+    "prioridad": {
+      "type": "number",
+      "default": 5,
+      "description": "Prioridad de producción 1-10"
+    },
+    "research_data": {
+      "type": "string",
+      "description": "Investigación del keyword serializada en JSON"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["draft", "researched", "generating", "pending_approval", "published"],
+      "default": "draft",
+      "description": "Estado del nodo dentro del pipeline"
+    }
+  },
+  "required": ["keyword"]
+}

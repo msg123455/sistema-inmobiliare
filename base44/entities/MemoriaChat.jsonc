@@ -1,0 +1,49 @@
+{
+  "name": "MemoriaChat",
+  "type": "object",
+  "properties": {
+    "telefono": {
+      "type": "string",
+      "description": "Teléfono/ID único del lead (clave de búsqueda)"
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "ID del Contacto en el CRM"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del lead si ya se conoce"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Canal de la conversación (WhatsApp, Telegram)"
+    },
+    "estado_json": {
+      "type": "string",
+      "description": "Estado completo de la conversación: historial, datos capturados, etapa, calificación"
+    },
+    "ultimo_mensaje": {
+      "type": "string",
+      "description": "Último mensaje que envió el cliente"
+    },
+    "ultima_respuesta": {
+      "type": "string",
+      "description": "Última respuesta que dio Valentina"
+    },
+    "fecha_ultimo_mensaje": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora del último intercambio"
+    },
+    "calificado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si el lead ya fue calificado y asignado a broker"
+    },
+    "broker_asignado": {
+      "type": "string",
+      "description": "Nombre del broker asignado (si calificado)"
+    }
+  },
+  "required": ["telefono"]
+}

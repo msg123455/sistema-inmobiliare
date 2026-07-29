@@ -1,0 +1,100 @@
+{
+  "name": "Inversionista",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "title": "Nombre"
+    },
+    "tipo": {
+      "type": "string",
+      "title": "Tipo",
+      "enum": [
+        "Individual",
+        "Empresa",
+        "Fondo de Capital",
+        "Otro"
+      ]
+    },
+    "email": {
+      "type": "string",
+      "title": "Email"
+    },
+    "telefono": {
+      "type": "string",
+      "title": "Tel\u00e9fono"
+    },
+    "monto_invertido": {
+      "type": "number",
+      "title": "Monto invertido"
+    },
+    "porcentaje": {
+      "type": "number",
+      "title": "Porcentaje (%)"
+    },
+    "moneda": {
+      "type": "string",
+      "title": "Moneda",
+      "enum": [
+        "USD",
+        "COP",
+        "EUR"
+      ]
+    },
+    "fecha_inversion": {
+      "type": "string",
+      "title": "Fecha inversi\u00f3n"
+    },
+    "notas": {
+      "type": "string",
+      "title": "Notas"
+    }
+  },
+  "required": [
+    "nombre"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "user"
+          }
+        }
+      ]
+    }
+  }
+}

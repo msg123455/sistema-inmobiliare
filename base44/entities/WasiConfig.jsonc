@@ -1,0 +1,61 @@
+{
+  "name": "WasiConfig",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "default": "general",
+      "description": "Clave de configuración (usar 'general')"
+    },
+    "api_key": {
+      "type": "string",
+      "description": "WASI API Key (wasi_token)"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "WASI User ID (id_company)"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si la integración está activa"
+    },
+    "estado_conexion": {
+      "type": "string",
+      "enum": ["Conectado", "Desconectado", "Error", "No_configurado"],
+      "default": "No_configurado",
+      "description": "Estado de la conexión con WASI"
+    },
+    "ultimo_sync": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Fecha y hora del último sync"
+    },
+    "propiedades_sincronizadas": {
+      "type": "number",
+      "default": 0,
+      "description": "Total de propiedades sincronizadas"
+    },
+    "leads_importados": {
+      "type": "number",
+      "default": 0,
+      "description": "Total de leads importados"
+    },
+    "auto_sync_activo": {
+      "type": "boolean",
+      "default": false,
+      "description": "Activar sync automático"
+    },
+    "auto_sync_horas": {
+      "type": "number",
+      "default": 6,
+      "description": "Frecuencia del sync automático en horas"
+    },
+    "log_sync": {
+      "type": "array",
+      "items": { "type": "object" },
+      "description": "Historial de sincronizaciones"
+    }
+  },
+  "required": ["api_key", "user_id"]
+}

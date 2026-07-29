@@ -1,0 +1,16 @@
+{
+  "name": "SyncState",
+  "type": "object",
+  "properties": {
+    "sync_token": {
+      "type": "string",
+      "description": "Token de sincronizaci\u00f3n para Google Calendar webhooks"
+    },
+    "ultima_sincronizacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\u00daltima fecha de sincronizaci\u00f3n exitosa"
+    }
+  },
+  "required": []
+}

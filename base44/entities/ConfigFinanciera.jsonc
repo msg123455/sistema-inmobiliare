@@ -1,0 +1,48 @@
+{
+  "name": "ConfigFinanciera",
+  "type": "object",
+  "properties": {
+    "clave": {
+      "type": "string",
+      "description": "Clave \u00fanica (ej: 'general')"
+    },
+    "gastos_fijos_mes": {
+      "type": "number",
+      "default": 0,
+      "description": "Gastos fijos mensuales de la empresa (USD)"
+    },
+    "salarios_mes": {
+      "type": "number",
+      "default": 0,
+      "description": "N\u00f3mina mensual (USD)"
+    },
+    "otros_gastos_mes": {
+      "type": "number",
+      "default": 0,
+      "description": "Otros gastos operativos mensuales (USD)"
+    },
+    "tasa_impuesto_renta": {
+      "type": "number",
+      "default": 35,
+      "description": "Tasa de impuesto de renta en %"
+    },
+    "tasa_iva": {
+      "type": "number",
+      "default": 19,
+      "description": "IVA en %"
+    },
+    "reserva_legal_pct": {
+      "type": "number",
+      "default": 10,
+      "description": "% de reserva legal sobre utilidades"
+    },
+    "capital_inicial": {
+      "type": "number",
+      "default": 0,
+      "description": "Capital inicial disponible (USD)"
+    }
+  },
+  "required": [
+    "clave"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "AprendizajeValentina",
+  "type": "object",
+  "properties": {
+    "regla": {
+      "type": "string",
+      "description": "Regla concreta y accionable destilada de las evaluaciones, para el prompt de Valentina"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["pendiente", "aprobada", "rechazada"],
+      "default": "pendiente",
+      "description": "pendiente = esperando aprobacion humana; aprobada = se inyecta a Valentina; rechazada = descartada"
+    },
+    "fuente": {
+      "type": "string",
+      "description": "Nota de origen (patron o cuantas evaluaciones lo respaldan)"
+    },
+    "fecha": {
+      "type": "string",
+      "description": "Fecha ISO en que se genero la regla"
+    }
+  },
+  "required": ["regla"]
+}

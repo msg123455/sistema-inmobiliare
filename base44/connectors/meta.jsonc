@@ -1,0 +1,14 @@
+{
+  "type": "rest",
+  "name": "meta",
+  "description": "Conector Meta Graph API v19 - Facebook e Instagram Business",
+  "baseUrl": "https://graph.facebook.com/v19.0",
+  "auth": {
+    "type": "bearer",
+    "token": "{{env.META_ACCESS_TOKEN}}"
+  },
+  "headers": {
+    "Content-Type": "application/json",
+    "Accept": "application/json"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "seguimientoLeads",
+  "entry": "entry.ts",
+  "automations": [
+    {
+      "type": "scheduled",
+      "name": "cron_seguimiento_leads",
+      "description": "Follow-up de leads (3h/20h, dentro de la ventana de 24h) y recordatorios a brokers por Telegram. Cada 30 min; la funcion respeta el horario habil Bogota 8-21h.",
+      "function_args": { "token": "SEGUIMIENTO2026" },
+      "is_active": true,
+      "schedule_mode": "recurring",
+      "schedule_type": "cron",
+      "cron_expression": "*/30 * * * *"
+    }
+  ]
+}

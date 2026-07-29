@@ -1,0 +1,61 @@
+{
+  "name": "ContenidoSEO",
+  "type": "object",
+  "properties": {
+    "nodo_id": {
+      "type": "string",
+      "description": "ID del NodoSitemap del que proviene"
+    },
+    "keyword_principal": {
+      "type": "string",
+      "description": "Keyword objetivo del artículo"
+    },
+    "title": {
+      "type": "string",
+      "description": "Title tag (máx 60 caracteres)"
+    },
+    "slug": {
+      "type": "string",
+      "description": "Slug de la URL"
+    },
+    "meta_description": {
+      "type": "string",
+      "description": "Meta description (máx 160 caracteres)"
+    },
+    "content_sections": {
+      "type": "string",
+      "description": "Secciones del artículo serializadas en JSON"
+    },
+    "faq_items": {
+      "type": "string",
+      "description": "Preguntas frecuentes serializadas en JSON"
+    },
+    "schema_jsonld": {
+      "type": "string",
+      "description": "Schema.org JSON-LD de la página"
+    },
+    "cta_text": {
+      "type": "string",
+      "description": "Llamado a la acción de cierre"
+    },
+    "aeo_data": {
+      "type": "string",
+      "description": "Optimización para motores de respuesta (AI Overviews, ChatGPT) en JSON"
+    },
+    "palabras": {
+      "type": "number",
+      "description": "Conteo aproximado de palabras"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["pendiente", "aprobado", "rechazado"],
+      "default": "pendiente",
+      "description": "Estado editorial del contenido"
+    },
+    "export_html": {
+      "type": "string",
+      "description": "HTML final listo para exportar al CMS"
+    }
+  },
+  "required": ["keyword_principal"]
+}

@@ -1,0 +1,47 @@
+{
+  "name": "Tarea",
+  "type": "object",
+  "properties": {
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente (referencia a Cliente)"
+    },
+    "titulo": {
+      "type": "string",
+      "description": "T\u00edtulo de la tarea"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n detallada"
+    },
+    "fecha_limite": {
+      "type": "string",
+      "format": "date",
+      "description": "Fecha l\u00edmite para completar"
+    },
+    "completada": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la tarea est\u00e1 completada"
+    },
+    "asignado_a": {
+      "type": "string",
+      "description": "Email del usuario asignado"
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "Baja",
+        "Media",
+        "Alta"
+      ],
+      "default": "Media",
+      "description": "Prioridad de la tarea"
+    }
+  },
+  "required": [
+    "cliente_id",
+    "titulo",
+    "fecha_limite"
+  ]
+}

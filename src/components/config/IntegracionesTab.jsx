@@ -1,0 +1,167 @@
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { CalendarPlus, Mail, Link, Unlink, CheckCircle2, Loader2 } from 'lucide-react';
+
+const CALENDAR_CONNECTOR_ID = '6a18839dc1f7c1f1c25e5638';
+const GMAIL_CONNECTOR_ID = '6a188355eedd5e30c544330b';
+
+export default function IntegracionesTab() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const [calConnected, setCalConnected] = useState(false);
+  const [calLoading, setCalLoading] = useState(true);
+
+  const [gmailConnected, setGmailConnected] = useState(false);
+  const [gmailEmail, setGmailEmail] = useState('');
+  const [gmailLoading, setGmailLoading] = useState(true);
+
+  // Rule 2: reusable fetch — doubles as connection check AND data loader
+  const checkCalendar = async () => {
+    setCalLoading(true);
+    try {
+      const res = await base44.functions.invoke('checkCalendarConnection', {});
+      setCalConnected(res.data?.connected || false);
+    } catch {
+      setCalConnected(false);
+    }
+    setCalLoading(false);
+  };
+
+  const checkGmail = async () => {
+    setGmailLoading(true);
+    try {
+      const res = await base44.functions.invoke('checkGmailConnection', {});
+      setGmailConnected(res.data?.connected || false);
+      setGmailEmail(res.data?.email || '');
+    } catch {
+      setGmailConnected(false);
+    }
+    setGmailLoading(false);
+  };
+
+  // Rule 1+2: check auth first, then fetch to detect connection status
+  useEffect(() => {
+    base44.auth.isAuthenticated().then(async (authed) => {
+      if (authed) {
+        const me = await base44.auth.me();
+        setUser(me);
+        checkCalendar();
+        checkGmail();
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  // Rule 3: open OAuth popup, poll for close, then re-fetch
+  const handleConnect = async (connectorId, recheckFn) => {
+    const url = await base44.connectors.connectAppUser(connectorId);
+    const popup = window.open(url, '_blank');
+    const timer = setInterval(() => {
+      if (!popup || popup.closed) {
+        clearInterval(timer);
+        recheckFn();
+      }
+    }, 500);
+  };
+
+  const handleDisconnect = async (connectorId, resetFn) => {
+    await base44.connectors.disconnectAppUser(connectorId);
+    resetFn();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="bg-card rounded-xl p-6 text-center">
+        <p className="text-sm text-muted-foreground mb-3">Inicia sesión para conectar tus integraciones</p>
+        <Button onClick={() => base44.auth.redirectToLogin()} size="sm" className="rounded-lg">
+          Iniciar sesión
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Google Calendar */}
+      <ConnectorCard
+        icon={CalendarPlus}
+        iconBg="bg-green-50 dark:bg-green-950/30"
+        iconColor="text-green-600"
+        title="Google Calendar"
+        description="Cuando conectas tu cuenta, cada tarea que crees se agrega automáticamente a tu Google Calendar como evento de 30 minutos."
+        connected={calConnected}
+        loading={calLoading}
+        onConnect={() => handleConnect(CALENDAR_CONNECTOR_ID, checkCalendar)}
+        onDisconnect={() => handleDisconnect(CALENDAR_CONNECTOR_ID, () => setCalConnected(false))}
+        connectLabel="Conectar Google Calendar"
+        disconnectLabel="Desconectar Calendar"
+      />
+
+      {/* Gmail */}
+      <ConnectorCard
+        icon={Mail}
+        iconBg="bg-blue-50 dark:bg-blue-950/30"
+        iconColor="text-blue-600"
+        title="Gmail"
+        description="Conecta tu cuenta de Gmail para enviar notificaciones y correos directamente desde la plataforma."
+        connected={gmailConnected}
+        loading={gmailLoading}
+        statusExtra={gmailEmail ? `(${gmailEmail})` : ''}
+        onConnect={() => handleConnect(GMAIL_CONNECTOR_ID, checkGmail)}
+        onDisconnect={() => handleDisconnect(GMAIL_CONNECTOR_ID, () => { setGmailConnected(false); setGmailEmail(''); })}
+        connectLabel="Conectar Gmail"
+        disconnectLabel="Desconectar Gmail"
+      />
+    </div>
+  );
+}
+
+function ConnectorCard({ icon: Icon, iconBg, iconColor, title, description, connected, loading, statusExtra, onConnect, onDisconnect, connectLabel, disconnectLabel }) {
+  return (
+    <div className="bg-card rounded-xl p-5 space-y-3">
+      <div className="flex items-start gap-3">
+        <div className={`w-10 h-10 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0`}>
+          <Icon className={`w-5 h-5 ${iconColor}`} />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+            {loading ? (
+              <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+            ) : connected ? (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-green-700 bg-green-100 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
+                <CheckCircle2 className="w-3 h-3" /> Conectado {statusExtra}
+              </span>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+        </div>
+      </div>
+
+      {!loading && (
+        <div className="flex items-center gap-3 pt-1">
+          {connected ? (
+            <Button onClick={onDisconnect} variant="outline" size="sm" className="gap-2 rounded-lg text-destructive border-destructive/30 hover:bg-destructive/5">
+              <Unlink className="w-3.5 h-3.5" /> {disconnectLabel}
+            </Button>
+          ) : (
+            <Button onClick={onConnect} size="sm" className="gap-2 rounded-lg">
+              <Link className="w-3.5 h-3.5" /> {connectLabel}
+            </Button>
+          )}
+          <p className="text-xs text-muted-foreground">Solo afecta tu cuenta — cada usuario conecta la suya.</p>
+        </div>
+      )}
+    </div>
+  );
+}

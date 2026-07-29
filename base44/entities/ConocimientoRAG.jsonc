@@ -1,0 +1,33 @@
+{
+  "name": "ConocimientoRAG",
+  "type": "object",
+  "properties": {
+    "titulo": {
+      "type": "string",
+      "description": "Título del chunk de conocimiento"
+    },
+    "contenido": {
+      "type": "string",
+      "description": "Contenido del chunk inyectado en el prompt"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": ["avatar", "principios", "frases", "conversaciones", "antideteccion", "mercado", "general"],
+      "description": "Categoría del conocimiento"
+    },
+    "etapas": {
+      "type": "string",
+      "description": "Etapas donde aplica: todas, calentamiento, descubrimiento, calificacion, propuesta, cierre (separadas por coma)"
+    },
+    "prioridad": {
+      "type": "number",
+      "default": 5,
+      "description": "Prioridad de inyección 1-10 (10 = más importante)"
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Si está activo se inyecta en el prompt"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "Documento",
+  "type": "object",
+  "properties": {
+    "cliente_id": {
+      "type": "string",
+      "description": "ID del cliente al que pertenece el documento"
+    },
+    "nombre": {
+      "type": "string",
+      "description": "Nombre del archivo"
+    },
+    "categoria": {
+      "type": "string",
+      "enum": [
+        "evidencia",
+        "recibo",
+        "carta",
+        "otro"
+      ],
+      "default": "otro",
+      "description": "Categor\u00eda del documento"
+    },
+    "descripcion": {
+      "type": "string",
+      "description": "Descripci\u00f3n opcional del documento"
+    },
+    "tipo_mime": {
+      "type": "string",
+      "description": "Tipo MIME del archivo (ej: image/jpeg, application/pdf)"
+    },
+    "tamanio_bytes": {
+      "type": "number",
+      "description": "Tama\u00f1o del archivo en bytes"
+    },
+    "contenido": {
+      "type": "string",
+      "description": "URL del archivo subido (v\u00eda UploadFile)"
+    }
+  },
+  "required": [
+    "cliente_id",
+    "nombre",
+    "categoria",
+    "contenido"
+  ]
+}

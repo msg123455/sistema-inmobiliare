@@ -1,0 +1,17 @@
+{
+  "name": "Conversacion",
+  "fields": [
+    { "name": "contacto_id",        "type": "string",   "required": true },
+    { "name": "contacto_nombre",    "type": "string"  },
+    { "name": "contacto_telefono",  "type": "string"  },
+    { "name": "canal",              "type": "string",   "enum": ["WhatsApp","Instagram","Facebook","Web","Telegram"], "default": "WhatsApp" },
+    { "name": "estado",             "type": "string",   "enum": ["IA_Activa","En_Espera_Humano","Asignada","Cerrada"], "default": "IA_Activa" },
+    { "name": "asignado_a",         "type": "string"  },
+    { "name": "fecha_inicio",       "type": "datetime" },
+    { "name": "fecha_ultimo_mensaje","type": "datetime" },
+    { "name": "ia_activa",          "type": "boolean",  "default": true },
+    { "name": "resumen_ia",         "type": "string"  },
+    { "name": "mensajes_sin_leer",  "type": "integer",  "default": 0 },
+    { "name": "broker_asignado",    "type": "string"  }
+  ]
+}
