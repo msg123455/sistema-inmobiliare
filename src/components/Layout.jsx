@@ -5,7 +5,7 @@ import {
   LayoutGrid, Users, Settings, LogOut, Home as HomeIcon, Menu, X,
   ChevronRight, CalendarDays, ClipboardList,
   Link2, Building2, UserCheck,
-  BarChart3, MessageSquare, Bot, LineChart, Megaphone, Globe, GraduationCap, SlidersHorizontal, Brain,
+  BarChart3, MessageSquare, Bot, LineChart, Megaphone, Globe, GraduationCap, SlidersHorizontal, Brain, Upload,
 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 import { Conversacion } from '@/api/base44Client';
@@ -68,6 +68,7 @@ const NAV_SECTIONS = [
     icon: Link2,
     basePath: '/integraciones',
     items: [
+      { label: 'Importar inventario', path: '/integraciones/inventario', icon: Upload },
       { label: 'WASI', path: '/integraciones/wasi', icon: Link2 },
     ],
   },

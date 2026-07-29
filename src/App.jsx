@@ -37,6 +37,7 @@ import Campanas from '@/pages/marketing/Campanas.jsx';
 
 // Integraciones
 import WasiIntegracion from '@/pages/integraciones/WasiIntegracion.jsx';
+import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
 
 // IA Agente + Lead management
 import Inbox from '@/pages/inbox/Inbox.jsx';
@@ -115,6 +116,7 @@ const AuthenticatedApp = () => {
 
         {/* Integraciones */}
         <Route path="/integraciones/wasi" element={<WasiIntegracion />} />
+        <Route path="/integraciones/inventario" element={<ImportarInventario />} />
 
         {/* IA Agente */}
         <Route path="/agente/configuracion" element={<AdminOnly><ConfigAgenteIA /></AdminOnly>} />
