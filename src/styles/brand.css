@@ -1,0 +1,54 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   INMOBILIARE — Tokens de marca
+   ─────────────────────────────────────────────────────────────────────────────
+
+   Este es el UNICO archivo que se toca para aplicar el manual de marca.
+   Contiene decisiones de marca (color, tipografia, radio). El mapeo semantico
+   —que token es "card", cual es "muted"— vive en index.css y no deberia cambiar
+   al re-skinear.
+
+   Formato: los valores de color son tripletas HSL SIN envolver en hsl(), porque
+   Tailwind las consume como `hsl(var(--token))` y necesita componerlas con alpha
+   (ej. `bg-primary/50`). Escribir `#007AFF` aqui rompe las variantes de opacidad.
+
+   ESTADO: paleta placeholder (azul iOS heredado del codigo original).
+   Pendiente reemplazar por la del manual de marca de INMOBILIARE Julio Corredor.
+   ────────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* ── Tipografia ─────────────────────────────────────────────────────────── */
+  /* Cuerpo de texto e interfaz. */
+  --brand-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+  /* Titulares. Hoy apunta a la misma familia; los manuales de marca casi siempre
+     especifican una display distinta, y este token es donde entra sin tocar nada mas. */
+  --brand-font-display: var(--brand-font-sans);
+  --brand-tracking: -0.01em;
+
+  /* ── Color de marca ─────────────────────────────────────────────────────── */
+  --brand-primary: 211 100% 50%;
+  --brand-primary-foreground: 0 0% 100%;
+  --brand-accent: 211 100% 50%;
+  --brand-accent-foreground: 0 0% 100%;
+
+  /* ── Color funcional ────────────────────────────────────────────────────── */
+  /* Usados para estados, no para identidad. Un manual de marca rara vez los
+     define, pero deben convivir con la paleta sin chocar. */
+  --brand-danger: 0 72% 51%;
+  --brand-danger-foreground: 0 0% 100%;
+  --brand-success: 145 63% 42%;
+  --brand-warning: 38 92% 50%;
+
+  /* ── Forma ──────────────────────────────────────────────────────────────── */
+  --brand-radius: 0.875rem;
+
+  /* ── Paleta de datos ────────────────────────────────────────────────────── */
+  /* Series de graficas. Ordenada por distinguibilidad, no por gusto: la 1 y la 2
+     son las que mas se comparan entre si, asi que llevan la mayor separacion. */
+  --brand-chart-1: 211 100% 50%;
+  --brand-chart-2: 199 89% 48%;
+  --brand-chart-3: 145 63% 42%;
+  --brand-chart-4: 262 83% 58%;
+  --brand-chart-5: 340 75% 55%;
+}

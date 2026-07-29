@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* Tokens de marca primero: define las variables --brand-* que este archivo mapea
+   a los tokens semanticos que consume Tailwind. Para re-skinear, editar brand.css. */
+@import './styles/brand.css';
 
 @tailwind base;
 @tailwind components;
@@ -6,42 +8,47 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+    --font-sans: var(--brand-font-sans);
+    --font-display: var(--brand-font-display);
 
-    /* iOS Clásico — Light */
+    /* Light */
     --background: 240 6% 97%;
     --foreground: 222 47% 11%;
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    --primary: 211 100% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: var(--brand-primary);
+    --primary-foreground: var(--brand-primary-foreground);
     --secondary: 240 5% 96%;
     --secondary-foreground: 222 47% 11%;
     --muted: 240 5% 96%;
     --muted-foreground: 220 9% 46%;
-    --accent: 211 100% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: var(--brand-accent);
+    --accent-foreground: var(--brand-accent-foreground);
+    --destructive: var(--brand-danger);
+    --destructive-foreground: var(--brand-danger-foreground);
     --border: 240 6% 90%;
     --input: 240 6% 90%;
-    --ring: 211 100% 50%;
-    --chart-1: 211 100% 50%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 145 63% 42%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 340 75% 55%;
-    --radius: 0.875rem;
+    --ring: var(--brand-primary);
+    --chart-1: var(--brand-chart-1);
+    --chart-2: var(--brand-chart-2);
+    --chart-3: var(--brand-chart-3);
+    --chart-4: var(--brand-chart-4);
+    --chart-5: var(--brand-chart-5);
+    --radius: var(--brand-radius);
     --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 211 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: var(--brand-primary);
+    --sidebar-primary-foreground: var(--brand-primary-foreground);
     --sidebar-accent: 240 6% 96%;
     --sidebar-accent-foreground: 222 47% 11%;
     --sidebar-border: 240 6% 90%;
-    --sidebar-ring: 211 100% 50%;
+    --sidebar-ring: var(--brand-primary);
+
+    /* Scrollbar — no son tokens de Tailwind, se usan crudos mas abajo. */
+    --scrollbar-thumb: 240 5% 80%;
+    --scrollbar-thumb-hover: 240 5% 70%;
   }
 
   .dark {
@@ -51,32 +58,35 @@
     --card-foreground: 0 0% 96%;
     --popover: 0 0% 11%;
     --popover-foreground: 0 0% 96%;
-    --primary: 211 100% 50%;
-    --primary-foreground: 0 0% 100%;
+    --primary: var(--brand-primary);
+    --primary-foreground: var(--brand-primary-foreground);
     --secondary: 0 0% 16%;
     --secondary-foreground: 0 0% 96%;
     --muted: 0 0% 16%;
     --muted-foreground: 0 0% 58%;
-    --accent: 211 100% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: var(--brand-accent);
+    --accent-foreground: var(--brand-accent-foreground);
+    --destructive: var(--brand-danger);
+    --destructive-foreground: var(--brand-danger-foreground);
     --border: 0 0% 20%;
     --input: 0 0% 20%;
-    --ring: 211 100% 50%;
-    --chart-1: 211 100% 50%;
-    --chart-2: 199 89% 48%;
-    --chart-3: 145 63% 42%;
-    --chart-4: 262 83% 58%;
-    --chart-5: 340 75% 55%;
+    --ring: var(--brand-primary);
+    --chart-1: var(--brand-chart-1);
+    --chart-2: var(--brand-chart-2);
+    --chart-3: var(--brand-chart-3);
+    --chart-4: var(--brand-chart-4);
+    --chart-5: var(--brand-chart-5);
     --sidebar-background: 0 0% 7%;
     --sidebar-foreground: 0 0% 96%;
-    --sidebar-primary: 211 100% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-primary: var(--brand-primary);
+    --sidebar-primary-foreground: var(--brand-primary-foreground);
     --sidebar-accent: 0 0% 16%;
     --sidebar-accent-foreground: 0 0% 96%;
     --sidebar-border: 0 0% 20%;
-    --sidebar-ring: 211 100% 50%;
+    --sidebar-ring: var(--brand-primary);
+
+    --scrollbar-thumb: 0 0% 30%;
+    --scrollbar-thumb-hover: 0 0% 40%;
   }
 }
 
@@ -90,11 +100,11 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.01em;
+    letter-spacing: var(--brand-tracking);
   }
 }
 
-/* iOS-style scrollbar — thin and subtle */
+/* Scrollbar delgado. Ahora sigue el tema en vez de hardcodear el color claro. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -103,12 +113,9 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(240 5% 80%);
+  background: hsl(var(--scrollbar-thumb));
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(240 5% 70%);
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: hsl(0 0% 30%);
+  background: hsl(var(--scrollbar-thumb-hover));
 }
