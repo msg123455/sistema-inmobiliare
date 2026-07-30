@@ -26,6 +26,8 @@ const CONSUMIDORAS = [
   { nombre: 'continuarTurno' },
   { nombre: 'seedAgentes', archivos: ['prompts.ts'] },
   { nombre: 'configurarDemoVentas', archivos: ['prompts.ts'] },
+  // Sonda temporal (ver base44/functions/pingPesado/entry.ts). Quitar junto con ella.
+  { nombre: 'pingPesado' },
 ];
 
 const soloCheck = process.argv.includes('--check');

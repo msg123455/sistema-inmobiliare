@@ -1,0 +1,5 @@
+{
+  "name": "pingPesado",
+  "entry": "entry.ts",
+  "description": "Sonda temporal: importa el grafo completo de _core sin ejecutarlo, para saber si Base44 rechaza agenteInbound por tamano de bundle."
+}
