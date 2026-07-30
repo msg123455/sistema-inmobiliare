@@ -1,5 +1,0 @@
-{
-  "name": "pingUnico",
-  "entry": "entry.ts",
-  "description": "Sonda temporal: mismo peso que pingPesado (~108 KB) pero en UN solo archivo. Separa si el limite de Base44 es de bytes o de cantidad de modulos."
-}

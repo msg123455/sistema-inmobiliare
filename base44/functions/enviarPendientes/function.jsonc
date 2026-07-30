@@ -1,6 +1,6 @@
 {
   "name": "enviarPendientes",
-  "entry": "entry.ts",
+  "entry": "bundle.ts",
   "automations": [
     {
       "type": "scheduled",

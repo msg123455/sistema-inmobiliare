@@ -9,11 +9,13 @@
     "check:core": "node scripts/sync-core.mjs --check",
     "check:funciones": "tsc -p tsconfig.functions.json",
     "test:agentes": "node scripts/test-agent-core.mjs",
-    "build": "node scripts/sync-core.mjs --check && tsc -p tsconfig.functions.json && vite build",
+    "build": "node scripts/sync-core.mjs --check && node scripts/empaquetar.mjs --check && tsc -p tsconfig.functions.json && vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "empaquetar": "node scripts/empaquetar.mjs",
+    "check:bundles": "node scripts/empaquetar.mjs --check"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.41",

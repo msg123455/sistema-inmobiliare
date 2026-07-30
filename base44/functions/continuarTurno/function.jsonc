@@ -1,6 +1,6 @@
 {
   "name": "continuarTurno",
-  "entry": "entry.ts",
+  "entry": "bundle.ts",
   "automations": [
     {
       "type": "scheduled",
