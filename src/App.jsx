@@ -68,10 +68,8 @@ import BandejaAgentes from '@/pages/inbox/BandejaAgentes.jsx';
 import ContactoDetalle from '@/pages/crm/ContactoDetalle.jsx';
 import AnalyticsLeads from '@/pages/analytics/AnalyticsLeads.jsx';
 import ConfigAgenteIA from '@/pages/agente/ConfigAgente.jsx';
-import Autoeducacion from '@/pages/agente/Autoeducacion.jsx';
-import ConfigEvaluadorPage from '@/pages/agente/ConfigEvaluador.jsx';
-import Aprendizajes from '@/pages/agente/Aprendizajes.jsx';
 import Agentes from '@/pages/agente/Agentes.jsx';
+import Conocimiento from '@/pages/agente/Conocimiento.jsx';
 
 function AdminOnly({ children }) {
   const { isAdmin, isLoading } = useUserRole();
@@ -158,10 +156,14 @@ const AuthenticatedApp = () => {
 
         {/* IA Agente */}
         <Route path="/agente/configuracion" element={<AdminOnly><ConfigAgenteIA /></AdminOnly>} />
-        <Route path="/agente/autoeducacion" element={<AdminOnly><Autoeducacion /></AdminOnly>} />
-        <Route path="/agente/config-evaluador" element={<AdminOnly><ConfigEvaluadorPage /></AdminOnly>} />
         <Route path="/agente/agentes" element={<AdminOnly><Agentes /></AdminOnly>} />
-        <Route path="/agente/aprendizajes" element={<AdminOnly><Aprendizajes /></AdminOnly>} />
+        <Route path="/agente/conocimiento" element={<AdminOnly><Conocimiento /></AdminOnly>} />
+        {/* El evaluador y los aprendizajes del bot monolitico quedaron fuera:
+            operaban solo sobre ventas y escribian un campo que el runtime
+            multiagente no consume. */}
+        <Route path="/agente/autoeducacion" element={<Navigate to="/agente/agentes" replace />} />
+        <Route path="/agente/config-evaluador" element={<Navigate to="/agente/agentes" replace />} />
+        <Route path="/agente/aprendizajes" element={<Navigate to="/agente/conocimiento" replace />} />
         <Route path="/analytics/leads" element={<AnalyticsLeads />} />
 
         {/* Equipo - Admin only */}

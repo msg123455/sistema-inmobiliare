@@ -1,200 +1,133 @@
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ConfigAgente } from '@/api/base44Client';
-import { base44 } from '@/api/base44Client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { base44, ConfigAgente } from '@/api/base44Client';
+import { BACKEND_URL } from '@/lib/backend';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/components/ui/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
-  Bot, Plus, X, Save, Play, Clock, MessageCircle, Zap,
-  Settings, BookOpen, Link, CheckCircle, AlertCircle, Users, Phone,
+  Bot, BookOpen, CheckCircle2, Copy, Database, ExternalLink, Loader2,
+  PlayCircle, RefreshCw, Save, Settings, ShieldCheck, UserRound, XCircle,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-const DEFAULT_INSTRUCCIONES = `Eres una asesora inmobiliaria profesional y amable. Atiendes prospectos con calidez colombiana.
+const DEFAULTS = {
+  activo: true,
+  demora_respuesta_min: 0,
+  telegram_notif_chat: '',
+  numero_notificaciones: '',
+};
 
-FLUJO DE CALIFICACIÓN:
-1. Saluda y pregunta si busca comprar o arrendar
-2. Pregunta la ciudad de interés
-3. Pregunta el presupuesto aproximado
-4. Pregunta número de habitaciones deseadas
-5. Recomienda máximo 3 propiedades del catálogo disponible
-6. Propone una visita presencial o virtual con fecha y hora concretas
-
-REGLAS:
-- Habla en español colombiano, de tú a tú, con calidez y profesionalismo
-- Nunca inventes propiedades ni precios que no estés en el catálogo
-- Máximo 3 propiedades por mensaje para no abrumar
-- Si el cliente pregunta algo que no sabes, di que lo consultas con un asesor
-- Usa un tono cálido y cercano sin emojis
-- Si el cliente quiere hablar con una persona, escala inmediatamente`;
-
-const DEFAULT_CONOCIMIENTO = [
-  'Atendemos en ciudades: Medellín, Bogotá, Cali, Barranquilla y principales ciudades de Colombia',
-  'Horario de atención: lunes a sábado 8am - 8pm',
-  'Manejamos apartamentos, casas, locales, oficinas y lotes',
-  'Nuestras comisiones son del 3% en venta y el 10% del canon en arriendo',
-  'Aceptamos todos los estratos',
+const SECRETOS_TELEGRAM = [
+  'TELEGRAM_BOT_TOKEN',
+  'TELEGRAM_WEBHOOK_SECRET',
+  'ANTHROPIC_API_KEY',
 ];
 
 export default function ConfigAgenteIA() {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [form, setForm] = useState(DEFAULTS);
+  const [demo, setDemo] = useState(null);
+  const [demoError, setDemoError] = useState('');
+  const [cargandoDemo, setCargandoDemo] = useState(false);
 
-  const [form, setForm] = useState({
-    nombre_agente: 'Valentina',
-    instrucciones_sistema: DEFAULT_INSTRUCCIONES,
-    conocimiento_base: DEFAULT_CONOCIMIENTO,
-    saludo_inicial: '¡Hola {{nombre}}! Soy {{agente}}, asesora de {{inmobiliaria}}. ¿En qué te puedo ayudar hoy?',
-    horario_inicio: '08:00',
-    horario_fin: '20:00',
-    fuera_de_horario_mensaje: '¡Hola! En este momento estamos fuera de horario (8am - 8pm). Te respondemos pronto.',
-    escalar_triggers: ['hablar con agente', 'hablar con asesor', 'hablar con persona', 'urgente', 'queja', 'reclamo'],
-    activo: true,
-    nombre_inmobiliaria: '',
-    brokers: [],
-    demora_respuesta_min: 0,
-  });
-
-  const [nuevoKnowledge, setNuevoKnowledge] = useState('');
-  const [nuevoTrigger, setNuevoTrigger] = useState('');
-  const [nuevoBroker, setNuevoBroker] = useState({ nombre: '', telefono: '', genero: 'F', tipo_inmueble: 'ambos', barrios: '' });
-  const [testMensaje, setTestMensaje] = useState('Hola, quiero arrendar un apartamento');
-  const [testRespuesta, setTestRespuesta] = useState('');
-  const [testLoading, setTestLoading] = useState(false);
-
-  // ── Cargar config existente ──
-  const { data: configExistente } = useQuery({
+  const { data: filas = [], isLoading } = useQuery({
     queryKey: ['config_agente'],
-    queryFn: () => ConfigAgente.list(),
-    select: (data) => data[0],
+    queryFn: () => ConfigAgente.list('-created_date', 100),
   });
+  const config = filas.find((fila) => fila.clave === 'general') || filas[0] || null;
 
   useEffect(() => {
-    if (configExistente) {
-      setForm({
-        nombre_agente: configExistente.nombre_agente || 'Valentina',
-        instrucciones_sistema: configExistente.instrucciones_sistema || DEFAULT_INSTRUCCIONES,
-        conocimiento_base: configExistente.conocimiento_base || DEFAULT_CONOCIMIENTO,
-        saludo_inicial: configExistente.saludo_inicial || form.saludo_inicial,
-        horario_inicio: configExistente.horario_inicio || '08:00',
-        horario_fin: configExistente.horario_fin || '20:00',
-        fuera_de_horario_mensaje: configExistente.fuera_de_horario_mensaje || form.fuera_de_horario_mensaje,
-        escalar_triggers: configExistente.escalar_triggers || form.escalar_triggers,
-        activo: configExistente.activo ?? true,
-        nombre_inmobiliaria: configExistente.nombre_inmobiliaria || '',
-        brokers: configExistente.brokers || [],
-        demora_respuesta_min: configExistente.demora_respuesta_min ?? 0,
-      });
-    }
-  }, [configExistente]);
+    if (!config) return;
+    setForm({
+      activo: config.activo ?? true,
+      demora_respuesta_min: Number(config.demora_respuesta_min) || 0,
+      telegram_notif_chat: config.telegram_notif_chat || '',
+      numero_notificaciones: config.numero_notificaciones || '',
+    });
+  }, [config]);
 
-  // ── Guardar ──
   const guardar = useMutation({
     mutationFn: async () => {
-      if (configExistente?.id) {
-        return ConfigAgente.update(configExistente.id, { ...form, clave: 'general' });
-      } else {
-        return ConfigAgente.create({ ...form, clave: 'general' });
-      }
+      const datos = {
+        ...(config || {}),
+        ...form,
+        clave: 'general',
+        nombre_agente: config?.nombre_agente || 'Asistente Inmobiliare',
+        nombre_inmobiliaria: config?.nombre_inmobiliaria || 'INMOBILIARE Julio Corredor',
+      };
+      return config?.id ? ConfigAgente.update(config.id, datos) : ConfigAgente.create(datos);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['config_agente']);
-      toast({ title: 'Configuración guardada' });
+      qc.invalidateQueries({ queryKey: ['config_agente'] });
+      toast.success('Configuración operativa guardada');
     },
-    onError: () => toast({ title: 'Error al guardar', variant: 'destructive' }),
+    onError: () => toast.error('No se pudo guardar la configuración'),
   });
 
-  // ── Probar agente ──
-  const probarAgente = async () => {
-    setTestLoading(true);
-    setTestRespuesta('');
+  const webhookUrl = `${BACKEND_URL}/api/functions/agenteInbound`;
+  const webhookVentasUrl = `${webhookUrl}?agente=ventas`;
+  const copiarWebhook = async () => {
+    await navigator.clipboard.writeText(webhookUrl);
+    toast.success('Webhook copiado');
+  };
+
+  const consultarDemo = useCallback(async () => {
+    setCargandoDemo(true);
+    setDemoError('');
     try {
-      const res = await base44.functions.invoke('generateSEOContent', {
-        action: 'test_agent',
-        mensaje: testMensaje,
-      });
-      setTestRespuesta(res.data?.respuesta || 'Sin respuesta');
-    } catch (err) {
-      setTestRespuesta('Error: ' + (err?.message || 'desconocido'));
+      const res = await base44.functions.invoke('configurarDemoVentas', { accion: 'estado' });
+      setDemo(res.data || null);
+    } catch (error) {
+      setDemoError(error?.response?.data?.error || error?.message || 'No se pudo consultar el demo');
     } finally {
-      setTestLoading(false);
+      setCargandoDemo(false);
+    }
+  }, []);
+
+  useEffect(() => { consultarDemo(); }, [consultarDemo]);
+
+  const prepararDemo = async () => {
+    setCargandoDemo(true);
+    setDemoError('');
+    try {
+      await base44.functions.invoke('seedAgentes', {
+        agente: 'ventas', sobrescribir: true, modo_demo: true,
+      });
+      const res = await base44.functions.invoke('configurarDemoVentas', { accion: 'preparar' });
+      setDemo(res.data || null);
+      if (res.data?.listo) toast.success('Demo de Ventas listo');
+      else toast.warning('El bot quedo conectado, pero falta revisar un punto');
+    } catch (error) {
+      const mensaje = error?.response?.data?.error || error?.message || 'No se pudo preparar el demo';
+      setDemoError(mensaje);
+      toast.error(mensaje);
+    } finally {
+      setCargandoDemo(false);
     }
   };
 
-  const agregarKnowledge = () => {
-    if (!nuevoKnowledge.trim()) return;
-    setForm((f) => ({ ...f, conocimiento_base: [...f.conocimiento_base, nuevoKnowledge.trim()] }));
-    setNuevoKnowledge('');
-  };
-
-  const eliminarKnowledge = (i) => {
-    setForm((f) => ({ ...f, conocimiento_base: f.conocimiento_base.filter((_, idx) => idx !== i) }));
-  };
-
-  const agregarTrigger = () => {
-    if (!nuevoTrigger.trim()) return;
-    setForm((f) => ({ ...f, escalar_triggers: [...f.escalar_triggers, nuevoTrigger.trim().toLowerCase()] }));
-    setNuevoTrigger('');
-  };
-
-  const eliminarTrigger = (i) => {
-    setForm((f) => ({ ...f, escalar_triggers: f.escalar_triggers.filter((_, idx) => idx !== i) }));
-  };
-
-  const agregarBroker = () => {
-    if (!nuevoBroker.nombre.trim() || !nuevoBroker.telefono.trim()) return;
-    const broker = {
-      nombre: nuevoBroker.nombre.trim(),
-      telefono: nuevoBroker.telefono.replace(/\D/g, ''),
-      genero: nuevoBroker.genero,
-      tipo_inmueble: nuevoBroker.tipo_inmueble,
-      barrios: nuevoBroker.barrios
-        .split(',')
-        .map((b) => b.trim().toLowerCase())
-        .filter(Boolean),
-    };
-    setForm((f) => ({ ...f, brokers: [...(f.brokers || []), broker] }));
-    setNuevoBroker({ nombre: '', telefono: '', genero: 'F', tipo_inmueble: 'ambos', barrios: '' });
-  };
-
-  const eliminarBroker = (i) => {
-    setForm((f) => ({ ...f, brokers: f.brokers.filter((_, idx) => idx !== i) }));
-  };
-
-  // Permite fijar el género en asesores YA guardados sin tener que recrearlos.
-  const setBrokerGenero = (i, genero) => {
-    setForm((f) => ({ ...f, brokers: (f.brokers || []).map((b, idx) => (idx === i ? { ...b, genero } : b)) }));
-  };
-
-  const TIPO_LABEL = { vivienda: 'Vivienda', comercial: 'Comercial', ambos: 'Ambos' };
-  const TIPO_COLOR = {
-    vivienda: 'bg-blue-50 text-blue-700 border-blue-200',
-    comercial: 'bg-orange-50 text-orange-700 border-orange-200',
-    ambos:     'bg-violet-50 text-violet-700 border-violet-200',
-  };
-
-  // URL del webhook — endpoint de Base44 (distinto al frontend).
-  // Apunta a agenteInbound: es la funcion conversacional actual y atiende los
-  // dos canales. webhookWhatsApp y webhookTelegram se eliminaron.
-  const appHost = window.location.hostname; // ej: <tenant>.base44.app
-  const webhookUrl = `https://${appHost}/api/functions/agenteInbound`;
+  if (isLoading) return <div className="py-12 text-center text-muted-foreground">Cargando...</div>;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Bot className="w-6 h-6 text-violet-600" />
-          <h1 className="text-[28px] font-bold tracking-tight text-foreground">Configurar Agente IA</h1>
-          {configExistente && (
-            <Badge variant={form.activo ? 'default' : 'secondary'} className="ml-2 flex items-center gap-1">
-              {form.activo ? <><span className="w-1.5 h-1.5 rounded-full bg-green-400" />Activo</> : <><span className="w-1.5 h-1.5 rounded-full bg-gray-400" />Inactivo</>}
+    <div className="max-w-4xl mx-auto space-y-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Bot className="w-6 h-6 text-primary" />
+            <h1 className="text-[28px] font-bold tracking-tight">Configuración operativa</h1>
+            <Badge variant={form.activo ? 'default' : 'secondary'}>
+              {form.activo ? 'IA activa' : 'IA pausada'}
             </Badge>
-          )}
+          </div>
+          <p className="text-muted-foreground text-[15px]">
+            Controles globales que sí usa el motor de los ocho agentes.
+          </p>
         </div>
         <Button onClick={() => guardar.mutate()} disabled={guardar.isPending} className="gap-2">
           <Save className="w-4 h-4" />
@@ -202,439 +135,254 @@ export default function ConfigAgenteIA() {
         </Button>
       </div>
 
-      {/* Estado activo */}
-      <Card>
-        <CardContent className="p-4 flex items-center justify-between">
-          <div>
-            <p className="font-medium text-gray-900">Agente IA activo</p>
-            <p className="text-sm text-gray-500">Cuando está activo, responde automáticamente a todos los leads por WhatsApp</p>
-          </div>
-          <Switch
-            checked={form.activo}
-            onCheckedChange={(v) => setForm((f) => ({ ...f, activo: v }))}
-          />
-        </CardContent>
-      </Card>
+      <Alert>
+        <ShieldCheck className="h-4 w-4" />
+        <AlertTitle>Una identidad pública, ocho roles internos</AlertTitle>
+        <AlertDescription>
+          El cliente habla con “Asistente Inmobiliare”. Los nombres, reglas y límites de cada rol se editan en{' '}
+          <Link className="font-medium text-primary underline-offset-4 hover:underline" to="/agente/agentes">
+            Agentes
+          </Link>
+          , y las políticas aprobadas en{' '}
+          <Link className="font-medium text-primary underline-offset-4 hover:underline" to="/agente/conocimiento">
+            Conocimiento RAG
+          </Link>.
+        </AlertDescription>
+      </Alert>
 
-      {/* Identidad */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings className="w-4 h-4" /> Identidad del agente
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+      <Card className="rounded-2xl border-primary/40 bg-primary/[0.02]">
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <Label className="text-sm">Nombre del agente</Label>
-              <Input
-                value={form.nombre_agente}
-                onChange={(e) => setForm((f) => ({ ...f, nombre_agente: e.target.value }))}
-                placeholder="ej: Valentina"
-                className="mt-1"
-              />
+              <CardTitle className="text-lg flex items-center gap-2">
+                <PlayCircle className="w-5 h-5 text-primary" /> Demo: Ventas por Telegram
+                {demo?.listo && <Badge className="gap-1"><CheckCircle2 className="w-3 h-3" /> Listo</Badge>}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">
+                Conecta un bot directamente con Ventas, sin depender del router ni de los otros agentes.
+              </p>
             </div>
-            <div>
-              <Label className="text-sm">Nombre de la inmobiliaria</Label>
-              <Input
-                value={form.nombre_inmobiliaria}
-                onChange={(e) => setForm((f) => ({ ...f, nombre_inmobiliaria: e.target.value }))}
-                placeholder="ej: Inmobiliaria García"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div>
-            <Label className="text-sm">Saludo inicial <span className="text-gray-400">(usa {"{{nombre}}"}, {"{{agente}}"}, {"{{inmobiliaria}}"}) </span></Label>
-            <Textarea
-              value={form.saludo_inicial}
-              onChange={(e) => setForm((f) => ({ ...f, saludo_inicial: e.target.value }))}
-              rows={2}
-              className="mt-1"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Demora humana */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Settings className="w-4 h-4" /> Demora de respuesta (para no parecer bot)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="flex items-center gap-3">
-            <Input
-              type="number" min="0" max="10"
-              value={form.demora_respuesta_min}
-              onChange={(e) => setForm((f) => ({ ...f, demora_respuesta_min: Number(e.target.value) || 0 }))}
-              className="w-24"
-            />
-            <span className="text-sm text-muted-foreground">minutos antes de responder cada mensaje</span>
-          </div>
-          <p className="text-xs text-amber-600">
-            0 = responde al instante. Con más de 0, Valentina espera ese tiempo antes de contestar (más humano). REQUIERE el cron "enviarPendientes" corriendo cada minuto. Sin el cron, no responderá.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Instrucciones */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <MessageCircle className="w-4 h-4" /> Instrucciones del sistema
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-xs text-gray-500 mb-2">
-            Aquí defines la personalidad, el flujo de calificación y las reglas que sigue el agente.
-          </p>
-          <Textarea
-            value={form.instrucciones_sistema}
-            onChange={(e) => setForm((f) => ({ ...f, instrucciones_sistema: e.target.value }))}
-            rows={12}
-            className="font-mono text-sm"
-          />
-        </CardContent>
-      </Card>
-
-      {/* Knowledge base */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BookOpen className="w-4 h-4" /> Base de conocimiento
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Agrega FAQs, políticas, información de la inmobiliaria y cualquier dato que el agente deba conocer.
-          </p>
-          <div className="space-y-2">
-            {form.conocimiento_base.map((item, i) => (
-              <div key={i} className="flex items-start gap-2 p-2 bg-gray-50 rounded-lg">
-                <span className="text-xs text-gray-700 flex-1">{item}</span>
-                <button onClick={() => eliminarKnowledge(i)} className="text-gray-400 hover:text-red-500">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Agregar nuevo conocimiento..."
-              value={nuevoKnowledge}
-              onChange={(e) => setNuevoKnowledge(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && agregarKnowledge()}
-              className="flex-1"
-            />
-            <Button size="sm" variant="outline" onClick={agregarKnowledge}>
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Horario */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Horario de atención
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label className="text-sm">Hora inicio</Label>
-              <Input
-                type="time"
-                value={form.horario_inicio}
-                onChange={(e) => setForm((f) => ({ ...f, horario_inicio: e.target.value }))}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-sm">Hora fin</Label>
-              <Input
-                type="time"
-                value={form.horario_fin}
-                onChange={(e) => setForm((f) => ({ ...f, horario_fin: e.target.value }))}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div>
-            <Label className="text-sm">Mensaje fuera de horario</Label>
-            <Textarea
-              value={form.fuera_de_horario_mensaje}
-              onChange={(e) => setForm((f) => ({ ...f, fuera_de_horario_mensaje: e.target.value }))}
-              rows={2}
-              className="mt-1"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Triggers de escalación */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Zap className="w-4 h-4" /> Palabras que escalan a humano
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Si el lead menciona alguna de estas palabras, la conversación se escala automáticamente a un agente humano.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {form.escalar_triggers.map((trigger, i) => (
-              <span key={i} className="flex items-center gap-1 bg-orange-50 text-orange-700 text-xs px-2 py-1 rounded-full border border-orange-200">
-                {trigger}
-                <button onClick={() => eliminarTrigger(i)}>
-                  <X className="w-3 h-3 hover:text-red-500" />
-                </button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <Input
-              placeholder="Agregar palabra de escalación..."
-              value={nuevoTrigger}
-              onChange={(e) => setNuevoTrigger(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && agregarTrigger()}
-              className="flex-1"
-            />
-            <Button size="sm" variant="outline" onClick={agregarTrigger}>
-              <Plus className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Asesores / Brokers */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Users className="w-4 h-4" /> Asesores / Brokers
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Cuando un lead quede calificado, Valentina le envía un WhatsApp al asesor asignado según el tipo de inmueble y el barrio.
-          </p>
-
-          {/* Lista de brokers */}
-          {(form.brokers || []).length === 0 && (
-            <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-lg">
-              No hay asesores configurados — todos los leads calificados irán al número de fallback.
-            </p>
-          )}
-          <div className="space-y-2">
-            {(form.brokers || []).map((broker, i) => (
-              <div key={i} className="flex items-start gap-2 p-3 bg-gray-50 rounded-lg border">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-gray-900">{broker.nombre}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${TIPO_COLOR[broker.tipo_inmueble] || TIPO_COLOR.ambos}`}>
-                      {TIPO_LABEL[broker.tipo_inmueble] || broker.tipo_inmueble}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
-                    <Phone className="w-3 h-3" />
-                    <span>{broker.telefono}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="text-xs text-gray-500">Trato:</span>
-                    <select
-                      value={broker.genero || ''}
-                      onChange={(e) => setBrokerGenero(i, e.target.value)}
-                      className="h-6 text-xs border rounded px-1.5 bg-white text-gray-700"
-                    >
-                      <option value="">Sin definir (neutro)</option>
-                      <option value="F">Femenino (nuestra asesora)</option>
-                      <option value="M">Masculino (nuestro asesor)</option>
-                    </select>
-                    {!broker.genero && (
-                      <span className="text-[11px] text-amber-600">se dirá "especialista" hasta definirlo</span>
-                    )}
-                  </div>
-                  {broker.barrios?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {broker.barrios.map((b, j) => (
-                        <span key={j} className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded">
-                          {b}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button onClick={() => eliminarBroker(i)} className="text-gray-400 hover:text-red-500 mt-0.5">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-
-          {/* Formulario de nuevo broker */}
-          <div className="border rounded-lg p-3 space-y-2 bg-white">
-            <p className="text-xs font-medium text-gray-700">Agregar asesor</p>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">Nombre</Label>
-                <Input
-                  value={nuevoBroker.nombre}
-                  onChange={(e) => setNuevoBroker((b) => ({ ...b, nombre: e.target.value }))}
-                  placeholder="ej: Alejandro"
-                  className="mt-0.5 h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Teléfono (con código país)</Label>
-                <Input
-                  value={nuevoBroker.telefono}
-                  onChange={(e) => setNuevoBroker((b) => ({ ...b, telefono: e.target.value }))}
-                  placeholder="ej: 573105771576"
-                  className="mt-0.5 h-8 text-sm"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">Género <span className="text-gray-400">(para el trato correcto)</span></Label>
-                <select
-                  value={nuevoBroker.genero}
-                  onChange={(e) => setNuevoBroker((b) => ({ ...b, genero: e.target.value }))}
-                  className="mt-0.5 w-full h-8 text-sm border rounded-md px-2 bg-white"
-                >
-                  <option value="F">Femenino (nuestra asesora)</option>
-                  <option value="M">Masculino (nuestro asesor)</option>
-                  <option value="">Sin definir (neutro)</option>
-                </select>
-              </div>
-              <div>
-                <Label className="text-xs">Tipo de inmueble</Label>
-                <select
-                  value={nuevoBroker.tipo_inmueble}
-                  onChange={(e) => setNuevoBroker((b) => ({ ...b, tipo_inmueble: e.target.value }))}
-                  className="mt-0.5 w-full h-8 text-sm border rounded-md px-2 bg-white"
-                >
-                  <option value="ambos">Ambos (vivienda y comercial)</option>
-                  <option value="vivienda">Solo vivienda (apt, casa...)</option>
-                  <option value="comercial">Solo comercial (oficina, local...)</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs">Barrios asignados <span className="text-gray-400">(separados por coma, opcional)</span></Label>
-              <Input
-                value={nuevoBroker.barrios}
-                onChange={(e) => setNuevoBroker((b) => ({ ...b, barrios: e.target.value }))}
-                placeholder="ej: chico, cabrera, rosales"
-                className="mt-0.5 h-8 text-sm"
-              />
-            </div>
-            <Button size="sm" onClick={agregarBroker} className="gap-1">
-              <Plus className="w-3 h-3" /> Agregar asesor
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Secretos necesarios en Base44 */}
-      <Card className="border-amber-200 bg-amber-50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2 text-amber-800">
-            <AlertCircle className="w-4 h-4" /> Paso 1 — Agregar secretos en Base44
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-sm text-amber-700">Ve a <strong>Base44 → tu app → Settings → Secrets</strong> y agrega:</p>
-          {[
-            { key: 'ANTHROPIC_API_KEY', desc: 'Tu API key de Anthropic (console.anthropic.com → API Keys)', ok: true },
-            { key: 'WHATSAPP_API_TOKEN', desc: 'Token permanente de Meta (Meta Business Suite → Usuarios del sistema → token con permisos whatsapp_business_messaging)', ok: false },
-            { key: 'WHATSAPP_PHONE_NUMBER_ID', desc: 'ID del número en Meta Developer Console → WhatsApp → Configuración de API', ok: false },
-            { key: 'WHATSAPP_VERIFY_TOKEN', desc: 'Cualquier string secreto que defines tú (ej: inmogest_2026)', ok: false },
-          ].map(s => (
-            <div key={s.key} className="flex items-start gap-2 text-xs">
-              {s.ok
-                ? <CheckCircle className="w-3.5 h-3.5 text-green-600 mt-0.5 flex-shrink-0" />
-                : <span className="w-3.5 h-3.5 rounded-full border border-amber-500 mt-0.5 flex-shrink-0" />
-              }
-              <div>
-                <code className="font-bold">{s.key}</code>
-                <span className="text-amber-700 ml-1">— {s.desc}</span>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Webhook URL */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Link className="w-4 h-4" /> Paso 2 — Configurar Webhook en Meta
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-gray-600">
-            En <strong>Meta Developer Console → tu App → WhatsApp → Configuración → Webhooks</strong>, agrega:
-          </p>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">URL del Webhook</p>
-            <div className="flex items-center gap-2 p-3 bg-gray-900 rounded-lg">
-              <code className="text-green-400 text-sm flex-1 break-all">{webhookUrl}</code>
-              <Button size="sm" variant="ghost" className="text-gray-400 hover:text-white flex-shrink-0"
-                onClick={() => { navigator.clipboard.writeText(webhookUrl); toast({ title: 'URL copiada' }); }}>
-                Copiar
+            <div className="flex gap-2">
+              <Button variant="outline" size="icon" onClick={consultarDemo} disabled={cargandoDemo} aria-label="Revisar estado">
+                <RefreshCw className={`w-4 h-4 ${cargandoDemo ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button onClick={prepararDemo} disabled={cargandoDemo} className="gap-2">
+                {cargandoDemo ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+                Preparar demo
               </Button>
             </div>
           </div>
-          <div className="text-xs space-y-1 bg-gray-50 p-3 rounded-lg">
-            <p><strong>Verify token:</strong> el mismo valor que pusiste en <code>WHATSAPP_VERIFY_TOKEN</code></p>
-            <p><strong>Campos a suscribir:</strong> messages</p>
-            <p><strong>Suscripción de la app:</strong> WhatsApp Business Account</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {demoError && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>No se pudo completar</AlertTitle>
+              <AlertDescription>{demoError}</AlertDescription>
+            </Alert>
+          )}
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <EstadoDemo
+              titulo="Webhook Ventas"
+              valor={demo?.bot?.webhook_correcto ? 'Conectado' : 'Pendiente'}
+              ok={demo?.bot?.webhook_correcto}
+              icono={Bot}
+            />
+            <EstadoDemo
+              titulo="Inventario"
+              valor={demo?.agente?.inmuebles_disponibles == null ? 'Sin verificar' : `${demo.agente.inmuebles_disponibles} disponibles`}
+              ok={Number(demo?.agente?.inmuebles_disponibles) > 0}
+              icono={Database}
+            />
+            <EstadoDemo
+              titulo="Prompt Ventas"
+              valor={demo?.agente?.prompt_activo ? `Activo v${demo.agente.prompt_version || 1}` : 'Pendiente'}
+              ok={demo?.agente?.prompt_activo}
+              icono={ShieldCheck}
+            />
+            <EstadoDemo
+              titulo="Asesores"
+              valor={demo?.agente?.asesores_activos == null ? 'Sin verificar' : `${demo.agente.asesores_activos} activos`}
+              ok={Number(demo?.agente?.asesores_activos) > 0}
+              icono={UserRound}
+            />
           </div>
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-            <strong>Tip:</strong> Para probar sin número real, Meta ofrece un número de prueba gratuito en el mismo panel de WhatsApp. Ideal para verificar que el agente funciona antes de conectar el número de producción.
+
+          <div>
+            <p className="text-sm font-medium mb-2">Secrets mínimos del demo</p>
+            <div className="flex flex-wrap gap-2">
+              {SECRETOS_TELEGRAM.map((secret) => {
+                const ok = demo?.secretos?.[secret];
+                return (
+                  <code key={secret} className="rounded-md bg-muted px-2 py-1 text-xs flex items-center gap-1.5">
+                    {ok ? <CheckCircle2 className="w-3 h-3 text-success" /> : <XCircle className="w-3 h-3 text-destructive" />}
+                    {secret}
+                  </code>
+                );
+              })}
+            </div>
+            {demo?.faltantes?.length > 0 && (
+              <p className="text-xs text-destructive mt-2">
+                En Base44 abre Dashboard → Secrets → Add Secret y agrega: {demo.faltantes.join(', ')}.
+              </p>
+            )}
+          </div>
+
+          {demo?.bot?.username && (
+            <div className="rounded-xl bg-muted/60 p-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-sm font-medium">Bot del demo: @{demo.bot.username}</p>
+                <p className="text-xs text-muted-foreground">
+                  Abre el bot y envía <code>/reiniciar</code> antes de cada ensayo para empezar limpio.
+                </p>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <a href={`https://t.me/${demo.bot.username}`} target="_blank" rel="noreferrer">Abrir Telegram</a>
+              </Button>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Este botón activa la IA, fija demora en 0, siembra solo Identidad + Ventas y registra el webhook{' '}
+            <code>{webhookVentasUrl}</code>. No conecta WhatsApp.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Settings className="w-4 h-4" /> Respuesta automática
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-muted/60 p-4">
+            <div>
+              <p className="font-medium">Motor multiagente activo</p>
+              <p className="text-sm text-muted-foreground">
+                Al apagarlo se guardan los mensajes entrantes, pero ningún agente responde.
+              </p>
+            </div>
+            <Switch
+              checked={form.activo}
+              onCheckedChange={(activo) => setForm((actual) => ({ ...actual, activo }))}
+            />
+          </div>
+
+          <div className="max-w-sm">
+            <Label htmlFor="demora">Demora de respuesta (minutos)</Label>
+            <Input
+              id="demora"
+              type="number"
+              min="0"
+              max="10"
+              value={form.demora_respuesta_min}
+              onChange={(e) => setForm((actual) => ({
+                ...actual,
+                demora_respuesta_min: Math.min(10, Math.max(0, Number(e.target.value) || 0)),
+              }))}
+              className="mt-1"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Usa 0 durante las pruebas por Telegram. Un valor mayor requiere el cron enviarPendientes.
+            </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Probar agente */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Play className="w-4 h-4" /> Probar el agente
-          </CardTitle>
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="text-base">Alertas internas</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-xs text-gray-500">
-            Simula cómo respondería el agente a un mensaje de prueba. Recuerda guardar los cambios primero.
-          </p>
-          <div className="flex gap-2">
+        <CardContent className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="telegram-chat">Chat ID de Telegram del equipo</Label>
             <Input
-              value={testMensaje}
-              onChange={(e) => setTestMensaje(e.target.value)}
-              placeholder="Escribe un mensaje de prueba..."
-              className="flex-1"
+              id="telegram-chat"
+              value={form.telegram_notif_chat}
+              onChange={(e) => setForm((actual) => ({ ...actual, telegram_notif_chat: e.target.value.trim() }))}
+              placeholder="Ej. -1001234567890"
+              className="mt-1"
             />
-            <Button onClick={probarAgente} disabled={testLoading} className="gap-2">
-              <Play className="w-4 h-4" />
-              {testLoading ? 'Procesando...' : 'Probar'}
-            </Button>
           </div>
-          {testRespuesta && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Bot className="w-4 h-4 text-violet-600" />
-                <span className="text-xs font-medium text-violet-700">Respuesta del agente {form.nombre_agente}:</span>
-              </div>
-              <p className="text-sm text-gray-900 whitespace-pre-wrap">{testRespuesta}</p>
-            </div>
-          )}
+          <div>
+            <Label htmlFor="numero-alertas">WhatsApp de respaldo</Label>
+            <Input
+              id="numero-alertas"
+              value={form.numero_notificaciones}
+              onChange={(e) => setForm((actual) => ({
+                ...actual,
+                numero_notificaciones: e.target.value.replace(/\D/g, ''),
+              }))}
+              placeholder="573001234567"
+              className="mt-1"
+            />
+          </div>
+          <p className="md:col-span-2 text-xs text-muted-foreground">
+            Telegram tiene prioridad. Estas direcciones reciben escalaciones; nunca se reutiliza el número del cliente.
+            La asignación comercial se configura en{' '}
+            <Link className="font-medium text-primary hover:underline" to="/equipo/asesores">Equipo &gt; Asesores</Link>.
+          </p>
         </CardContent>
       </Card>
+
+      <Card className="rounded-2xl">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ExternalLink className="w-4 h-4" /> Webhook único
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input value={webhookUrl} readOnly className="font-mono text-xs" />
+            <Button variant="outline" size="icon" onClick={copiarWebhook} aria-label="Copiar webhook">
+              <Copy className="w-4 h-4" />
+            </Button>
+          </div>
+          <div>
+            <p className="text-sm font-medium mb-2">Para conectar WhatsApp más adelante</p>
+            <div className="flex flex-wrap gap-2">
+              {['META_APP_SECRET', 'WHATSAPP_VERIFY_TOKEN'].map((secret) => (
+                <code key={secret} className="rounded-md bg-muted px-2 py-1 text-xs">{secret}</code>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Primero registra y prueba Telegram. La conexión de WhatsApp queda para el cutover final.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-2xl border-dashed">
+        <CardContent className="p-5 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <BookOpen className="w-5 h-5 text-primary mt-0.5" />
+            <div>
+              <p className="font-medium">Las reglas de negocio no se configuran aquí</p>
+              <p className="text-sm text-muted-foreground">
+                Comisión, mora, reparaciones, tarifario de avalúos y F117 deben cargarse como conocimiento trazable.
+              </p>
+            </div>
+          </div>
+          <Button asChild variant="outline">
+            <Link to="/agente/conocimiento">Abrir RAG</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function EstadoDemo({ titulo, valor, ok, icono: Icon }) {
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Icon className="w-4 h-4 text-muted-foreground" />
+        {ok ? <CheckCircle2 className="w-4 h-4 text-success" /> : <XCircle className="w-4 h-4 text-muted-foreground" />}
+      </div>
+      <p className="text-xs text-muted-foreground mt-2">{titulo}</p>
+      <p className="text-sm font-medium truncate">{valor}</p>
     </div>
   );
 }

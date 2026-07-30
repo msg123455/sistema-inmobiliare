@@ -16,7 +16,10 @@ async function descargarMedia(fileId: string, tgToken: string) {
   return { buf: await rBin.arrayBuffer(), mimeType };
 }
 
-export async function normalizar(body: any, env: { tgToken: string; openaiKey: string }): Promise<Entrada | null> {
+export async function normalizar(
+  body: any,
+  env: { tgToken: string; openaiKey: string; tgBotKey?: string },
+): Promise<Entrada | null> {
   const m = body?.message || body?.edited_message;
   const chatId = m?.chat?.id;
   if (!chatId) return null;
@@ -26,7 +29,9 @@ export async function normalizar(body: any, env: { tgToken: string; openaiKey: s
   const base = {
     canal: 'telegram' as const,
     tel: String(chatId),
-    msgId: String(m.message_id || ''),
+    // message_id solo es unico dentro de cada bot/chat. El prefijo evita que
+    // dos bots dedicados conserven el mismo numero y el dedup descarte uno.
+    msgId: `${env.tgBotKey || 'compartido'}:${String(m.message_id || '')}`,
     botonId: '',
     adReferral: { adId: '', adTitulo: '', adCuerpo: '' },
     destino: String(chatId),

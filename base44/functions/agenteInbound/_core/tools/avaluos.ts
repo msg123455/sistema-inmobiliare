@@ -1,9 +1,5 @@
 import { definirTool, str, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
-// Tarifas base. Viven en AppConfig para que no haya que desplegar para cambiar
-// un precio; estos son el respaldo si la fila no existe.
-const TARIFA_FALLBACK = { base: 450_000, por_m2: 900, tope: 2_500_000 };
-
 export const registrarSolicitudAvaluo: Tool = {
   ...definirTool(
     'registrar_solicitud_avaluo',
@@ -46,7 +42,7 @@ export const registrarSolicitudAvaluo: Tool = {
       tipo_no_estandar: noEstandar,
       instruccion: noEstandar
         ? 'Este tipo de inmueble no tiene tarifa estandar. NO des un precio: escala con escalar_a_humano para que el perito cotice.'
-        : 'Confirma que quedo radicado. Si pregunta el valor, usa cotizar_avaluo.',
+        : 'Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor, escala para cotizacion.',
     };
   },
 };
@@ -54,42 +50,17 @@ export const registrarSolicitudAvaluo: Tool = {
 export const cotizarAvaluo: Tool = {
   ...definirTool(
     'cotizar_avaluo',
-    'Calcula cuanto cuesta el avaluo. Solo aplica a apartamento, casa, local y oficina. Para cualquier otro tipo NO cotices: escala.',
+    'Comprueba si existe un tarifario aprobado. Por ahora no hay uno cargado y debes escalar para cotizacion.',
     {
       tipo_inmueble: enumStr('Tipo', ['Apartamento', 'Casa', 'Local', 'Oficina']),
       area_m2: numOpc('Area en metros cuadrados. null si no la sabe.'),
     },
     { retorna: true },
   ),
-  ejecutar: async (input, c: CtxTool) => {
-    const cfg = (await c.db.uno('AppConfig', { clave: 'tarifas_avaluo' }))?.valor_json;
-    let t = TARIFA_FALLBACK;
-    try { if (cfg) t = { ...TARIFA_FALLBACK, ...JSON.parse(cfg) }; } catch { /* usa el fallback */ }
-
-    const area = Number(input.area_m2) || 0;
-    if (!area) {
-      return {
-        requiere_area: true,
-        instruccion: 'Sin el area no hay cifra. Preguntale cuantos metros cuadrados tiene, sin dar todavia ningun valor.',
-      };
-    }
-    const valor = Math.min(t.tope, t.base + area * t.por_m2);
-
-    // Se guarda la cifra que se le dijo al cliente. Si solo se devuelve al
-    // modelo, el cliente cuelga con un precio que no esta en ningun registro y
-    // el perito no tiene contra que contrastar cuando llame.
-    const avaluoId = String(c.ctxAgente.avaluo_id || '');
-    if (avaluoId) {
-      await c.db.actualizar('Avaluo', avaluoId, {
-        valor_servicio: valor,
-        area_m2: area,
-        tipo_inmueble: String(input.tipo_inmueble),
-      });
-    }
-
+  ejecutar: async (_input, _c: CtxTool) => {
     return {
-      valor_servicio: valor,
-      instruccion: `Di la cifra redondeada ($${valor.toLocaleString('es-CO')}) en una frase, aclarando que es el valor del servicio de avaluo y que incluye la visita y el informe. Es un estimado sujeto a confirmacion.`,
+      error: 'tarifario_no_aprobado',
+      instruccion: 'No des ninguna cifra ni formula. Escala con escalar_a_humano para que el equipo de avaluos cotice.',
     };
   },
 };

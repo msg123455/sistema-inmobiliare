@@ -1,108 +1,57 @@
-// Diagnóstico de credenciales — solo para admin, no dejar en producción.
-// GET /api/functions/checkCredenciales?token=CHECK2026
+// Diagnostico seguro de configuracion. Nunca devuelve fragmentos de secretos.
+// GET/POST /api/functions/checkCredenciales?token=<CRON_TOKEN>
+
+const OBLIGATORIAS = [
+  'BASE44_APP_URL',
+  'BASE44_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+  'CRON_TOKEN',
+  'TELEGRAM_BOT_TOKEN',
+  'TELEGRAM_WEBHOOK_SECRET',
+];
+
+const WHATSAPP = [
+  'WHATSAPP_API_TOKEN',
+  'WHATSAPP_PHONE_NUMBER_ID',
+  'WHATSAPP_VERIFY_TOKEN',
+  'META_APP_SECRET',
+];
+
+const json = (data: unknown, status = 200) => new Response(JSON.stringify(data, null, 2), {
+  status,
+  headers: { 'Content-Type': 'application/json' },
+});
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
-  if (url.searchParams.get('token') !== 'CHECK2026') {
-    return new Response('Unauthorized', { status: 401 });
-  }
+  let body: any = {};
+  try { body = await req.json(); } catch { /* GET o body vacio */ }
 
-  const vars = [
-    'BASE44_API_KEY',
-    'ANTHROPIC_API_KEY',
-    'OPENAI_API_KEY',
-    'WHATSAPP_API_TOKEN',
-    'WHATSAPP_PHONE_NUMBER_ID',
-    'WHATSAPP_VERIFY_TOKEN',
-    'TELEGRAM_BOT_TOKEN',
-    'WASI_API_KEY',
-    'WASI_USER_ID',
-  ];
+  const esperado = Deno.env.get('CRON_TOKEN') || '';
+  const recibido = url.searchParams.get('token') || body?.token || body?.args?.token || '';
+  if (!esperado || recibido !== esperado) return json({ error: 'Unauthorized' }, 401);
 
-  const resultado: Record<string, string> = {};
+  const estado = (nombres: string[]) => Object.fromEntries(
+    nombres.map((nombre) => [nombre, Boolean(Deno.env.get(nombre))]),
+  );
+  const requeridas = estado(OBLIGATORIAS);
+  const whatsapp = estado(WHATSAPP);
 
-  for (const v of vars) {
-    const val = Deno.env.get(v);
-    if (!val) {
-      resultado[v] = '❌ NO ENCONTRADA';
-    } else {
-      // Muestra solo primeros y últimos 4 caracteres por seguridad
-      const masked = val.length > 8
-        ? `✅ ${val.slice(0, 4)}...${val.slice(-4)} (${val.length} chars)`
-        : `✅ ${'*'.repeat(val.length)} (${val.length} chars)`;
-      resultado[v] = masked;
-    }
-  }
-
-  // Test rápido de BASE44_API_KEY
-  let base44Test = 'no probado';
-  const base44Key = Deno.env.get('BASE44_API_KEY');
-  if (base44Key) {
+  let base44Api = false;
+  const base = (Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
+  const key = Deno.env.get('BASE44_API_KEY') || '';
+  if (base && key) {
     try {
-      const r = await fetch(`${Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app'}/api/entities/ConfigAgente?limit=1`, {
-        headers: { 'api_key': base44Key }
-      });
-      base44Test = r.ok ? `✅ OK (${r.status})` : `❌ Error ${r.status}`;
-    } catch (e) {
-      base44Test = `❌ ${e.message}`;
-    }
+      const r = await fetch(`${base}/api/entities/ConfigAgente?limit=1`, { headers: { api_key: key } });
+      base44Api = r.ok;
+    } catch { /* se reporta false */ }
   }
 
-  // Test rápido de ANTHROPIC_API_KEY
-  let anthropicTest = 'no probado';
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (anthropicKey) {
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'hola' }] })
-      });
-      anthropicTest = r.ok ? `✅ OK (${r.status})` : `❌ Error ${r.status}: ${(await r.text()).slice(0, 100)}`;
-    } catch (e) {
-      anthropicTest = `❌ ${e.message}`;
-    }
-  }
-
-  // Test rápido de OPENAI_API_KEY (para Whisper / notas de voz)
-  let openaiTest = 'no probado';
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
-  if (openaiKey) {
-    try {
-      const r = await fetch('https://api.openai.com/v1/models?limit=1', {
-        headers: { Authorization: `Bearer ${openaiKey}` }
-      });
-      openaiTest = r.ok ? `✅ OK (${r.status})` : `❌ Error ${r.status}: ${(await r.text()).slice(0, 100)}`;
-    } catch (e) {
-      openaiTest = `❌ ${e.message}`;
-    }
-  }
-
-  // Test rápido de WHATSAPP token
-  let waTest = 'no probado';
-  const waToken = Deno.env.get('WHATSAPP_API_TOKEN');
-  const waPhoneId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID');
-  if (waToken && waPhoneId) {
-    try {
-      const r = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}`, {
-        headers: { Authorization: `Bearer ${waToken}` }
-      });
-      waTest = r.ok ? `✅ OK (${r.status})` : `❌ Error ${r.status}: ${(await r.text()).slice(0, 100)}`;
-    } catch (e) {
-      waTest = `❌ ${e.message}`;
-    }
-  }
-
-  return new Response(JSON.stringify({
-    variables: resultado,
-    tests: {
-      base44_api: base44Test,
-      anthropic:  anthropicTest,
-      openai:     openaiTest,
-      whatsapp:   waTest,
-    }
-  }, null, 2), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
+  return json({
+    ok: Object.values(requeridas).every(Boolean) && base44Api,
+    configuradas: requeridas,
+    whatsapp_cutover: whatsapp,
+    conectividad: { base44_api: base44Api },
   });
 });

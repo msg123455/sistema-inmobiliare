@@ -8,6 +8,7 @@
 // tiene 15s y no puede gastarlos durmiendo.
 
 import { crearDb } from './_core/db.ts';
+import { agentesAutomaticosActivos } from './_core/contexto.ts';
 import * as wa from './_core/canales/whatsapp.ts';
 import * as tg from './_core/canales/telegram.ts';
 import { tokenDeAgente } from './_core/canales/bots.ts';
@@ -25,7 +26,9 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* GET desde el cron */ }
 
   const esperado = Deno.env.get('CRON_TOKEN') || '';
-  const dado = url.searchParams.get('token') || body.token || '';
+  // Base44 entrega function_args dentro de `args` en algunas ejecuciones del
+  // scheduler; mantener tambien query/body directo permite invocacion manual.
+  const dado = url.searchParams.get('token') || body?.token || body?.args?.token || '';
   if (!esperado || dado !== esperado) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
@@ -36,6 +39,16 @@ Deno.serve(async (req) => {
     tgToken:   Deno.env.get('TELEGRAM_BOT_TOKEN') || '',
   };
   const db = crearDb(Deno.env.get('BASE44_API_KEY') || '');
+
+  // El switch global tambien detiene mensajes que ya estaban en la cola. No se
+  // marcan como fallidos: quedan pendientes para cuando el equipo reactive la IA.
+  const config = await db.uno('ConfigAgente', { clave: 'general' });
+  if (!agentesAutomaticosActivos(config)) {
+    return new Response(JSON.stringify({ ok: true, skip: 'IA global inactiva' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   const t0 = Date.now();
   const ahora = Date.now();

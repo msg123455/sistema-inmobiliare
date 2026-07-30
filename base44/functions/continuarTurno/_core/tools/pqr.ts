@@ -1,24 +1,5 @@
 import { definirTool, str, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
-// En Colombia la PQR tiene plazos legales de respuesta. La fecha se calcula al
-// crear y un cron escala antes de que venza: no puede depender de que alguien
-// se acuerde.
-const DIAS_HABILES: Record<string, number> = {
-  Peticion: 15, Queja: 15, Reclamo: 15, Sugerencia: 15, Felicitacion: 30,
-};
-
-function sumarHabiles(dias: number): string {
-  const d = new Date();
-  let restantes = dias;
-  while (restantes > 0) {
-    d.setDate(d.getDate() + 1);
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) restantes--;
-  }
-  d.setHours(23, 59, 59, 0);
-  return d.toISOString();
-}
-
 // Palabra legal: dispara prioridad y notificacion inmediata al equipo.
 const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
 
@@ -51,7 +32,6 @@ export const registrarPqr: Tool = {
       descripcion: String(input.descripcion || '').slice(0, 4000),
       estado: 'Radicada',
       prioridad: esLegal ? 'Urgente' : tipo === 'Reclamo' ? 'Alta' : 'Media',
-      fecha_limite_legal: sumarHabiles(DIAS_HABILES[tipo] ?? 15),
       fecha_radicacion: new Date().toISOString(),
     });
     if (!pqr) return { error: 'no_se_pudo_registrar' };
@@ -62,8 +42,7 @@ export const registrarPqr: Tool = {
     c.efectos.notificar.push(
       `${esLegal ? 'PQR CON MENCION LEGAL — REVISAR YA' : `PQR NUEVA (${tipo})`}\n` +
       `Radicado: ${radicado}\n${String(input.nombre)} — wa.me/${c.entrada.tel}\n` +
-      `Asunto: ${String(input.asunto)}\n\n${String(input.descripcion).slice(0, 500)}\n\n` +
-      `Vence: ${new Date(sumarHabiles(DIAS_HABILES[tipo] ?? 15)).toLocaleDateString('es-CO')}`,
+      `Asunto: ${String(input.asunto)}\n\n${String(input.descripcion).slice(0, 500)}`,
     );
 
     return {
@@ -72,7 +51,7 @@ export const registrarPqr: Tool = {
       mencion_legal: esLegal,
       instruccion: esLegal
         ? `Dale el radicado ${radicado}, dile que ya quedo en manos del equipo y llama tambien a escalar_a_humano con prioridad urgente. NO opines sobre lo legal ni asumas responsabilidad.`
-        : `Dale el radicado ${radicado} y dile que le responden dentro de los terminos de ley. NO prometas una fecha exacta ni le des la razon anticipadamente.`,
+        : `Dale el radicado ${radicado}. El plazo aplicable aun no esta configurado: NO prometas una fecha ni menciones un termino legal; indica que el equipo confirmara el tramite.`,
     };
   },
 };

@@ -2,10 +2,6 @@ import { definirTool, str, strOpc, enumStr, type Tool, type CtxTool } from '../p
 import { exigirVerificado } from './comunes.ts';
 import { verificarIdentidad } from './cartera.ts';
 
-// SLA en horas por urgencia. Emergencia = respuesta inmediata y escalamiento
-// aunque sea de madrugada: gas, incendio o inundacion no esperan al horario.
-const SLA: Record<string, number> = { Emergencia: 2, Alta: 24, Media: 72, Baja: 168 };
-
 export const registrarReparacion: Tool = {
   ...definirTool(
     'registrar_reparacion',
@@ -31,8 +27,6 @@ export const registrarReparacion: Tool = {
       ubicacion: String(input.ubicacion || ''),
       urgencia,
       estado: 'Reportada',
-      sla_horas: SLA[urgencia] ?? 72,
-      fecha_limite: new Date(Date.now() + (SLA[urgencia] ?? 72) * 3600_000).toISOString(),
       origen: `agente:${c.entrada.canal}`,
       fotos: [],
       fecha_reporte: new Date().toISOString(),
@@ -44,16 +38,16 @@ export const registrarReparacion: Tool = {
     if (urgencia === 'Emergencia') {
       c.efectos.notificar.push(
         `EMERGENCIA — reparacion\n${String(input.categoria)}: ${String(input.descripcion).slice(0, 300)}\n` +
-        `Telefono: ${c.entrada.tel}\nContrato: ${c.estado.identidad.contrato_id || 'sin contrato'}\nSLA: 2 horas`,
+        `Telefono: ${c.entrada.tel}\nContrato: ${c.estado.identidad.contrato_id || 'sin contrato'}`,
       );
     }
 
     return {
       ok: true,
       radicado: rep.numero_radicado || rep.id,
-      sla_horas: SLA[urgencia] ?? 72,
+      sla_horas: null,
       instruccion: urgencia === 'Emergencia'
-        ? 'Confirma el radicado y dile que ya avisaste al equipo por ser una emergencia. Llama tambien a escalar_a_humano.'
+        ? 'Confirma el radicado y dile que ya avisaste al equipo por ser una emergencia. Llama tambien a escalar_a_humano. No prometas un tiempo de respuesta.'
         : 'Confirma el radicado en una frase. Puedes pedirle una foto del dano si ayuda al tecnico. No prometas fecha ni costo.',
     };
   },

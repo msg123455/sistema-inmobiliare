@@ -19,6 +19,12 @@
         "frases",
         "conversaciones",
         "antideteccion",
+        "base",
+        "voz",
+        "politicas",
+        "tarifas",
+        "documentos",
+        "procesos",
         "mercado",
         "general"
       ]
@@ -35,6 +41,10 @@
       "type": "number",
       "description": "Prioridad de inyecci\u00f3n 1-10 (10 = m\u00e1s importante)",
       "default": 5
+    },
+    "origen": {
+      "type": "string",
+      "description": "Quien administra el chunk, por ejemplo seedBaseAgentes:v2 o negocio:manual"
     },
     "activo": {
       "type": "boolean",

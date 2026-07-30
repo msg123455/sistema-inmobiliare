@@ -13,7 +13,7 @@
     },
     "valor_json": {
       "type": "string",
-      "description": "Valor serializado de la configuración. Ej: clave 'tarifas_avaluo' con {base, por_m2, tope}. Saca los numeros de negocio del codigo."
+      "description": "Valor serializado de una configuración aprobada. No usar para tarifas hasta definir su estructura real."
     }
   },
   "required": [

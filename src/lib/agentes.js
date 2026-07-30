@@ -1,10 +1,10 @@
 import {
   Headphones, TrendingUp, Building2, Wallet, Wrench, Ruler,
-  MessageSquareWarning, ClipboardCheck, Star,
+  MessageSquareWarning, ClipboardCheck,
 } from 'lucide-react';
 
 /**
- * Catálogo de los nueve agentes.
+ * Catálogo de los ocho agentes activos.
  *
  * Vive en código y no en datos a propósito: es la lista de agentes que el
  * backend sabe enrutar, no una preferencia editable. Los prompts sí van en
@@ -21,10 +21,9 @@ export const AGENTES = [
   { clave: 'consignacion',  nombre: 'Consignación',  icono: Building2,            resumen: 'Capta inmuebles para venta o administración.' },
   { clave: 'cartera',       nombre: 'Cartera',       icono: Wallet,               resumen: 'Estado de cuenta y pagos. Exige verificación.' },
   { clave: 'mantenimiento', nombre: 'Mantenimiento', icono: Wrench,               resumen: 'Reparaciones y emergencias.' },
-  { clave: 'avaluos',       nombre: 'Avalúos',       icono: Ruler,                resumen: 'Cotiza y agenda avalúos.' },
-  { clave: 'pqr',           nombre: 'PQR',           icono: MessageSquareWarning, resumen: 'Radica peticiones y reclamos. Plazo legal.' },
+  { clave: 'avaluos',       nombre: 'Avalúos',       icono: Ruler,                resumen: 'Radica solicitudes y coordina avalúos.' },
+  { clave: 'pqr',           nombre: 'PQR',           icono: MessageSquareWarning, resumen: 'Radica peticiones y reclamos; escala menciones legales.' },
   { clave: 'matricula',     nombre: 'Matrícula',     icono: ClipboardCheck,       resumen: 'Intake del F117 y participantes.' },
-  { clave: 'encuestas',     nombre: 'Encuestas',     icono: Star,                 resumen: 'NPS y satisfacción.' },
 ];
 
 /** clave -> nombre legible. */

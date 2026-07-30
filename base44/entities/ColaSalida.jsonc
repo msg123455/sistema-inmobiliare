@@ -16,7 +16,7 @@
     },
     "agente": {
       "type": "string",
-      "description": "Agente que genero la respuesta. En Telegram decide por CUAL bot se entrega: cada agente puede tener el suyo. Vacio = bot compartido."
+      "description": "En Telegram identifica el bot que recibio el chat y debe responder. Vacio = bot compartido."
     },
     "globos": {
       "type": "array",

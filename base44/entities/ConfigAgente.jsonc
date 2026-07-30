@@ -8,8 +8,8 @@
     },
     "nombre_agente": {
       "type": "string",
-      "description": "Nombre del agente de IA",
-      "default": "Valentina"
+      "description": "Identidad publica unica de los agentes",
+      "default": "Asistente Inmobiliare"
     },
     "nombre_inmobiliaria": {
       "type": "string",
@@ -17,11 +17,11 @@
     },
     "instrucciones_sistema": {
       "type": "string",
-      "description": "System prompt con personalidad, flujo y reglas del agente"
+      "description": "Campo legacy. El motor multiagente usa AgentePrompt."
     },
     "conocimiento_base": {
       "type": "array",
-      "description": "FAQs, pol\u00edticas y datos que el agente debe conocer (RAG)",
+      "description": "Campo legacy. El motor multiagente usa ConocimientoRAG.",
       "default": [],
       "items": {
         "type": "string"
@@ -65,7 +65,7 @@
     },
     "aprendizajes": {
       "type": "string",
-      "description": "Bloque de reglas aprendidas y APROBADAS que se inyectan al prompt de Valentina (Fase B autoeducaci\u00f3n)"
+      "description": "Bloque de reglas aprendidas y APROBADAS que se inyectan a los agentes"
     },
     "numero_notificaciones": {
       "type": "string",

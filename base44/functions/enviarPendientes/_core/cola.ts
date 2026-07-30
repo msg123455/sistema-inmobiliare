@@ -1,4 +1,5 @@
-// Encolado de salida. El webhook NUNCA entrega inline.
+// Encolado de salida. El webhook intenta entrega inline solo cuando la demora
+// es cero; si falla, el worker procesa la fila pendiente.
 //
 // Antes la funcion dormia hasta 5s dentro del request para simular tipeo, con
 // un presupuesto total de 15s. Ahora escribe en ColaSalida y retorna; la

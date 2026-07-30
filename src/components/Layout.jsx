@@ -64,10 +64,8 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Bandejas por agente', path: '/inbox' },
       { label: 'Agentes', path: '/agente/agentes' },
+      { label: 'Conocimiento RAG', path: '/agente/conocimiento' },
       { label: 'Configurar IA', path: '/agente/configuracion' },
-      { label: 'Autoeducación', path: '/agente/autoeducacion' },
-      { label: 'Aprendizajes', path: '/agente/aprendizajes' },
-      { label: 'Config Evaluador', path: '/agente/config-evaluador' },
       { label: 'Analítica Leads', path: '/analytics/leads' },
     ],
   },

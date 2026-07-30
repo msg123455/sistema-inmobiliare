@@ -7,8 +7,8 @@
 //   POST /api/functions/migrarAsesores?token=<CRON_TOKEN>
 //
 // Idempotente: si ya existe un Asesor con el mismo telefono, no lo duplica.
-// NO borra brokers[] — ConfigAgente.jsx todavia lo edita. Eso se retira cuando
-// exista la pantalla de Asesores.
+// NO borra brokers[]: queda como respaldo historico. La pantalla operativa es
+// Equipo > Asesores y el runtime solo consulta la entidad Asesor.
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -16,7 +16,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* GET */ }
 
   const esperado = Deno.env.get('CRON_TOKEN') || '';
-  if (!esperado || (url.searchParams.get('token') || body.token || '') !== esperado) {
+  if (!esperado || (url.searchParams.get('token') || body?.token || body?.args?.token || '') !== esperado) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 

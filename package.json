@@ -8,6 +8,7 @@
     "sync:core": "node scripts/sync-core.mjs",
     "check:core": "node scripts/sync-core.mjs --check",
     "check:funciones": "tsc -p tsconfig.functions.json",
+    "test:agentes": "node scripts/test-agent-core.mjs",
     "build": "node scripts/sync-core.mjs --check && tsc -p tsconfig.functions.json && vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",

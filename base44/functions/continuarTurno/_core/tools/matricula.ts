@@ -1,5 +1,5 @@
-// Matricula de contrato — el reemplazo del formulario F117.
-// El intake es por WhatsApp; los documentos van al portal (§D.3).
+// Matricula de contrato — intake de datos para reemplazar el formulario F117.
+// La lista documental y su canal seguro siguen pendientes de definicion.
 
 import { definirTool, str, strOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
@@ -109,15 +109,6 @@ export const finalizarMatricula: Tool = {
       estado: 'Pendiente_documentos',
       fecha_cierre_captura: new Date().toISOString(),
     });
-    await c.db.crear('Tarea', {
-      titulo: `Estudio de arriendo — solicitud ${numero}`,
-      descripcion: `Solicitud ${numero}\nTelefono: ${c.entrada.tel}\nParticipantes: ${(c.ctxAgente.participantes as any[] || []).length}`,
-      fecha_limite: new Date(Date.now() + 2 * 864e5).toISOString().split('T')[0],
-      prioridad: 'Alta',
-      completada: false,
-      origen_agente: 'matricula',
-    });
-
     c.efectos.notificar.push(
       `MATRICULA LISTA PARA ESTUDIO\nSolicitud ${numero}\n` +
       `${String(c.estado.compartido.nombre || '')} — wa.me/${c.entrada.tel}\n` +
@@ -126,7 +117,7 @@ export const finalizarMatricula: Tool = {
 
     return {
       ok: true,
-      instruccion: 'Dile que ya quedo registrada y que ahora tiene que subir los documentos. Manda el link con enviar_link_portal.',
+      instruccion: 'Dile que la solicitud quedo registrada y que el equipo confirmara la lista documental y el canal seguro. No enumeres documentos ni prometas un plazo.',
     };
   },
 };
@@ -136,36 +127,16 @@ export const finalizarMatricula: Tool = {
 export const enviarLinkDocumentos: Tool = {
   ...definirTool(
     'enviar_link_portal',
-    'Manda el link seguro donde el cliente sube los documentos del estudio (cedula, certificado laboral, extractos). Vence en 15 minutos.',
+    'Comprueba si ya existe el canal seguro para documentos de matricula. Por ahora esta pendiente y debes escalar.',
     {},
     { retorna: true },
   ),
-  ejecutar: async (_input, c: CtxTool) => {
-    const solId = String(c.ctxAgente.solicitud_id || '');
-    if (!solId) return { ok: false, error: 'sin_solicitud' };
-
-    // Sesion acotada a esta solicitud, no al patrimonio del cliente.
-    const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-    const hash = Array.from(new Uint8Array(
-      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)),
-    )).map((b) => b.toString(16).padStart(2, '0')).join('');
-
-    const ok = await c.db.crear('SesionPortal', {
-      token_hash: hash,
-      tipo: 'matricula-documentos',
-      sujeto_id: solId,
-      sujeto_tipo: 'solicitud_matricula',
-      telefono: c.entrada.tel.replace(/\D/g, ''),
-      expira: new Date(Date.now() + 15 * 60_000).toISOString(),
-      usado: false,
-      creada: new Date().toISOString(),
-    });
-    if (!ok) return { error: 'no_se_pudo_generar' };
-
-    const app = (Deno.env.get('PORTAL_URL') || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
-    c.salida.globos.push('Aqui subes los documentos del estudio. El enlace es personal y vence en 15 minutos:');
-    c.salida.globos.push(`${app}/portal/entrar?t=${token}`);
-    return { ok: true, nota: 'El link ya se envio. No lo repitas en responder.' };
+  ejecutar: async (_input, _c: CtxTool) => {
+    return {
+      ok: false,
+      error: 'portal_documentos_no_disponible',
+      instruccion: 'No envies ningun enlace. Escala para que el equipo confirme la lista documental y el canal seguro.',
+    };
   },
 };
 

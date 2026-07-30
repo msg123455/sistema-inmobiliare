@@ -37,7 +37,19 @@ export async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: s
   return elegido;
 }
 
-const fmtM = (n: number) => n >= 1e9 ? `$${(n / 1e9).toFixed(1).replace('.0', '')} mil millones` : `$${Math.round(n / 1e6)} millones`;
+// El demo tiene que decir el valor real. Redondear $2.500.000 a "$3 millones"
+// cambia materialmente el canon y erosiona la confianza en el inventario.
+export const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', maximumFractionDigits: 0,
+}).format(Math.round(n)).replace(/\s+/g, '');
+
+export const linkFicha = (p: any): string => String(
+  p?.link_wasi
+  || p?.portales?.metrocuadrado
+  || p?.portales?.fincaraiz
+  || p?.portales?.mercadolibre
+  || '',
+).trim();
 
 export const buscarInmuebles: Tool = {
   ...definirTool(
@@ -63,7 +75,23 @@ export const buscarInmuebles: Tool = {
     const puntuados = props
       .filter((p) => {
         const op = String(p.operacion || '');
-        return op === 'Venta_y_Arriendo' || (esArr ? op === 'Arriendo' : op === 'Venta');
+        if (!(op === 'Venta_y_Arriendo' || (esArr ? op === 'Arriendo' : op === 'Venta'))) return false;
+
+        const barrioPropiedad = String(p.barrio || '').toLowerCase();
+        const zonaPropiedad = [p.barrio, p.zona, p.ciudad]
+          .map((valor) => String(valor || '').toLowerCase())
+          .join(' ');
+        const coincideZona = zonaPropiedad.includes(barrio)
+          || Boolean(barrioPropiedad && barrio.includes(barrioPropiedad));
+        if (barrio && !coincideZona) {
+          return false;
+        }
+        if (tipo && !String(p.tipo || '').toLowerCase().includes(tipo)) return false;
+
+        const precio = esArr ? Number(p.canon_arriendo) || 0 : Number(p.precio_venta) || 0;
+        if (tope && (!precio || precio > tope)) return false;
+        if (habs && (!Number(p.habitaciones) || Number(p.habitaciones) < habs)) return false;
+        return true;
       })
       .map((p) => {
         let s = 0;
@@ -91,10 +119,10 @@ export const buscarInmuebles: Tool = {
         habitaciones: p.habitaciones ?? null,
         banos: p.banos ?? null,
         precio: esArr
-          ? (p.canon_arriendo ? fmtM(p.canon_arriendo) + ' al mes' : null)
-          : (p.precio_venta ? fmtM(p.precio_venta) : null),
+          ? (p.canon_arriendo ? fmtCOP(p.canon_arriendo) + ' al mes' : null)
+          : (p.precio_venta ? fmtCOP(p.precio_venta) : null),
         administracion: p.valor_administracion ?? p.administracion ?? null,
-        ficha: p.link_wasi || null,
+        ficha: linkFicha(p) || null,
         video: p.link_instagram || null,
       })),
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
@@ -111,9 +139,10 @@ export const enviarFicha: Tool = {
   ejecutar: (input, c: CtxTool) => {
     const p = (c.ctxAgente.catalogo || []).find((x: any) => x.id === input.inmueble_id);
     if (!p) return { ok: false, error: 'inmueble no encontrado' };
-    if (!p.link_wasi) return { ok: false, error: 'sin_ficha', nota: 'Dile que el asesor se la comparte. No inventes el link.' };
+    const ficha = linkFicha(p);
+    if (!ficha) return { ok: false, error: 'sin_ficha', nota: 'Dile que el asesor se la comparte. No inventes el link.' };
     c.salida.globos.push('Te dejo la ficha con las fotos y todos los detalles:');
-    c.salida.globos.push(String(p.link_wasi));
+    c.salida.globos.push(ficha);
     return { ok: true };
   },
 };
@@ -123,6 +152,7 @@ export const calificarLead: Tool = {
     'calificar_lead',
     'Entrega el lead a un asesor humano. Llamala SOLO cuando tengas nombre, operacion (compra o arriendo) y una senal real del presupuesto del cliente. El precio de un inmueble NO es el presupuesto del cliente. El sistema escribe el mensaje de entrega: tu no lo redactas.',
     {
+      nombre: str('Nombre que dio el cliente. No lo inventes.'),
       operacion: enumStr('Que busca', ['venta', 'arriendo']),
       zona: strOpc('Barrio o zona de interes. null si no la dio.'),
       tipo_inmueble: strOpc('Tipo de inmueble. null si no lo dijo.'),
@@ -134,8 +164,9 @@ export const calificarLead: Tool = {
   ejecutar: async (input, c: CtxTool) => {
     const ctx = ctxDe(c.estado, 'ventas');
     if (ctx.calificado) return { ok: false, error: 'ya_calificado' };
-    const nombre = String(c.estado.compartido.nombre || '').trim();
+    const nombre = String(input.nombre || c.estado.compartido.nombre || '').trim();
     if (!nombre) return { ok: false, error: 'falta_nombre', nota: 'Pide el nombre antes de calificar.' };
+    c.estado.compartido.nombre = nombre;
 
     const asesor = await asignarAsesor(c.db, {
       zona: input.zona, tipo: input.tipo_inmueble, operacion: input.operacion,
@@ -173,10 +204,10 @@ export const calificarLead: Tool = {
     }
 
     c.efectos.notificar.push(
-      `LEAD CALIFICADO — contactar hoy\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
+      `LEAD CALIFICADO — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
       `${input.operacion === 'arriendo' ? 'Arriendo' : 'Compra'} de ${input.tipo_inmueble || 'inmueble'}\n` +
       `Zona: ${input.zona || 'sin definir'}\n` +
-      `Presupuesto: ${input.presupuesto ? fmtM(Number(input.presupuesto)) : 'flexible, confirmar en la llamada'}\n` +
+      `Presupuesto: ${input.presupuesto ? fmtCOP(Number(input.presupuesto)) : 'flexible, confirmar en la llamada'}\n` +
       `${input.observaciones ? `\nA tener en cuenta: ${input.observaciones}\n` : ''}` +
       `\nAsesor asignado: ${asesor?.nombre || 'SIN ASIGNAR'}${asesor?.telefono ? ` (${asesor.telefono})` : ''}`,
     );
@@ -187,8 +218,8 @@ export const calificarLead: Tool = {
       ok: true,
       asesor: asesor?.nombre || null,
       instruccion: rol
-        ? `Llama a responder con: confirmacion breve a ${primer}, que lo acompana ${rol}, y que le escribe hoy por aqui. No prometas horas exactas.`
-        : `Llama a responder con: confirmacion breve a ${primer} y que un asesor le escribe hoy por aqui.`,
+        ? `Llama a responder con: confirmacion breve a ${primer}, que lo acompana ${rol}, y que se pondra en contacto por este medio. No prometas fecha ni hora.`
+        : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
     };
   },
 };

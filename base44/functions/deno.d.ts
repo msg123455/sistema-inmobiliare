@@ -20,3 +20,7 @@ declare namespace Deno {
     handler: (req: Request) => Response | Promise<Response>,
   ): unknown;
 }
+
+declare module 'npm:@base44/sdk@0.8.25' {
+  export function createClientFromRequest(req: Request): any;
+}

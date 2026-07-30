@@ -66,6 +66,10 @@
       "type": "string",
       "description": "Asesor a cargo"
     },
+    "preferencia_avaluo": {
+      "type": "string",
+      "description": "Disponibilidad expresada por el propietario para coordinar el avaluo previo"
+    },
     "origen": {
       "type": "string",
       "description": "Por donde entro"

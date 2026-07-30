@@ -4,7 +4,7 @@
   "properties": {
     "agente": {
       "type": "string",
-      "description": "Id del agente: recepcion, ventas, consignacion, cartera, mantenimiento, avaluos, pqr, matricula, encuestas. Usa 'identidad_marca' para el bloque comun a todos."
+      "description": "Id del agente: recepcion, ventas, consignacion, cartera, mantenimiento, avaluos, pqr o matricula. Usa 'identidad_marca' para el bloque comun a todos."
     },
     "version": {
       "type": "number",

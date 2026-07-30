@@ -31,7 +31,7 @@ const POR_BOTON: Record<string, Agente> = {
 // al cliente al agente equivocado sin que nadie se entere.
 const FRASES: Array<[Agente, RegExp]> = [
   ['cartera',       /\b(estado de cuenta|codigo de barras|recibo de pago|pagar el arriendo|pagar mi arriendo|cuanto debo|mi saldo|en mora|paz y salvo|certificado de arrendamiento)\b/],
-  ['mantenimiento', /\b(se dano|se me dano|esta danado|hay una fuga|se inunda|no hay agua|no sirve el|arreglar|reparacion|gotera|humedad|se rompio)\b/],
+  ['mantenimiento', /\b(se dano|se me dano|esta danado|fuga|se inunda|no hay agua|no sirve el|arreglar|reparacion|gotera|humedad|se rompio)\b/],
   ['consignacion',  /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
   ['avaluos',       /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
   ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia)\b/],

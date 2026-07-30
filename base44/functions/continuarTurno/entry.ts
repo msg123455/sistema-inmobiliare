@@ -8,7 +8,7 @@
 
 import { crearDb } from './_core/db.ts';
 import { encolar, notificarEquipo } from './_core/cola.ts';
-import { armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
+import { agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { correrAgente } from './_core/llm.ts';
 import { cargarEstado, ctxDe, guardarEstado } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
@@ -23,7 +23,8 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* GET desde el cron */ }
 
   const esperado = Deno.env.get('CRON_TOKEN') || '';
-  if (!esperado || (url.searchParams.get('token') || body.token || '') !== esperado) {
+  const dado = url.searchParams.get('token') || body?.token || body?.args?.token || '';
+  if (!esperado || dado !== esperado) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
 
@@ -75,6 +76,11 @@ async function reanudar(db: ReturnType<typeof crearDb>, anthropicKey: string, fi
     cargarContexto(db, agente, estado, entrada),
   ]);
 
+  // Conserva el turno para reanudarlo cuando el equipo vuelva a encender la IA,
+  // pero no llama al modelo ni encola mensajes durante la pausa global.
+  if (!agentesAutomaticosActivos(base.config)) return { saltado: 'IA global inactiva' };
+  console.log(`RAG[${agente}] ${base.ragChars} chars: ${base.ragTitulos.join(' | ') || '(vacio)'}`);
+
   const scratch = ctxDe(estado, agente);
   Object.assign(scratch, ctxCargado);
 
@@ -102,9 +108,10 @@ async function reanudar(db: ReturnType<typeof crearDb>, anthropicKey: string, fi
     estado.historial.push({ role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString() });
     await encolar(db, {
       canal: entrada.canal, destino: entrada.destino, globos,
-      // Igual que en agenteInbound: la continuacion sale por el bot del agente
-      // que la escribio, no por el compartido.
-      agente: estado.agente_activo,
+      // La continuacion debe volver por el mismo bot que recibio el chat.
+      agente: entrada.canal === 'telegram'
+        ? String(estado.compartido.telegram_bot_agente || '')
+        : estado.agente_activo,
       demoraMin: 0, conversacionId: memoriaId || '',
     });
   }

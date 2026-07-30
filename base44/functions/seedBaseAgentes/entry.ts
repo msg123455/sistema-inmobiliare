@@ -1,9 +1,9 @@
 // Siembra la BASE DE CONOCIMIENTO comun de los agentes en ConocimientoRAG.
 //
-// Origen: la "base humana de Valentina" — la capa de comportamiento que hacia
-// que el agente viejo sonara a persona. Se separo de la capa de venta a
+// Origen: la capa de comportamiento conversacional del agente anterior. Se
+// separo de la capa de venta a
 // proposito: la voz, el anti-deteccion y el manejo de conversacion sirven para
-// los nueve agentes; la tactica de venta solo sirve para uno.
+// los ocho agentes; la tactica de venta solo sirve para uno.
 //
 // Cada chunk lleva `agentes`: contexto.ts filtra por ese campo, asi que cartera
 // no recibe el banco de frases de captacion ni el lifestyle de restaurantes.
@@ -26,7 +26,7 @@ type Chunk = {
 const CAPTACION = 'recepcion,ventas,consignacion,avaluos';
 // Los de servicio: ya hay una relacion y un contrato de por medio. Necesitan
 // exactitud, no encanto.
-const SERVICIO = 'cartera,mantenimiento,pqr,matricula,encuestas';
+const SERVICIO = 'cartera,mantenimiento,pqr,matricula';
 
 const CHUNKS: Chunk[] = [
   // ─── Para todos ────────────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
   try { body = await req.json(); } catch { /* GET o body vacio */ }
 
   const esperado = Deno.env.get('CRON_TOKEN') || '';
-  const recibido = url.searchParams.get('token') || body.token || '';
+  const recibido = url.searchParams.get('token') || body?.token || body?.args?.token || '';
   if (!esperado || recibido !== esperado) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
   }
@@ -269,9 +269,10 @@ Deno.serve(async (req) => {
   const hdrs = { api_key: Deno.env.get('BASE44_API_KEY') || '', 'Content-Type': 'application/json' };
   if (!base) return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500 });
 
-  const sobrescribir = (url.searchParams.get('sobrescribir') || body.sobrescribir) === 'true';
-  const diagnostico = (url.searchParams.get('diagnostico') || body.diagnostico) === 'true';
-  const purgar = (url.searchParams.get('purgar') || body.purgar) === 'true';
+  const esFlag = (v: unknown) => v === true || v === 'true' || v === '1';
+  const sobrescribir = esFlag(url.searchParams.get('sobrescribir')) || esFlag(body?.sobrescribir) || esFlag(body?.args?.sobrescribir);
+  const diagnostico = esFlag(url.searchParams.get('diagnostico')) || esFlag(body?.diagnostico) || esFlag(body?.args?.diagnostico);
+  const purgar = esFlag(url.searchParams.get('purgar')) || esFlag(body?.purgar) || esFlag(body?.args?.purgar);
 
   // ── Diagnostico / purga de chunks ajenos ───────────────────────────────────
   //
@@ -284,9 +285,16 @@ Deno.serve(async (req) => {
   // identidades de empresa contradictorias, y ademas cartera y PQR reciben
   // psicologia de ventas para estrato 6.
   //
-  // Este bloque los encuentra y, con purgar=true, los borra. Los chunks propios
-  // (los de CHUNKS) nunca se tocan.
+  // Este bloque detecta SOLO huellas inequivocas del tenant anterior. Nunca
+  // considera borrable un chunk por el simple hecho de no pertenecer a este
+  // seed: las politicas reales que cargue el equipo tambien son "ajenas" y se
+  // deben preservar.
   const canonicos = new Set(CHUNKS.map((c) => c.titulo));
+  const esContaminado = (c: any) => {
+    if (canonicos.has(String(c.titulo || ''))) return false;
+    const texto = `${String(c.titulo || '')}\n${String(c.contenido || '')}`;
+    return /ND Inmobiliaria|Natalia Duque|Valentina Ospina|ndsoftware\.base44\.app/i.test(texto);
+  };
 
   if (diagnostico || purgar) {
     const r = await fetch(`${base}/api/entities/ConocimientoRAG?limit=200`, { headers: hdrs });
@@ -294,12 +302,13 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: `No se pudo listar: ${r.status}` }), { status: 500 });
     }
     const todos = (await r.json()) as any[];
-    const ajenos = todos.filter((c) => !canonicos.has(c.titulo));
+    const contaminados = todos.filter(esContaminado);
+    const externos = todos.filter((c) => !canonicos.has(c.titulo) && !esContaminado(c));
 
-    const detalle = ajenos.map((c) => ({
+    const detalle = contaminados.map((c) => ({
       id: c.id,
       titulo: c.titulo,
-      agentes: c.agentes || '(vacio -> llega a TODOS los agentes)',
+      agentes: c.agentes || '(vacio -> no se inyecta)',
       chars: String(c.contenido || '').length,
       activo: c.activo,
     }));
@@ -310,17 +319,19 @@ Deno.serve(async (req) => {
           ok: true,
           modo: 'diagnostico',
           total: todos.length,
-          canonicos: todos.length - ajenos.length,
-          ajenos: ajenos.length,
-          detalle,
-          nota: 'Para borrarlos: volver a llamar con purgar=true',
+          canonicos: todos.filter((c) => canonicos.has(c.titulo)).length,
+          contaminados: contaminados.length,
+          externos_preservados: externos.length,
+          detalle_contaminados: detalle,
+          externos: externos.map((c) => ({ id: c.id, titulo: c.titulo, agentes: c.agentes || '(vacio)' })),
+          nota: 'purgar=true borra solamente detalle_contaminados; nunca conocimiento externo por defecto',
         }, null, 2),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     }
 
     const borrados: any[] = [];
-    for (const c of ajenos) {
+    for (const c of contaminados) {
       const d = await fetch(`${base}/api/entities/ConocimientoRAG/${c.id}`, { method: 'DELETE', headers: hdrs });
       borrados.push({ titulo: c.titulo, ok: d.ok, status: d.status });
     }
@@ -344,7 +355,7 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const datos = { ...c, activo: true, etapas: 'todas' };
+    const datos = { ...c, activo: true, etapas: 'todas', origen: 'seedBaseAgentes:v2' };
     const w = await fetch(
       existente ? `${base}/api/entities/ConocimientoRAG/${existente.id}` : `${base}/api/entities/ConocimientoRAG`,
       { method: existente ? 'PUT' : 'POST', headers: hdrs, body: JSON.stringify(datos) },

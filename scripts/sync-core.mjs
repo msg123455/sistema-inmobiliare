@@ -18,8 +18,14 @@ import { join, dirname, relative } from 'node:path';
 const RAIZ = 'base44/functions';
 const FUENTE = join(RAIZ, '_core');
 
-// Funciones que importan _core. Agregar aqui al crear una nueva.
-const CONSUMIDORAS = ['agenteInbound', 'enviarPendientes', 'continuarTurno'];
+// Funciones que importan _core. Las conversacionales necesitan el arbol entero;
+// el seed solo importa prompts.ts.
+const CONSUMIDORAS = [
+  { nombre: 'agenteInbound' },
+  { nombre: 'enviarPendientes' },
+  { nombre: 'continuarTurno' },
+  { nombre: 'seedAgentes', archivos: ['prompts.ts'] },
+];
 
 const soloCheck = process.argv.includes('--check');
 
@@ -41,7 +47,8 @@ if (!existsSync(FUENTE)) {
 const fuentes = archivos(FUENTE);
 let desincronizados = 0;
 
-for (const fn of CONSUMIDORAS) {
+for (const consumidor of CONSUMIDORAS) {
+  const fn = consumidor.nombre;
   const dirFn = join(RAIZ, fn);
   if (!existsSync(dirFn)) {
     console.error(`Funcion no encontrada: ${dirFn}`);
@@ -51,7 +58,8 @@ for (const fn of CONSUMIDORAS) {
 
   if (!soloCheck && existsSync(destino)) rmSync(destino, { recursive: true, force: true });
 
-  for (const rel of fuentes) {
+  const requeridos = consumidor.archivos || fuentes;
+  for (const rel of requeridos) {
     const src = join(FUENTE, rel);
     const dst = join(destino, rel);
     const contenido = readFileSync(src, 'utf8');
@@ -67,7 +75,7 @@ for (const fn of CONSUMIDORAS) {
     writeFileSync(dst, contenido);
   }
 
-  if (!soloCheck) console.log(`${fn}/_core  <-  ${fuentes.length} archivos`);
+  if (!soloCheck) console.log(`${fn}/_core  <-  ${requeridos.length} archivos`);
 }
 
 if (soloCheck) {

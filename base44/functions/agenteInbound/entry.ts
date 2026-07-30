@@ -12,15 +12,16 @@
 
 import { crearDb } from './_core/db.ts';
 import { encolar, entregarYa, notificarEquipo } from './_core/cola.ts';
-import { armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
+import { agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { correrAgente } from './_core/llm.ts';
 import { decidirAgente } from './_core/router.ts';
-import { cargarEstado, ctxDe, guardarEstado } from './_core/state.ts';
+import { cargarEstado, ctxDe, estadoVacio, guardarEstado } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
 import type { Agente, CtxTool, Entrada } from './_core/protocol.ts';
 import * as wa from './_core/canales/whatsapp.ts';
 import * as tg from './_core/canales/telegram.ts';
 import { agenteDeUrl, tokenDeAgente } from './_core/canales/bots.ts';
+import { firmaMetaValida, secretoIgual } from './_core/webhook.ts';
 
 const MODELO_PRIMARIO = 'claude-sonnet-5';
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
@@ -40,13 +41,55 @@ Deno.serve(async (req) => {
   }
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
+  // La firma de Meta cubre los bytes exactos recibidos. Leer con req.json()
+  // primero perderia ese cuerpo y obligaria a verificar una reserializacion.
+  let rawBody: ArrayBuffer;
+  try { rawBody = await req.arrayBuffer(); } catch { return new Response('Bad Request', { status: 400 }); }
+
   let body: any;
-  try { body = await req.json(); } catch { return new Response('OK', { status: 200 }); }
+  try { body = JSON.parse(new TextDecoder().decode(rawBody)); } catch {
+    return new Response('Bad Request', { status: 400 });
+  }
+
+  const esWhatsApp = wa.esWhatsApp(body);
+  const esTelegram = tg.esTelegram(body);
+
+  // No aceptar payloads que no pertenezcan inequivocamente a uno de los dos
+  // proveedores. Antes cualquier POST desconocido recibia 200.
+  if (esWhatsApp === esTelegram) return new Response('Bad Request', { status: 400 });
+
+  if (esWhatsApp) {
+    const secret = Deno.env.get('META_APP_SECRET') || '';
+    if (!secret) {
+      console.error('META_APP_SECRET no configurado; webhook de Meta rechazado');
+      return new Response('Service Unavailable', { status: 503 });
+    }
+    const firma = req.headers.get('x-hub-signature-256');
+    if (!(await firmaMetaValida(rawBody, firma, secret))) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+  } else {
+    const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET') || '';
+    if (!secret) {
+      console.error('TELEGRAM_WEBHOOK_SECRET no configurado; webhook de Telegram rechazado');
+      return new Response('Service Unavailable', { status: 503 });
+    }
+    if (!secretoIgual(req.headers.get('x-telegram-bot-api-secret-token'), secret)) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+  }
 
   // Bot dedicado: cada agente puede tener el suyo, y la URL del webhook dice
   // cual es (?agente=ventas). Si viene, esa conversacion pertenece a ese agente
   // y el router no decide.
-  const agenteBot = agenteDeUrl(url);
+  const agenteParam = url.searchParams.get('agente');
+  const agenteBot = esTelegram ? agenteDeUrl(url) : null;
+  // ?agente= solo pertenece a bots dedicados de Telegram. Rechazar valores
+  // viejos (por ejemplo encuestas), typos y cualquier intento de fijar el
+  // agente desde el webhook de WhatsApp.
+  if (agenteParam !== null && (!esTelegram || !agenteBot)) {
+    return new Response('Bad Request', { status: 400 });
+  }
 
   const env = {
     base44Key:   Deno.env.get('BASE44_API_KEY') || '',
@@ -56,13 +99,14 @@ Deno.serve(async (req) => {
     waPhoneId:   body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') || '',
     // El token depende del bot que recibio: se necesita ya para bajar media.
     tgToken:     tokenDeAgente(agenteBot),
+    tgBotKey:    agenteBot || 'compartido',
   };
 
   // ── 1. Normalizar. El payload se olfatea; no hay dos webhooks. ────────────
   let entrada: Entrada | null = null;
   try {
-    if (wa.esWhatsApp(body)) entrada = await wa.normalizar(body, env);
-    else if (tg.esTelegram(body)) entrada = await tg.normalizar(body, env);
+    if (esWhatsApp) entrada = await wa.normalizar(body, env);
+    else entrada = await tg.normalizar(body, env);
   } catch (e) {
     console.error('normalizar error:', (e as Error).message);
   }
@@ -84,8 +128,26 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   const db = crearDb(env.base44Key);
 
   // ── 2. Estado + dedup ────────────────────────────────────────────────────
-  const { id: memoriaId, estado } = await cargarEstado(db, entrada.canal, entrada.tel);
+  const cargada = await cargarEstado(db, entrada.canal, entrada.tel);
+  const memoriaId = cargada.id;
+  let estado = cargada.estado;
   marca('estado cargado');
+
+  // En un bot dedicado, /start o /reiniciar abre una prueba limpia. Es
+  // especialmente util en el demo: una pausa manual o un hilo de pruebas de
+  // ayer no puede dejar al bot aparentemente mudo frente al cliente.
+  if (entrada.canal === 'telegram' && agenteBot && /^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+    estado = estadoVacio();
+    entrada.texto = 'Hola';
+    marca('conversacion reiniciada por comando de Telegram');
+  }
+
+  // El chat id de Telegram solo existe dentro del bot que recibio el mensaje.
+  // Guardar ese origen evita contestar por un bot dedicado cuando el usuario
+  // escribio al compartido (o viceversa).
+  if (entrada.canal === 'telegram') {
+    estado.compartido.telegram_bot_agente = agenteBot || '';
+  }
 
   if (entrada.msgId && estado.msg_ids.includes(entrada.msgId)) {
     console.log(`dedup: ${entrada.msgId} ya procesado`);
@@ -133,8 +195,17 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     asegurarContacto(db, entrada, estado),
   ]);
   marca('contexto cargado');
+  console.log(`RAG[${estado.agente_activo}] ${base.ragChars} chars: ${base.ragTitulos.join(' | ') || '(vacio)'}`);
 
   if (contacto) estado.compartido.contacto_id = contacto.id;
+  if (!agentesAutomaticosActivos(base.config)) {
+    await guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, {
+      ultimo_mensaje: entrada.texto,
+      contacto_id: contacto?.id,
+    });
+    console.log('IA global inactiva por ConfigAgente.activo');
+    return;
+  }
   if (!base.prompt) console.error(`Sin fila AgentePrompt activa para "${estado.agente_activo}" — usando prompt minimo`);
 
   const scratch = ctxDe(estado, estado.agente_activo);
@@ -193,8 +264,11 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     const demoraMin = Number(base.config.demora_respuesta_min) || 0;
     const item = await encolar(db, {
       canal: entrada.canal,
-      // Para que la respuesta salga por el bot del agente que la escribio.
-      agente: estado.agente_activo,
+      // En Telegram identifica el bot que RECIBIO el chat, no el rol que
+      // redacto. Vacio significa bot compartido.
+      agente: entrada.canal === 'telegram'
+        ? String(estado.compartido.telegram_bot_agente || '')
+        : estado.agente_activo,
       destino: entrada.destino,
       globos,
       demoraMin,

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Phone, Mail, DollarSign, MapPin, MessageSquare, Bot, RefreshCw } from 'lucide-react';
+import { Plus, Search, Phone, Mail, DollarSign, MapPin, MessageSquare, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TEMP_CONFIG = {
@@ -109,7 +109,6 @@ export default function Contactos() {
   const [search, setSearch] = useState('');
   const [filterEtapa, setFilterEtapa] = useState('todos');
   const [filterTipo, setFilterTipo] = useState('todos');
-  const [syncing, setSyncing] = useState(false);
 
   const { data: contactos = [], isLoading } = useQuery({
     queryKey: ['contactos'],
@@ -117,19 +116,6 @@ export default function Contactos() {
   });
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['contactos'] });
-
-  const handleSyncValentina = async () => {
-    setSyncing(true);
-    try {
-      const res = await base44.functions.syncCRM({ token: 'SYNCWASI2026' });
-      refresh();
-      toast.success(`Sync completado: ${res.contactos_actualizados} actualizados, ${res.contactos_creados} nuevos`);
-    } catch (err) {
-      toast.error(err?.message || 'Error al sincronizar con Valentina');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   const filtered = contactos.filter(c => {
     const q = search.toLowerCase();
@@ -147,10 +133,6 @@ export default function Contactos() {
           <p className="text-muted-foreground text-[15px]">{contactos.length} contactos registrados</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSyncValentina} disabled={syncing}>
-            <RefreshCw className={`w-4 h-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
-            {syncing ? 'Sincronizando...' : 'Sync Valentina'}
-          </Button>
           <NuevoContactoDialog onCreated={refresh} />
         </div>
       </div>

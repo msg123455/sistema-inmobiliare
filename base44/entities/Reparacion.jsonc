@@ -95,12 +95,12 @@
     },
     "sla_horas": {
       "type": "number",
-      "description": "Horas de SLA segun la urgencia"
+      "description": "Horas de SLA aprobadas. Dejar vacio hasta definir la politica."
     },
     "fecha_limite": {
       "type": "string",
       "format": "date-time",
-      "description": "Cuando vence el SLA"
+      "description": "Cuando vence el SLA aprobado. Dejar vacio si no existe."
     },
     "fecha_reporte": {
       "type": "string",

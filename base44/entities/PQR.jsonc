@@ -70,7 +70,7 @@
     "fecha_limite_legal": {
       "type": "string",
       "format": "date-time",
-      "description": "Plazo legal de respuesta. Se calcula al radicar; un cron escala antes de que venza."
+      "description": "Plazo aprobado para respuesta. Dejar vacio hasta definir la politica legal aplicable."
     },
     "fecha_radicacion": {
       "type": "string",

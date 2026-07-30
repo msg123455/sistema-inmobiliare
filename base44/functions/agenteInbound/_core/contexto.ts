@@ -8,43 +8,99 @@ import type { Db } from './db.ts';
 import { type Agente, type Entrada, type Estado } from './protocol.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from './prompts.ts';
 
-const MAX_RAG_CHARS = 3000;
+export const MAX_RAG_CHARS = 6000;
+
+type ChunkRag = Record<string, any>;
+
+function destinosDe(ch: ChunkRag): string[] {
+  return String(ch.agentes || '')
+    .split(',')
+    .map((s: string) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Seleccion determinista y fail-closed del conocimiento que recibe un agente.
+ *
+ * Los chunks especificos entran antes que los comunes. Un chunk sin `agentes`
+ * no se inyecta: el tenant anterior dejo conocimiento contaminado sin ese campo
+ * y tratarlo como `todos` fue precisamente lo que mezclo las dos marcas.
+ */
+export function seleccionarRag(
+  chunks: ChunkRag[],
+  agente: Agente,
+  maxChars = MAX_RAG_CHARS,
+): { texto: string; titulos: string[]; chars: number } {
+  const relevantes = (chunks || [])
+    .map((ch) => ({ ch, destinos: destinosDe(ch) }))
+    .filter(({ destinos }) => destinos.includes('todos') || destinos.includes(agente))
+    .sort((a, b) => {
+      const especificoA = a.destinos.includes(agente) && !a.destinos.includes('todos') ? 1 : 0;
+      const especificoB = b.destinos.includes(agente) && !b.destinos.includes('todos') ? 1 : 0;
+      return especificoB - especificoA
+        || (Number(b.ch.prioridad) || 5) - (Number(a.ch.prioridad) || 5)
+        || String(a.ch.titulo || '').localeCompare(String(b.ch.titulo || ''), 'es');
+    });
+
+  let usado = 0;
+  const trozos: string[] = [];
+  const titulos: string[] = [];
+  for (const { ch } of relevantes) {
+    const titulo = String(ch.titulo || '').trim();
+    const contenido = String(ch.contenido || '').trim();
+    if (!titulo || !contenido) continue;
+    const bloque = `[${titulo}]\n${contenido}\n\n`;
+    // No cortar toda la seleccion porque un bloque no quepa: puede haber otro
+    // mas pequeno y relevante despues.
+    if (usado + bloque.length > maxChars) continue;
+    trozos.push(bloque);
+    titulos.push(titulo);
+    usado += bloque.length;
+  }
+  return { texto: trozos.join(''), titulos, chars: usado };
+}
+
+/** ConfigAgente.activo funciona como kill switch global. */
+export function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
+  return config?.activo !== false;
+}
 
 export interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
   identidadMarca: string;
   rag: string;
+  ragTitulos: string[];
+  ragChars: number;
+}
+
+function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, any> | null {
+  return [...(filas || [])]
+    .filter((fila) => fila.activo !== false)
+    .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))[0] || null;
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
 // los chunks de conocimiento que le corresponden.
 export async function cargarBase(db: Db, agente: Agente): Promise<Base> {
-  const [config, prompts, marca, chunks] = await Promise.all([
+  const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
-    db.list('AgentePrompt', { agente, activo: true, limit: 1 }),
-    db.uno('AgentePrompt', { agente: 'identidad_marca', activo: true }),
-    db.list('ConocimientoRAG', { activo: true, limit: 60 }),
+    db.list('AgentePrompt', { agente, limit: 100 }),
+    db.list('AgentePrompt', { agente: 'identidad_marca', limit: 100 }),
+    db.list('ConocimientoRAG', { activo: true, limit: 200 }),
   ]);
 
-  // ConocimientoRAG.agentes es el campo nuevo: sin el, cartera recibia 4.5KB
-  // de psicologia de ventas en cada consulta de saldo.
-  let usado = 0;
-  const trozos: string[] = [];
-  for (const ch of (chunks || []).sort((a: any, b: any) => (Number(b.prioridad) || 5) - (Number(a.prioridad) || 5))) {
-    const destinos = String(ch.agentes || 'todos').split(',').map((s: string) => s.trim());
-    if (!destinos.includes('todos') && !destinos.includes(agente)) continue;
-    const bloque = `[${ch.titulo}]\n${ch.contenido}\n\n`;
-    if (usado + bloque.length > MAX_RAG_CHARS) break;
-    trozos.push(bloque);
-    usado += bloque.length;
-  }
+  const seleccion = seleccionarRag(chunks || [], agente);
+  const prompt = promptActivoMasReciente(prompts || []);
+  const marca = promptActivoMasReciente(marcas || []);
 
   return {
     config: config || {},
-    prompt: prompts?.[0] || null,
+    prompt,
     identidadMarca: String(marca?.prompt || ''),
-    rag: trozos.length ? `=== CONOCIMIENTO DE LA CASA ===\n${trozos.join('')}` : '',
+    rag: seleccion.texto ? `=== CONOCIMIENTO DE LA CASA ===\n${seleccion.texto}` : '',
+    ragTitulos: seleccion.titulos,
+    ragChars: seleccion.chars,
   };
 }
 

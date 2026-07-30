@@ -76,15 +76,11 @@ export const agendarAvaluoPrevio: Tool = {
   ejecutar: async (input, c: CtxTool) => {
     const consId = String(c.ctxAgente.consignacion_id || '');
     if (!consId) return { ok: false, error: 'sin_consignacion' };
-    await c.db.crear('Tarea', {
-      titulo: 'Avaluo previo de consignacion',
-      descripcion: `Consignacion ${consId}. Disponibilidad del propietario: ${String(input.preferencia || '')}\nTelefono: ${c.entrada.tel}`,
-      fecha_limite: new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0],
-      prioridad: 'Media',
-      completada: false,
-      origen_agente: 'consignacion',
-    });
-    await c.db.actualizar('Consignacion', consId, { estado: 'En_Avaluo' });
+    const preferencia = String(input.preferencia || '').slice(0, 300);
+    await c.db.actualizar('Consignacion', consId, { estado: 'En_Avaluo', preferencia_avaluo: preferencia });
+    c.efectos.notificar.push(
+      `AVALUO PREVIO SOLICITADO\nConsignacion: ${consId}\nTelefono: ${c.entrada.tel}\nPreferencia: ${preferencia}`,
+    );
     return { ok: true, nota: 'Dile que el asesor le confirma el dia. No des una hora tu.' };
   },
 };

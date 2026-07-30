@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Bot, Pencil, AlertTriangle } from 'lucide-react';
@@ -17,6 +16,7 @@ const AgentePrompt = base44.entities.AgentePrompt;
 
 
 const MODELOS = [
+  { id: 'claude-sonnet-5', etiqueta: 'Sonnet 5 — conversación' },
   { id: 'claude-sonnet-4-5', etiqueta: 'Sonnet 4.5 — conversación' },
   { id: 'claude-haiku-4-5-20251001', etiqueta: 'Haiku 4.5 — rápido y barato' },
 ];
@@ -28,9 +28,8 @@ const MAX_LINEAS = 80;
 
 function Editor({ agente, fila, onGuardado, onCerrar }) {
   const [prompt, setPrompt] = useState(fila?.prompt || '');
-  const [modelo, setModelo] = useState(fila?.modelo || 'claude-sonnet-4-5');
-  const [maxTokens, setMaxTokens] = useState(String(fila?.max_tokens || 1500));
-  const [activo, setActivo] = useState(fila?.activo ?? true);
+  const [modelo, setModelo] = useState(fila?.modelo || 'claude-sonnet-5');
+  const [maxTokens, setMaxTokens] = useState(String(fila?.max_tokens || 3000));
   const [guardando, setGuardando] = useState(false);
 
   const lineas = prompt ? prompt.split('\n').length : 0;
@@ -41,11 +40,12 @@ function Editor({ agente, fila, onGuardado, onCerrar }) {
     setGuardando(true);
     try {
       const datos = {
+        ...(fila || {}),
         agente: agente.clave,
         prompt,
         modelo,
-        max_tokens: Number(maxTokens) || 1500,
-        activo,
+        max_tokens: Number(maxTokens) || 3000,
+        activo: true,
         // La version sube en cada guardado: permite volver atras si un cambio de
         // prompt degrada las conversaciones.
         version: (Number(fila?.version) || 0) + 1,
@@ -88,13 +88,6 @@ function Editor({ agente, fila, onGuardado, onCerrar }) {
         </div>
         <div><Label>Máx. tokens</Label><Input type="number" value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} /></div>
       </div>
-      <div className="flex items-center justify-between rounded-xl bg-muted p-3">
-        <div>
-          <p className="text-sm font-medium">Agente activo</p>
-          <p className="text-xs text-muted-foreground">Si se apaga, recepción no le transfiere conversaciones.</p>
-        </div>
-        <Switch checked={activo} onCheckedChange={setActivo} />
-      </div>
       <div className="flex gap-2 pt-1">
         <Button className="flex-1 presionable" onClick={guardar} disabled={guardando}>
           {guardando ? 'Guardando...' : fila ? `Guardar v${(Number(fila.version) || 0) + 1}` : 'Crear prompt'}
@@ -118,7 +111,7 @@ export default function Agentes() {
     .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))[0] || null;
 
   const configurados = AGENTES.filter((a) => filaDe(a.clave)).length;
-  const activos = AGENTES.filter((a) => filaDe(a.clave)?.activo).length;
+  const activos = AGENTES.filter((a) => filaDe(a.clave)?.activo !== false).length;
 
   return (
     <div className="space-y-5">
@@ -135,7 +128,8 @@ export default function Agentes() {
 
       <p className="text-xs text-muted-foreground">
         Los prompts viven en datos, no en código: editarlos aquí no requiere desplegar.
-        La identidad de marca es común a todos y se inyecta aparte.
+        La identidad de marca es común a todos y se inyecta aparte. Si falta una fila, el motor usa el fallback seguro del código;
+        al sembrar queda editable aquí. Para pausar todas las respuestas usa Configurar IA.
       </p>
 
       {isLoading ? <Cargando /> : (
