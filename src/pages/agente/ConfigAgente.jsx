@@ -96,9 +96,6 @@ export default function ConfigAgenteIA() {
     setCargandoDemo(true);
     setDemoError('');
     try {
-      await base44.functions.invoke('seedAgentes', {
-        agente: 'ventas', sobrescribir: true, modo_demo: true,
-      });
       const res = await base44.functions.invoke('configurarDemoVentas', { accion: 'preparar' });
       setDemo(res.data || null);
       if (res.data?.listo) toast.success('Demo de Ventas listo');

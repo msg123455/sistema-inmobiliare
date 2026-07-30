@@ -5,6 +5,7 @@
 // fragmentos de secretos.
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { IDENTIDAD_MARCA, PROMPTS } from './_core/prompts.ts';
 
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 
@@ -76,6 +77,49 @@ async function activarRespuestaInmediata(base: string, apiKey: string) {
     },
   );
   if (!r.ok) throw new Error(`No se pudo activar ConfigAgente (HTTP ${r.status})`);
+}
+
+async function sembrarVentas(base: string, apiKey: string) {
+  const filas = [
+    { agente: 'identidad_marca', prompt: IDENTIDAD_MARCA },
+    { agente: 'ventas', prompt: PROMPTS.ventas },
+  ];
+  const versiones: Record<string, number> = {};
+
+  for (const fila of filas) {
+    const existentes = await listar(base, apiKey, 'AgentePrompt', {
+      agente: fila.agente, limit: 100,
+    });
+    if (existentes === null) throw new Error(`No se pudo leer el prompt ${fila.agente}`);
+    const actual = [...existentes]
+      .sort((a, b) => (Number(b.version) || 0) - (Number(a.version) || 0))[0] || null;
+    const esVentas = fila.agente === 'ventas';
+    const datos = {
+      ...(actual || {}),
+      agente: fila.agente,
+      version: (Number(actual?.version) || 0) + 1,
+      prompt: fila.prompt,
+      tools_habilitadas: esVentas ? [] : (actual?.tools_habilitadas || []),
+      modelo: esVentas ? 'claude-sonnet-5' : (actual?.modelo || 'claude-sonnet-5'),
+      effort: esVentas ? 'low' : (actual?.effort || 'low'),
+      max_tokens: esVentas ? 3000 : (Number(actual?.max_tokens) || 3000),
+      activo: true,
+      notas: `Prompt canonico para demo sembrado el ${new Date().toISOString().split('T')[0]}`,
+    };
+    const r = await fetch(
+      actual?.id
+        ? `${base}/api/entities/AgentePrompt/${actual.id}`
+        : `${base}/api/entities/AgentePrompt`,
+      {
+        method: actual?.id ? 'PUT' : 'POST',
+        headers: { api_key: apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+      },
+    );
+    if (!r.ok) throw new Error(`No se pudo sembrar ${fila.agente} (HTTP ${r.status})`);
+    versiones[fila.agente] = datos.version;
+  }
+  return versiones;
 }
 
 async function probarAnthropic(apiKey: string) {
@@ -220,6 +264,7 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const prompts = await sembrarVentas(base, apiKey);
     await activarRespuestaInmediata(base, apiKey);
     const webhookUrl = `${base}/api/functions/agenteInbound?agente=ventas`;
     await telegram(botToken, 'setWebhook', {
@@ -228,7 +273,7 @@ Deno.serve(async (req) => {
       allowed_updates: ['message'],
       drop_pending_updates: false,
     });
-    return json({ ...(await diagnosticar()), modelo, preparado: true });
+    return json({ ...(await diagnosticar()), modelo, prompts, preparado: true });
   } catch (error) {
     return json({ error: String((error as Error).message || error).slice(0, 300) }, 502);
   }

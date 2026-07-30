@@ -25,6 +25,7 @@ const CONSUMIDORAS = [
   { nombre: 'enviarPendientes' },
   { nombre: 'continuarTurno' },
   { nombre: 'seedAgentes', archivos: ['prompts.ts'] },
+  { nombre: 'configurarDemoVentas', archivos: ['prompts.ts'] },
 ];
 
 const soloCheck = process.argv.includes('--check');
