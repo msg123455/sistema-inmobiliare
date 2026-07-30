@@ -9,7 +9,9 @@
 //
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
-// equivocada.type Filtro = Record<string, string | number | boolean | undefined | null>;function crearDb(apiKey: string, baseUrl?: string) {
+// equivocada.
+type Filtro = Record<string, string | number | boolean | undefined | null>;
+function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
@@ -102,7 +104,8 @@
   }
 
   return { base, list, uno, crear, actualizar, guardar };
-}type Db = ReturnType<typeof crearDb>;
+}
+type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
@@ -240,6 +243,8 @@
 // un presupuesto total de 15s. Ahora escribe en ColaSalida y retorna; la
 // simulacion la hace enviarPendientes. `demora_respuesta_min = 0` pasa a
 // significar "encolar con delay 0", no "enviar inline".
+
+
 /**
  * Entrega un item de la cola YA, sin esperar al cron.
  *
@@ -248,7 +253,8 @@
  * intenta la entrega inmediata y, si falla, el item queda pendiente y el cron
  * la reintenta. La simulacion de tipeo sigue viviendo en el cron, no aqui: este
  * camino corre dentro del webhook, que tiene presupuesto.
- */async function entregarYa(
+ */
+async function entregarYa(
   db: Db,
   item: any,
   env: { waToken?: string; waPhoneId?: string },
@@ -279,7 +285,8 @@
     console.error('entregarYa error:', (e as Error).message);
     return false;
   }
-}async function encolar(
+}
+async function encolar(
   db: Db,
   datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string; agente?: string },
 ) {
@@ -299,7 +306,8 @@
 }
 
 // Notificaciones internas al equipo. NUNCA al chat del cliente: el destino sale
-// de configuracion, y se compara contra el remitente antes de enviar.async function notificarEquipo(config: Record<string, any>, telCliente: string, mensajes: string[]) {
+// de configuracion, y se compara contra el remitente antes de enviar.
+async function notificarEquipo(config: Record<string, any>, telCliente: string, mensajes: string[]) {
   if (!mensajes.length) return;
   const texto = mensajes.join('\n\n———\n\n');
   const chat = String(config.telegram_notif_chat || '').trim();
@@ -564,7 +572,8 @@ No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmu
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.
+const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -636,7 +645,8 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.
+async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -720,7 +730,8 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};
+async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -730,7 +741,8 @@ const CARGADORES: Record<Agente, Cargador> = {
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.
+function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -774,6 +786,7 @@ const CARGADORES: Record<Agente, Cargador> = {
 // La segunda llamada solo ocurre con tools de recuperacion, que genuinamente
 // necesitan el resultado para hablar. Si hace falta una tercera, el turno se
 // aparca en estado.turno_pendiente y lo reanuda el cron continuarTurno.
+
 const API = 'https://api.anthropic.com/v1/messages';
 
 // Capacidades por modelo. `effort` NO existe en Haiku 4.5 (devuelve error), y
@@ -782,11 +795,13 @@ const API = 'https://api.anthropic.com/v1/messages';
 function paramsModelo(modelo: string, effort?: string) {
   if (/haiku/.test(modelo)) return {};
   return { output_config: { effort: effort || 'low' } };
-}interface RespuestaModelo {
+}
+interface RespuestaModelo {
   bloques: any[];
   stop_reason: string;
   modelo: string;
-}async function llamarModelo(opts: {
+}
+async function llamarModelo(opts: {
   apiKey: string;
   modelos: string[];
   system: string | any[];
@@ -827,7 +842,8 @@ function paramsModelo(modelo: string, effort?: string) {
     }
   }
   return null;
-}interface ResultadoAgente {
+}
+interface ResultadoAgente {
   globos: string[];
   finTurno: boolean;
   pendiente: { mensajes: any[] } | null;
@@ -835,7 +851,8 @@ function paramsModelo(modelo: string, effort?: string) {
 }
 
 // Un turno del agente. `mensajes` entra como el historial ya formateado para la
-// API; si viene de un turno aparcado, trae los tool_result pendientes.async function correrAgente(opts: {
+// API; si viene de un turno aparcado, trae los tool_result pendientes.
+async function correrAgente(opts: {
   apiKey: string;
   modelos: string[];
   system: string;
@@ -929,7 +946,8 @@ function paramsModelo(modelo: string, effort?: string) {
 //
 // El ruteo se paga una vez por HILO, no por mensaje: el nivel 0 (pegajosidad)
 // resuelve ~95% de los mensajes a costo cero. Esa sola decision es la que hace
-// viable el costo de la operacion.interface Decision { agente: Agente; nivel: 0 | 1 | 2; motivo: string }
+// viable el costo de la operacion.
+interface Decision { agente: Agente; nivel: 0 | 1 | 2; motivo: string }
 
 const normalizar = (s: unknown) =>
   String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -964,7 +982,8 @@ function porFrase(texto: string): Agente | null {
   if (!t) return null;
   for (const [agente, re] of FRASES) if (re.test(t)) return agente;
   return null;
-}async function decidirAgente(
+}
+async function decidirAgente(
   db: Db,
   estado: Estado,
   entrada: Entrada,
@@ -1071,15 +1090,20 @@ async function clasificar(
 // MemoriaChat es el UNICO almacen. La escritura dual a Nota queda retirada:
 // eran tres escritores sobre dos copias, y `pausada` se leia de la copia
 // equivocada.
+
+
 // Clave indexada de busqueda. Reemplaza el scan `?limit=500` que corria dos
-// veces por mensaje: no se despacha un full-table scan a cada WhatsApp que entra.const claveDe = (canal: string, tel: string) =>
-  `${canal === 'telegram' ? 'tg' : 'wa'}:${String(tel).replace(/\D/g, '')}`;function identidadVacia(): Identidad {
+// veces por mensaje: no se despacha un full-table scan a cada WhatsApp que entra.
+const claveDe = (canal: string, tel: string) =>
+  `${canal === 'telegram' ? 'tg' : 'wa'}:${String(tel).replace(/\D/g, '')}`;
+function identidadVacia(): Identidad {
   return {
     verificado: false, metodo: null,
     arrendatario_id: null, contrato_id: null, propietario_id: null,
     verificado_en: null, expira: null, intentos: 0, bloqueado_hasta: null,
   };
-}function estadoVacio(): Estado {
+}
+function estadoVacio(): Estado {
   return {
     v: 2,
     agente_activo: 'recepcion',
@@ -1096,7 +1120,8 @@ async function clasificar(
 
 // v1 -> v2. Perezosa (al leer) e idempotente: los hilos vivos no se rompen.
 // El estado v1 era plano — `datos`, `etapa_ventas`, `objeciones_activas` eran
-// del agente de ventas aunque nadie lo dijera. Aqui se nombra.function migrar(raw: unknown): Estado {
+// del agente de ventas aunque nadie lo dijera. Aqui se nombra.
+function migrar(raw: unknown): Estado {
   const v = estadoVacio();
   if (!raw || typeof raw !== 'object') return v;
   const o = raw as Record<string, any>;
@@ -1146,7 +1171,9 @@ async function clasificar(
       },
     },
   };
-}interface MemoriaCargada { id: string | null; estado: Estado; fila: Record<string, any> | null }async function cargarEstado(db: Db, canal: string, tel: string): Promise<MemoriaCargada> {
+}
+interface MemoriaCargada { id: string | null; estado: Estado; fila: Record<string, any> | null }
+async function cargarEstado(db: Db, canal: string, tel: string): Promise<MemoriaCargada> {
   const clave = claveDe(canal, tel);
   // Primero por clave indexada; el fallback por telefono cubre las filas que
   // aun no tienen `clave` escrita (se rellena al guardar, una sola vez).
@@ -1157,14 +1184,16 @@ async function clasificar(
   let bruto: unknown = {};
   try { bruto = JSON.parse(fila.estado_json || '{}'); } catch { /* estado corrupto: se arranca limpio */ }
   return { id: fila.id, estado: migrar(bruto), fila };
-}function ctxDe(estado: Estado, agente: Agente): Record<string, any> {
+}
+function ctxDe(estado: Estado, agente: Agente): Record<string, any> {
   if (!estado.ctx[agente]) estado.ctx[agente] = {};
   return estado.ctx[agente];
 }
 
 // El handoff preserva todo: fija el agente, deja rastro en agente_historial y
 // empuja un marcador al historial compartido para que el agente nuevo entienda
-// por que le llego la conversacion a medias.function transferir(estado: Estado, destino: Agente, motivo: string) {
+// por que le llego la conversacion a medias.
+function transferir(estado: Estado, destino: Agente, motivo: string) {
   const origen = estado.agente_activo;
   if (origen === destino) return;
   estado.agente_activo = destino;
@@ -1177,7 +1206,8 @@ async function clasificar(
     content: `[Sistema: transferido de ${origen} a ${destino}. Motivo: ${motivo}]`,
     ts: new Date().toISOString(),
   });
-}async function guardarEstado(
+}
+async function guardarEstado(
   db: Db,
   memoriaId: string | null,
   canal: string,
@@ -1206,10 +1236,13 @@ async function clasificar(
 
 // ─── _core/tools/comunes.ts ──────────────────────────────────────
 // Las cuatro tools que recibe TODO agente.
+
+
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
 const COMPARTIDOS = new Set(['nombre', 'email', 'documento', 'direccion_inmueble']);
-const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'area_m2', 'habitaciones', 'nps_score']);const responder: Tool = {
+const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'area_m2', 'habitaciones', 'nps_score']);
+const responder: Tool = {
   ...definirTool(
     'responder',
     'Envia tu respuesta al cliente y TERMINA tu turno. Cada elemento de `globos` se manda como un mensaje separado de WhatsApp, como escribe una persona. Usa 1 o 2 globos; 3 solo si de verdad hace falta. Siempre debes terminar tu turno con esta herramienta.',
@@ -1231,8 +1264,10 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 };
 
 // Regla dura heredada del agente original: nada de guiones largos hacia el
-// cliente. Es el tic que mas delata a un bot en espanol.const limpiar = (t: unknown) =>
-  String(t ?? '').replace(/\s*[—–]\s*/g, ', ').replace(/\s{2,}/g, ' ').trim();const guardarDato: Tool = {
+// cliente. Es el tic que mas delata a un bot en espanol.
+const limpiar = (t: unknown) =>
+  String(t ?? '').replace(/\s*[—–]\s*/g, ', ').replace(/\s{2,}/g, ' ').trim();
+const guardarDato: Tool = {
   ...definirTool(
     'guardar_dato',
     'Guarda un dato que el cliente acaba de dar, para no volver a preguntarlo. Llamala tantas veces como datos nuevos haya en el mensaje.',
@@ -1253,7 +1288,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     }
     return { ok: true, campo };
   },
-};const transferirA: Tool = {
+};
+const transferirA: Tool = {
   ...definirTool(
     'transferir_a',
     'Pasa la conversacion a otro agente especializado cuando el tema deja de ser el tuyo. El cliente NO ve el cambio: el otro agente lee el mismo historial y sigue. No anuncies la transferencia, solo hazla.',
@@ -1274,7 +1310,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 
 // Escalamiento. La escalera es identica en todos los agentes: frustracion,
 // 3 turnos sin avance, 3 fallos de verificacion, el cliente pide humano, monto
-// o disputa fuera de politica, PQR con palabra legal.const escalarAHumano: Tool = {
+// o disputa fuera de politica, PQR con palabra legal.
+const escalarAHumano: Tool = {
   ...definirTool(
     'escalar_a_humano',
     'Pasa la conversacion a una persona del equipo. Usala si el cliente lo pide, si esta molesto, si llevas 3 turnos sin avanzar, si el tema se sale de lo que puedes resolver, o si hay plata o un reclamo legal de por medio. Despues de llamarla, despidete con `responder` diciendo que un asesor le escribe; NO prometas tiempos.',
@@ -1309,14 +1346,16 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     );
     return { ok: true, escalado: true };
   },
-};const COMUNES: Record<string, Tool> = {
+};
+const COMUNES: Record<string, Tool> = {
   responder,
   guardar_dato: guardarDato,
   transferir_a: transferirA,
   escalar_a_humano: escalarAHumano,
 };
 
-// Helper compartido: exigir identidad verificada antes de tocar PII.function exigirVerificado(c: CtxTool): { error: string } | null {
+// Helper compartido: exigir identidad verificada antes de tocar PII.
+function exigirVerificado(c: CtxTool): { error: string } | null {
   const i = c.estado.identidad;
   if (i.bloqueado_hasta && new Date(i.bloqueado_hasta).getTime() > Date.now()) {
     return { error: 'bloqueado_por_intentos_fallidos' };
@@ -1325,7 +1364,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     return { error: 'no_verificado' };
   }
   return null;
-}const enviarMenu: Tool = {
+}
+const enviarMenu: Tool = {
   ...definirTool(
     'enviar_menu',
     'Muestra el menu de opciones al cliente cuando no queda claro que necesita. Usalo maximo una vez por conversacion.',
@@ -1345,7 +1385,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 // ─── _core/tools/ventas.ts ───────────────────────────────────────
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
 // el primero que coincidia". Con 30+ asesores eso concentra todos los leads en
-// una persona: ahora se balancea por leads abiertos.async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
+// una persona: ahora se balancea por leads abiertos.
+async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
   const activos = await db.list('Asesor', { estado: 'Activo', limit: 100 });
   if (!activos.length) return null;
 
@@ -1466,7 +1507,8 @@ const buscarInmuebles: Tool = {
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
     };
   },
-};const enviarFicha: Tool = {
+};
+const enviarFicha: Tool = {
   ...definirTool(
     'enviar_ficha',
     'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
@@ -1481,7 +1523,8 @@ const buscarInmuebles: Tool = {
     c.salida.globos.push(ficha);
     return { ok: true };
   },
-};const calificarLead: Tool = {
+};
+const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
     'Entrega el lead a un asesor humano. Llamala SOLO cuando tengas nombre, operacion (compra o arriendo) y una senal real del presupuesto del cliente. El precio de un inmueble NO es el presupuesto del cliente. El sistema escribe el mensaje de entrega: tu no lo redactas.',
@@ -1556,7 +1599,8 @@ const buscarInmuebles: Tool = {
         : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
     };
   },
-};const agendarVisita: Tool = {
+};
+const agendarVisita: Tool = {
   ...definirTool(
     'agendar_visita',
     'Deja registrada la intencion de visitar un inmueble. No confirma hora: el asesor coordina. Nunca prometas un horario concreto.',
@@ -1576,7 +1620,8 @@ const buscarInmuebles: Tool = {
     });
     return { ok: true, nota: 'Dile que el asesor le confirma el horario. No des una hora tu.' };
   },
-};const VENTAS: Record<string, Tool> = {
+};
+const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
   calificar_lead: calificarLead,
@@ -1590,6 +1635,9 @@ const buscarInmuebles: Tool = {
 // puede pasar un id arbitrario. La comparacion ocurre aqui, server-side, y las
 // tools que leen PII no tienen parametros identificadores (ver tools/cartera.ts).
 // Solo este modulo escribe estado.identidad.
+
+
+
 const HORAS_VIGENCIA = 24;
 const MAX_INTENTOS = 3;
 const BLOQUEO_MIN = 60;
@@ -1600,7 +1648,8 @@ const soloDigitos = (s: unknown) => String(s ?? '').replace(/\D/g, '');
 async function sha256(txt: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}async function auditar(
+}
+async function auditar(
   db: Db,
   datos: { tipo: string; sujeto_id?: string; telefono: string; exito: boolean; detalle?: string },
 ) {
@@ -1620,7 +1669,8 @@ async function sha256(txt: string): Promise<string> {
 
 // ── Nivel A: implicito. El `from` del canal contra Arrendatario/Propietario. ──
 // Suficiente para RUTEAR a cartera. Nunca suficiente para divulgar: SIM swap,
-// telefonos familiares compartidos, numeros reasignados por el operador.async function reconocerTelefono(db: Db, tel: string) {
+// telefonos familiares compartidos, numeros reasignados por el operador.
+async function reconocerTelefono(db: Db, tel: string) {
   const t = soloDigitos(tel);
   if (!t) return { arrendatario: null, propietario: null, contrato: null };
   const [arrs, props] = await Promise.all([
@@ -1633,17 +1683,20 @@ async function sha256(txt: string): Promise<string> {
     contrato = (await db.list('ContratoArriendo', { arrendatario_id: arrendatario.id, estado: 'Activo', limit: 1 }))[0] || null;
   }
   return { arrendatario, propietario: props[0] || null, contrato };
-}function sesionVigente(estado: Estado): boolean {
+}
+function sesionVigente(estado: Estado): boolean {
   const i = estado.identidad;
   if (!i.verificado || !i.expira) return false;
   return new Date(i.expira).getTime() > Date.now();
-}function bloqueado(estado: Estado): boolean {
+}
+function bloqueado(estado: Estado): boolean {
   const h = estado.identidad.bloqueado_hasta;
   return !!h && new Date(h).getTime() > Date.now();
 }
 
 // ── Nivel B: reto. Segundo factor que el registro ya tiene. ──────────────────
-// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.async function verificar(
+// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.
+async function verificar(
   db: Db,
   estado: Estado,
   entrada: Entrada,
@@ -1709,7 +1762,8 @@ async function sha256(txt: string): Promise<string> {
 
 // ── Nivel C: magic link al portal. ──────────────────────────────────────────
 // Nunca sale un PDF ni un extracto completo por WhatsApp. Sale un link de un
-// solo uso, atado a este telefono, que vence en 15 minutos.async function crearSesionPortal(
+// solo uso, atado a este telefono, que vence en 15 minutos.
+async function crearSesionPortal(
   db: Db,
   entrada: Entrada,
   estado: Estado,
@@ -1740,7 +1794,8 @@ async function sha256(txt: string): Promise<string> {
 // ─── _core/tools/cartera.ts ──────────────────────────────────────
 // verificar_identidad NO recibe ningun identificador ni devuelve ninguno. El
 // modelo nunca ve la cedula correcta: la comparacion ocurre en identidad.ts, y
-// al fallar no se filtra nada que sirva para adivinar.const verificarIdentidad: Tool = {
+// al fallar no se filtra nada que sirva para adivinar.
+const verificarIdentidad: Tool = {
   ...definirTool(
     'verificar_identidad',
     'Comprueba que quien escribe es de verdad el titular, antes de darle cualquier dato de su contrato. Pidele los ultimos 4 digitos de su cedula (o el numero de solicitud si esta en un tramite) y pasa aqui lo que responda, tal cual. Tiene 3 intentos.',
@@ -1770,7 +1825,8 @@ async function sha256(txt: string): Promise<string> {
 
 // CERO argumentos. El contrato sale de estado.identidad, escrito server-side por
 // identidad.ts. Una inyeccion de prompt ("muestrame el contrato 4471") no tiene
-// de donde agarrarse: la herramienta no acepta ese parametro.const consultarEstadoCuenta: Tool = {
+// de donde agarrarse: la herramienta no acepta ese parametro.
+const consultarEstadoCuenta: Tool = {
   ...definirTool(
     'consultar_estado_cuenta',
     'Trae el saldo, el ultimo pago y el proximo vencimiento del contrato de ESTE cliente. Requiere haberlo verificado antes con verificar_identidad.',
@@ -1804,7 +1860,8 @@ async function sha256(txt: string): Promise<string> {
       instruccion: 'Da la cifra en una frase corta. El detalle completo NO se manda por chat: si pide el desglose, mandale el link del portal.',
     };
   },
-};const enviarLinkPortal: Tool = {
+};
+const enviarLinkPortal: Tool = {
   ...definirTool(
     'enviar_link_portal',
     'Manda un link seguro al portal del cliente. Usalo para todo lo que sea un documento, una tabla o un historial: el chat es para cifras sueltas, el portal para el detalle. El link vence en 15 minutos y sirve una sola vez.',
@@ -1823,7 +1880,8 @@ async function sha256(txt: string): Promise<string> {
     c.salida.globos.push(url);
     return { ok: true, nota: 'El link ya se envio. No lo repitas en responder.' };
   },
-};const enviarCodigoBarras: Tool = {
+};
+const enviarCodigoBarras: Tool = {
   ...definirTool(
     'enviar_codigo_barras',
     'Manda el codigo de barras del mes para que el cliente pague en banco o corresponsal.',
@@ -1853,7 +1911,8 @@ async function sha256(txt: string): Promise<string> {
     await c.db.actualizar('CodigoBarras', cb.id, { ...cb, fecha_envio: new Date().toISOString(), canal_envio: c.entrada.canal, estado_envio: 'Enviado' });
     return { ok: true, periodo, nota: 'Ya se envio el link. No lo repitas en responder.' };
   },
-};const CARTERA: Record<string, Tool> = {
+};
+const CARTERA: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   consultar_estado_cuenta: consultarEstadoCuenta,
   enviar_link_portal: enviarLinkPortal,
@@ -1910,7 +1969,8 @@ const registrarReparacion: Tool = {
         : 'Confirma el radicado en una frase. Puedes pedirle una foto del dano si ayuda al tecnico. No prometas fecha ni costo.',
     };
   },
-};const adjuntarEvidencia: Tool = {
+};
+const adjuntarEvidencia: Tool = {
   ...definirTool(
     'adjuntar_evidencia',
     'Guarda una foto que el cliente acaba de mandar como evidencia de la reparacion que ya radicaste.',
@@ -1929,7 +1989,8 @@ const registrarReparacion: Tool = {
     });
     return { ok: true };
   },
-};const consultarEstadoReparacion: Tool = {
+};
+const consultarEstadoReparacion: Tool = {
   ...definirTool(
     'consultar_estado_reparacion',
     'Consulta como van las reparaciones abiertas de este cliente.',
@@ -1957,7 +2018,8 @@ const registrarReparacion: Tool = {
       instruccion: 'Resume el estado en una frase. No prometas fechas que no aparecen aqui.',
     };
   },
-};const MANTENIMIENTO: Record<string, Tool> = {
+};
+const MANTENIMIENTO: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   registrar_reparacion: registrarReparacion,
   adjuntar_evidencia: adjuntarEvidencia,
@@ -2029,7 +2091,8 @@ const registrarConsignacion: Tool = {
       instruccion: 'Confirma que quedo registrado y que un asesor lo contacta para coordinar la visita y el avaluo. NO negocies comision ni des porcentajes: si pregunta por eso, escala.',
     };
   },
-};const agendarAvaluoPrevio: Tool = {
+};
+const agendarAvaluoPrevio: Tool = {
   ...definirTool(
     'agendar_avaluo_previo',
     'Deja pedida la visita de avaluo para una consignacion que ya registraste. Sirve para saber a que precio sale el inmueble.',
@@ -2097,7 +2160,8 @@ const registrarSolicitudAvaluo: Tool = {
         : 'Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor, escala para cotizacion.',
     };
   },
-};const cotizarAvaluo: Tool = {
+};
+const cotizarAvaluo: Tool = {
   ...definirTool(
     'cotizar_avaluo',
     'Comprueba si existe un tarifario aprobado. Por ahora no hay uno cargado y debes escalar para cotizacion.',
@@ -2113,14 +2177,16 @@ const registrarSolicitudAvaluo: Tool = {
       instruccion: 'No des ninguna cifra ni formula. Escala con escalar_a_humano para que el equipo de avaluos cotice.',
     };
   },
-};const AVALUOS: Record<string, Tool> = {
+};
+const AVALUOS: Record<string, Tool> = {
   registrar_solicitud_avaluo: registrarSolicitudAvaluo,
   cotizar_avaluo: cotizarAvaluo,
 };
 
 // ─── _core/tools/pqr.ts ──────────────────────────────────────────
 // Palabra legal: dispara prioridad y notificacion inmediata al equipo.
-const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;const registrarPqr: Tool = {
+const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
+const registrarPqr: Tool = {
   ...definirTool(
     'registrar_pqr',
     'Radica una peticion, queja, reclamo, sugerencia o felicitacion. Antes de llamarla necesitas entender bien QUE paso: no radiques con una sola frase suelta.',
@@ -2171,7 +2237,8 @@ const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[i
         : `Dale el radicado ${radicado}. El plazo aplicable aun no esta configurado: NO prometas una fecha ni menciones un termino legal; indica que el equipo confirmara el tramite.`,
     };
   },
-};const consultarEstadoPqr: Tool = {
+};
+const consultarEstadoPqr: Tool = {
   ...definirTool(
     'consultar_estado_pqr',
     'Consulta como va una PQR ya radicada, por su numero de radicado.',
@@ -2194,7 +2261,8 @@ const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[i
       respuesta: pqr.respuesta ?? null,
     };
   },
-};const PQR: Record<string, Tool> = {
+};
+const PQR: Record<string, Tool> = {
   registrar_pqr: registrarPqr,
   consultar_estado_pqr: consultarEstadoPqr,
 };
@@ -2248,7 +2316,8 @@ const iniciarMatricula: Tool = {
       instruccion: `Dale el numero ${numero} y dile que lo guarde. Luego preguntale si va a arrendar solo o si hay coarrendatarios o codeudores.`,
     };
   },
-};const agregarParticipante: Tool = {
+};
+const agregarParticipante: Tool = {
   ...definirTool(
     'agregar_participante',
     'Agrega un codeudor o coarrendatario a la solicitud. Llamala una vez por persona, cuando tengas su nombre, documento y telefono.',
@@ -2288,7 +2357,8 @@ const iniciarMatricula: Tool = {
 
     return { ok: true, total_participantes: lista.length, instruccion: 'Confirma y preguntale si falta alguien mas.' };
   },
-};const finalizarMatricula: Tool = {
+};
+const finalizarMatricula: Tool = {
   ...definirTool(
     'finalizar_matricula',
     'Cierra la captura de datos y deja la solicitud lista para el estudio. Llamala cuando el cliente confirme que no falta nadie mas.',
@@ -2318,7 +2388,8 @@ const iniciarMatricula: Tool = {
 };
 
 // En matricula el link se emite contra el numero de solicitud, no contra una
-// verificacion de contrato: el cliente todavia no es arrendatario nuestro.const enviarLinkDocumentos: Tool = {
+// verificacion de contrato: el cliente todavia no es arrendatario nuestro.
+const enviarLinkDocumentos: Tool = {
   ...definirTool(
     'enviar_link_portal',
     'Comprueba si ya existe el canal seguro para documentos de matricula. Por ahora esta pendiente y debes escalar.',
@@ -2347,6 +2418,15 @@ const MATRICULA: Record<string, Tool> = {
 // instruccion que el modelo podia ignorar. Aqui es un esquema: el agente de
 // cartera no recibe `calificar_lead`, asi que es estructuralmente incapaz de
 // llamarla.
+
+
+
+
+
+
+
+
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
@@ -2357,7 +2437,8 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
   avaluos:       AVALUOS,
   pqr:           PQR,
   matricula:     MATRICULA,
-};function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
+};
+function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
   const todas = { ...COMUNES, ...(EXTRA[agente] || {}) };
   // AgentePrompt.tools_habilitadas permite recortar (nunca ampliar) el set sin
   // desplegar. `responder` no se puede quitar: sin ella el agente no habla.
@@ -2367,7 +2448,8 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
 }
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
-// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
+// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
+async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
   fd.append('model', 'whisper-1');
@@ -2386,7 +2468,8 @@ function base64(buf: ArrayBuffer): string {
     bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
   }
   return btoa(bin);
-}async function describirImagen(
+}
+async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -2409,7 +2492,8 @@ function base64(buf: ArrayBuffer): string {
 }
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
-const GRAPH = 'https://graph.facebook.com/v19.0';const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
+const GRAPH = 'https://graph.facebook.com/v19.0';
+const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
   const d = String(t).replace(/\D/g, '');
@@ -2424,7 +2508,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
   const rBin = await fetch(meta.url, { headers: { Authorization: `Bearer ${waToken}` } });
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
-}async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
+}
+async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
   if (!m?.from) return null;
@@ -2476,7 +2561,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
   }
 
   return null;
-}async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
+}
+async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.waToken}`, 'Content-Type': 'application/json' },
@@ -2487,7 +2573,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
 }
 
 // Indicador de "escribiendo" real de Meta. Sustituye al sleep dentro del webhook:
-// la pausa la hace el worker de entrega, no el request.async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
+// la pausa la hace el worker de entrega, no el request.
+async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
   if (!msgId) return;
   try {
     await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
@@ -2499,7 +2586,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
 }
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
-const API = (token: string) => `https://api.telegram.org/bot${token}`;const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
+const API = (token: string) => `https://api.telegram.org/bot${token}`;
+const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
   const rInfo = await fetch(`${API(tgToken)}/getFile?file_id=${encodeURIComponent(fileId)}`);
@@ -2510,7 +2598,8 @@ async function descargarMedia(fileId: string, tgToken: string) {
   if (!rBin.ok) return null;
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
-}async function normalizar(
+}
+async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
 ): Promise<Entrada | null> {
@@ -2558,14 +2647,16 @@ async function descargarMedia(fileId: string, tgToken: string) {
   }
 
   return null;
-}async function enviar(destino: string, texto: string, env: { tgToken: string }) {
+}
+async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: Number(destino), text: texto }),
   });
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
-}async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
+}
+async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2611,7 +2702,8 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
   matricula:     'TELEGRAM_BOT_MATRICULA',
 };
 
-/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */function tokenDeAgente(agente?: string | null): string {
+/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */
+function tokenDeAgente(agente?: string | null): string {
   const compartido = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
   if (!agente || !esAgente(agente)) return compartido;
   return Deno.env.get(VAR_POR_AGENTE[agente]) || compartido;
@@ -2620,12 +2712,14 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
 /**
  * Agente al que pertenece esta peticion, segun `?agente=` de la URL del webhook.
  * Devuelve null si no viene o no es valido — ahi manda el router, como siempre.
- */function agenteDeUrl(url: URL): Agente | null {
+ */
+function agenteDeUrl(url: URL): Agente | null {
   const v = url.searchParams.get('agente');
   return v && esAgente(v) ? v : null;
 }
 
-/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */function agentesConBot(): Agente[] {
+/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */
+function agentesConBot(): Agente[] {
   return (Object.keys(VAR_POR_AGENTE) as Agente[])
     .filter((a) => !!Deno.env.get(VAR_POR_AGENTE[a]));
 }
@@ -2681,6 +2775,15 @@ function secretoIgual(recibido: string | null, esperado: string): boolean {
 //
 // Los dos cambios estructurales frente al motor viejo son rutear ANTES de
 // cargar, y encolar siempre en vez de entregar inline.
+
+
+
+
+
+
+
+
+
 
 
 

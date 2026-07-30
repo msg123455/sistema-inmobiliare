@@ -27,7 +27,6 @@ export const MensajeEnviado = base44.entities.MensajeEnviado;
 export const CampanaSocial = base44.entities.CampanaSocial;
 export const WasiConfig = base44.entities.WasiConfig;
 export const ConfigSEO = base44.entities.ConfigSEO;
-export const SEOPropiedad = base44.entities.SEOPropiedad;
 
 // IA Agente entities
 export const Conversacion = base44.entities.Conversacion;
