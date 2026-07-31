@@ -10,7 +10,9 @@
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
 // equivocada.
+
 type Filtro = Record<string, string | number | boolean | undefined | null>;
+
 function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
@@ -105,11 +107,14 @@ function crearDb(apiKey: string, baseUrl?: string) {
 
   return { base, list, uno, crear, actualizar, guardar };
 }
+
 type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
 // Los prompts NO viven aqui — viven en filas de AgentePrompt (§A.5).
+
+
 
 // ─── Agentes ────────────────────────────────────────────────────────────────
 
@@ -131,7 +136,9 @@ const AGENTES = [
   'recepcion', 'ventas', 'consignacion', 'cartera', 'mantenimiento',
   'avaluos', 'pqr', 'matricula',
 ] as const;
+
 type Agente = typeof AGENTES[number];
+
 const esAgente = (v: unknown): v is Agente =>
   typeof v === 'string' && (AGENTES as readonly string[]).includes(v);
 
@@ -148,6 +155,7 @@ const ETIQUETAS_AGENTE: Record<Agente, string> = {
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────
+
 interface Identidad {
   verificado: boolean;
   metodo: string | null;
@@ -159,13 +167,17 @@ interface Identidad {
   intentos: number;
   bloqueado_hasta: string | null;
 }
+
 interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }
+
 interface SaltoAgente { agente: Agente; desde: string; motivo: string }
+
 interface TurnoPendiente {
   mensajes: unknown[];      // historial de la conversacion con el modelo, tal cual
   continuaciones: number;
   agente: Agente;
 }
+
 interface Estado {
   v: 2;
   agente_activo: Agente;
@@ -180,7 +192,9 @@ interface Estado {
 }
 
 // ─── Entrada normalizada (ambos canales) ────────────────────────────────────
+
 type Canal = 'whatsapp' | 'telegram';
+
 interface Entrada {
   canal: Canal;
   tel: string;              // clave universal de la conversacion
@@ -192,6 +206,7 @@ interface Entrada {
 }
 
 // ─── Tools ──────────────────────────────────────────────────────────────────
+
 interface EsquemaTool {
   name: string;
   description: string;
@@ -216,6 +231,7 @@ interface Tool {
   terminal?: boolean;
   cierra?: boolean;
 }
+
 interface CtxTool {
   db: Db;
   estado: Estado;
@@ -257,6 +273,7 @@ function definirTool(
     ...opts,
   };
 }
+
 const str = (description: string) => ({ type: 'string', description });
 const strOpc = (description: string) => ({ type: ['string', 'null'], description });
 const num = (description: string) => ({ type: 'number', description });
@@ -634,8 +651,11 @@ function habilesHasta(desde: Date, hasta: Date): number {
 // a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
 // manana ya escribio a otra inmobiliaria.
 
+
+
 /** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
 const OFFSET_BOGOTA_H = -5;
+
 interface Horario {
   dias: number[];   // 1 = lunes … 7 = domingo (ISO)
   desde: number;    // hora local de inicio
@@ -644,6 +664,7 @@ interface Horario {
 
 /** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
 const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+
 function horarioDe(config: Record<string, any>): Horario {
   const h = config?.horario_equipo;
   if (!h) return HORARIO_DEFECTO;
@@ -707,6 +728,12 @@ function instruccionHorario(ahora: Date, config: Record<string, any> = {}): stri
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
 // agente pide solo lo suyo, y todo lo independiente va en paralelo.
+
+
+
+
+
+
 const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
@@ -763,6 +790,7 @@ function seleccionarRag(
 function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
   return config?.activo !== false;
 }
+
 interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
@@ -865,6 +893,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   pqr: async () => ({}),
   matricula: async () => ({}),
 };
+
 async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
@@ -918,6 +947,7 @@ function armarSystem(
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
 // Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
+
 async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
@@ -938,6 +968,7 @@ function base64(buf: ArrayBuffer): string {
   }
   return btoa(bin);
 }
+
 async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
@@ -962,6 +993,7 @@ async function describirImagen(
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
 const GRAPH = 'https://graph.facebook.com/v19.0';
+
 const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
@@ -978,6 +1010,7 @@ async function descargarMedia(mediaId: string, waToken: string) {
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
 }
+
 async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
@@ -1031,6 +1064,7 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
 
   return null;
 }
+
 async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
@@ -1056,6 +1090,7 @@ async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToke
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
 const API = (token: string) => `https://api.telegram.org/bot${token}`;
+
 const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
@@ -1068,6 +1103,7 @@ async function descargarMedia(fileId: string, tgToken: string) {
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
 }
+
 async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
@@ -1117,6 +1153,7 @@ async function normalizar(
 
   return null;
 }
+
 async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1125,6 +1162,7 @@ async function enviar(destino: string, texto: string, env: { tgToken: string }) 
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
 }
+
 async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
@@ -1202,6 +1240,8 @@ function agentesConBot(): Agente[] {
 //
 // La simulacion de tipeo vive aqui, no en el webhook: el request de entrada
 // tiene 15s y no puede gastarlos durmiendo.
+
+
 
 
 

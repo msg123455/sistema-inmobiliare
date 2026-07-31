@@ -10,7 +10,9 @@
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
 // equivocada.
+
 type Filtro = Record<string, string | number | boolean | undefined | null>;
+
 function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
@@ -105,11 +107,14 @@ function crearDb(apiKey: string, baseUrl?: string) {
 
   return { base, list, uno, crear, actualizar, guardar };
 }
+
 type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
 // Los prompts NO viven aqui — viven en filas de AgentePrompt (§A.5).
+
+
 
 // ─── Agentes ────────────────────────────────────────────────────────────────
 
@@ -131,7 +136,9 @@ const AGENTES = [
   'recepcion', 'ventas', 'consignacion', 'cartera', 'mantenimiento',
   'avaluos', 'pqr', 'matricula',
 ] as const;
+
 type Agente = typeof AGENTES[number];
+
 const esAgente = (v: unknown): v is Agente =>
   typeof v === 'string' && (AGENTES as readonly string[]).includes(v);
 
@@ -148,6 +155,7 @@ const ETIQUETAS_AGENTE: Record<Agente, string> = {
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────
+
 interface Identidad {
   verificado: boolean;
   metodo: string | null;
@@ -159,13 +167,17 @@ interface Identidad {
   intentos: number;
   bloqueado_hasta: string | null;
 }
+
 interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }
+
 interface SaltoAgente { agente: Agente; desde: string; motivo: string }
+
 interface TurnoPendiente {
   mensajes: unknown[];      // historial de la conversacion con el modelo, tal cual
   continuaciones: number;
   agente: Agente;
 }
+
 interface Estado {
   v: 2;
   agente_activo: Agente;
@@ -180,7 +192,9 @@ interface Estado {
 }
 
 // ─── Entrada normalizada (ambos canales) ────────────────────────────────────
+
 type Canal = 'whatsapp' | 'telegram';
+
 interface Entrada {
   canal: Canal;
   tel: string;              // clave universal de la conversacion
@@ -192,6 +206,7 @@ interface Entrada {
 }
 
 // ─── Tools ──────────────────────────────────────────────────────────────────
+
 interface EsquemaTool {
   name: string;
   description: string;
@@ -216,6 +231,7 @@ interface Tool {
   terminal?: boolean;
   cierra?: boolean;
 }
+
 interface CtxTool {
   db: Db;
   estado: Estado;
@@ -257,6 +273,7 @@ function definirTool(
     ...opts,
   };
 }
+
 const str = (description: string) => ({ type: 'string', description });
 const strOpc = (description: string) => ({ type: ['string', 'null'], description });
 const num = (description: string) => ({ type: 'number', description });
@@ -273,6 +290,8 @@ const lista = (description: string, items: unknown = { type: 'string' }) => ({ t
 // un presupuesto total de 15s. Ahora escribe en ColaSalida y retorna; la
 // simulacion la hace enviarPendientes. `demora_respuesta_min = 0` pasa a
 // significar "encolar con delay 0", no "enviar inline".
+
+
 
 
 /**
@@ -316,6 +335,7 @@ async function entregarYa(
     return false;
   }
 }
+
 async function encolar(
   db: Db,
   datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string; agente?: string },
@@ -742,8 +762,11 @@ function habilesHasta(desde: Date, hasta: Date): number {
 // a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
 // manana ya escribio a otra inmobiliaria.
 
+
+
 /** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
 const OFFSET_BOGOTA_H = -5;
+
 interface Horario {
   dias: number[];   // 1 = lunes … 7 = domingo (ISO)
   desde: number;    // hora local de inicio
@@ -752,6 +775,7 @@ interface Horario {
 
 /** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
 const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+
 function horarioDe(config: Record<string, any>): Horario {
   const h = config?.horario_equipo;
   if (!h) return HORARIO_DEFECTO;
@@ -815,6 +839,12 @@ function instruccionHorario(ahora: Date, config: Record<string, any> = {}): stri
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
 // agente pide solo lo suyo, y todo lo independiente va en paralelo.
+
+
+
+
+
+
 const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
@@ -871,6 +901,7 @@ function seleccionarRag(
 function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
   return config?.activo !== false;
 }
+
 interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
@@ -973,6 +1004,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   pqr: async () => ({}),
   matricula: async () => ({}),
 };
+
 async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
@@ -1034,6 +1066,8 @@ function armarSystem(
 // necesitan el resultado para hablar. Si hace falta una tercera, el turno se
 // aparca en estado.turno_pendiente y lo reanuda el cron continuarTurno.
 
+
+
 const API = 'https://api.anthropic.com/v1/messages';
 
 // Capacidades por modelo. `effort` NO existe en Haiku 4.5 (devuelve error), y
@@ -1043,11 +1077,13 @@ function paramsModelo(modelo: string, effort?: string) {
   if (/haiku/.test(modelo)) return {};
   return { output_config: { effort: effort || 'low' } };
 }
+
 interface RespuestaModelo {
   bloques: any[];
   stop_reason: string;
   modelo: string;
 }
+
 async function llamarModelo(opts: {
   apiKey: string;
   modelos: string[];
@@ -1090,6 +1126,7 @@ async function llamarModelo(opts: {
   }
   return null;
 }
+
 interface ResultadoAgente {
   globos: string[];
   finTurno: boolean;
@@ -1224,6 +1261,7 @@ const POLITICA_VERSION = '2026-01';
 
 /** URL por defecto. Se puede sobreescribir con ConfigAgente.politica_datos_url. */
 const POLITICA_URL_DEFECTO = 'https://bit.ly/3imaawE';
+
 function urlPolitica(config: Record<string, any>): string {
   return String(config?.politica_datos_url || '').trim() || POLITICA_URL_DEFECTO;
 }
@@ -1274,6 +1312,11 @@ function marcaAutorizacion() {
 // El ruteo se paga una vez por HILO, no por mensaje: el nivel 0 (pegajosidad)
 // resuelve ~95% de los mensajes a costo cero. Esa sola decision es la que hace
 // viable el costo de la operacion.
+
+
+
+
+
 interface Decision { agente: Agente; nivel: 0 | 1 | 2; motivo: string }
 
 const normalizar = (s: unknown) =>
@@ -1310,6 +1353,7 @@ function porFrase(texto: string): Agente | null {
   for (const [agente, re] of FRASES) if (re.test(t)) return agente;
   return null;
 }
+
 async function decidirAgente(
   db: Db,
   estado: Estado,
@@ -1419,10 +1463,13 @@ async function clasificar(
 // equivocada.
 
 
+
+
 // Clave indexada de busqueda. Reemplaza el scan `?limit=500` que corria dos
 // veces por mensaje: no se despacha un full-table scan a cada WhatsApp que entra.
 const claveDe = (canal: string, tel: string) =>
   `${canal === 'telegram' ? 'tg' : 'wa'}:${String(tel).replace(/\D/g, '')}`;
+
 function identidadVacia(): Identidad {
   return {
     verificado: false, metodo: null,
@@ -1430,6 +1477,7 @@ function identidadVacia(): Identidad {
     verificado_en: null, expira: null, intentos: 0, bloqueado_hasta: null,
   };
 }
+
 function estadoVacio(): Estado {
   return {
     v: 2,
@@ -1499,7 +1547,9 @@ function migrar(raw: unknown): Estado {
     },
   };
 }
+
 interface MemoriaCargada { id: string | null; estado: Estado; fila: Record<string, any> | null }
+
 async function cargarEstado(db: Db, canal: string, tel: string): Promise<MemoriaCargada> {
   const clave = claveDe(canal, tel);
   // Primero por clave indexada; el fallback por telefono cubre las filas que
@@ -1512,6 +1562,7 @@ async function cargarEstado(db: Db, canal: string, tel: string): Promise<Memoria
   try { bruto = JSON.parse(fila.estado_json || '{}'); } catch { /* estado corrupto: se arranca limpio */ }
   return { id: fila.id, estado: migrar(bruto), fila };
 }
+
 function ctxDe(estado: Estado, agente: Agente): Record<string, any> {
   if (!estado.ctx[agente]) estado.ctx[agente] = {};
   return estado.ctx[agente];
@@ -1534,6 +1585,7 @@ function transferir(estado: Estado, destino: Agente, motivo: string) {
     ts: new Date().toISOString(),
   });
 }
+
 async function guardarEstado(
   db: Db,
   memoriaId: string | null,
@@ -1577,6 +1629,8 @@ async function guardarEstado(
 //
 // Se manda un RESUMEN, no la transcripcion: el humano necesita decidir en diez
 // segundos si llama ya, no leer treinta mensajes.
+
+
 
 const ETIQUETAS: Record<string, string> = {
   operacion: 'Operacion',
@@ -1666,10 +1720,13 @@ function briefLead(estado: Estado, tel: string, canal: string, extra: string[] =
 
 
 
+
+
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
 const COMPARTIDOS = new Set(['nombre', 'email', 'documento', 'direccion_inmueble']);
 const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'area_m2', 'habitaciones', 'nps_score']);
+
 const responder: Tool = {
   ...definirTool(
     'responder',
@@ -1718,6 +1775,7 @@ const responder: Tool = {
 // cliente. Es el tic que mas delata a un bot en espanol.
 const limpiar = (t: unknown) =>
   String(t ?? '').replace(/\s*[—–]\s*/g, ', ').replace(/\s{2,}/g, ' ').trim();
+
 const guardarDato: Tool = {
   ...definirTool(
     'guardar_dato',
@@ -1740,6 +1798,7 @@ const guardarDato: Tool = {
     return { ok: true, campo };
   },
 };
+
 const transferirA: Tool = {
   ...definirTool(
     'transferir_a',
@@ -1805,6 +1864,7 @@ const escalarAHumano: Tool = {
     return { ok: true, escalado: true };
   },
 };
+
 const COMUNES: Record<string, Tool> = {
   responder,
   guardar_dato: guardarDato,
@@ -1823,6 +1883,7 @@ function exigirVerificado(c: CtxTool): { error: string } | null {
   }
   return null;
 }
+
 const enviarMenu: Tool = {
   ...definirTool(
     'enviar_menu',
@@ -1853,6 +1914,7 @@ const enviarMenu: Tool = {
 // La rubrica vive en codigo y no en el prompt a proposito: un criterio de
 // priorizacion tiene que ser reproducible y auditable. Si el modelo decide la
 // temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.
+
 interface SenalesLead {
   // Del CRM
   etapa_pipeline?: string;
@@ -1872,6 +1934,7 @@ interface SenalesLead {
   decide_solo?: boolean;
   otra_inmobiliaria?: boolean;
 }
+
 interface Calificacion {
   score: number;             // 0-100
   temperatura: 'Frio' | 'Tibio' | 'Caliente' | 'Urgente';
@@ -1987,6 +2050,7 @@ async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; 
 const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
 }).format(Math.round(n)).replace(/\s+/g, '');
+
 const linkFicha = (p: any): string => String(
   p?.link_wasi
   || p?.portales?.metrocuadrado
@@ -1994,6 +2058,7 @@ const linkFicha = (p: any): string => String(
   || p?.portales?.mercadolibre
   || '',
 ).trim();
+
 const buscarInmuebles: Tool = {
   ...definirTool(
     'buscar_inmuebles',
@@ -2103,6 +2168,7 @@ const buscarInmuebles: Tool = {
     };
   },
 };
+
 const enviarFicha: Tool = {
   ...definirTool(
     'enviar_ficha',
@@ -2119,6 +2185,7 @@ const enviarFicha: Tool = {
     return { ok: true };
   },
 };
+
 const registrarInteres: Tool = {
   ...definirTool(
     'registrar_interes',
@@ -2166,6 +2233,7 @@ const registrarInteres: Tool = {
     };
   },
 };
+
 const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
@@ -2264,6 +2332,7 @@ const calificarLead: Tool = {
     };
   },
 };
+
 const agendarVisita: Tool = {
   ...definirTool(
     'agendar_visita',
@@ -2286,6 +2355,7 @@ const agendarVisita: Tool = {
     return { ok: true, nota: 'Dile que el asesor le confirma el horario. No des una hora tu.' };
   },
 };
+
 const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
@@ -2304,6 +2374,8 @@ const VENTAS: Record<string, Tool> = {
 
 
 
+
+
 const HORAS_VIGENCIA = 24;
 const MAX_INTENTOS = 3;
 const BLOQUEO_MIN = 60;
@@ -2315,6 +2387,7 @@ async function sha256(txt: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
 async function auditar(
   db: Db,
   datos: { tipo: string; sujeto_id?: string; telefono: string; exito: boolean; detalle?: string },
@@ -2350,11 +2423,13 @@ async function reconocerTelefono(db: Db, tel: string) {
   }
   return { arrendatario, propietario: props[0] || null, contrato };
 }
+
 function sesionVigente(estado: Estado): boolean {
   const i = estado.identidad;
   if (!i.verificado || !i.expira) return false;
   return new Date(i.expira).getTime() > Date.now();
 }
+
 function bloqueado(estado: Estado): boolean {
   const h = estado.identidad.bloqueado_hasta;
   return !!h && new Date(h).getTime() > Date.now();
@@ -2527,6 +2602,7 @@ const consultarEstadoCuenta: Tool = {
     };
   },
 };
+
 const enviarLinkPortal: Tool = {
   ...definirTool(
     'enviar_link_portal',
@@ -2547,6 +2623,7 @@ const enviarLinkPortal: Tool = {
     return { ok: true, nota: 'El link ya se envio. No lo repitas en responder.' };
   },
 };
+
 const enviarCodigoBarras: Tool = {
   ...definirTool(
     'enviar_codigo_barras',
@@ -2578,6 +2655,7 @@ const enviarCodigoBarras: Tool = {
     return { ok: true, periodo, nota: 'Ya se envio el link. No lo repitas en responder.' };
   },
 };
+
 const CARTERA: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   consultar_estado_cuenta: consultarEstadoCuenta,
@@ -2636,6 +2714,7 @@ const registrarReparacion: Tool = {
     };
   },
 };
+
 const adjuntarEvidencia: Tool = {
   ...definirTool(
     'adjuntar_evidencia',
@@ -2656,6 +2735,7 @@ const adjuntarEvidencia: Tool = {
     return { ok: true };
   },
 };
+
 const consultarEstadoReparacion: Tool = {
   ...definirTool(
     'consultar_estado_reparacion',
@@ -2685,6 +2765,7 @@ const consultarEstadoReparacion: Tool = {
     };
   },
 };
+
 const MANTENIMIENTO: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   registrar_reparacion: registrarReparacion,
@@ -2758,6 +2839,7 @@ const registrarConsignacion: Tool = {
     };
   },
 };
+
 const agendarAvaluoPrevio: Tool = {
   ...definirTool(
     'agendar_avaluo_previo',
@@ -2776,6 +2858,7 @@ const agendarAvaluoPrevio: Tool = {
     return { ok: true, nota: 'Dile que el asesor le confirma el dia. No des una hora tu.' };
   },
 };
+
 const CONSIGNACION: Record<string, Tool> = {
   registrar_consignacion: registrarConsignacion,
   agendar_avaluo_previo: agendarAvaluoPrevio,
@@ -2832,6 +2915,7 @@ const registrarSolicitudAvaluo: Tool = {
     };
   },
 };
+
 const cotizarAvaluo: Tool = {
   ...definirTool(
     'cotizar_avaluo',
@@ -2849,6 +2933,7 @@ const cotizarAvaluo: Tool = {
     };
   },
 };
+
 const AVALUOS: Record<string, Tool> = {
   registrar_solicitud_avaluo: registrarSolicitudAvaluo,
   cotizar_avaluo: cotizarAvaluo,
@@ -2879,6 +2964,7 @@ const DIAS_DEFECTO: Record<string, number> = {
   Sugerencia:   15,
   Felicitacion: 15,
 };
+
 const registrarPqr: Tool = {
   ...definirTool(
     'registrar_pqr',
@@ -2947,6 +3033,7 @@ const registrarPqr: Tool = {
     };
   },
 };
+
 const consultarEstadoPqr: Tool = {
   ...definirTool(
     'consultar_estado_pqr',
@@ -2971,6 +3058,7 @@ const consultarEstadoPqr: Tool = {
     };
   },
 };
+
 const PQR: Record<string, Tool> = {
   registrar_pqr: registrarPqr,
   consultar_estado_pqr: consultarEstadoPqr,
@@ -2979,6 +3067,9 @@ const PQR: Record<string, Tool> = {
 // ─── _core/tools/matricula.ts ────────────────────────────────────
 // Matricula de contrato — intake de datos para reemplazar el formulario F117.
 // La lista documental y su canal seguro siguen pendientes de definicion.
+
+
+
 const iniciarMatricula: Tool = {
   ...definirTool(
     'iniciar_matricula',
@@ -3026,6 +3117,7 @@ const iniciarMatricula: Tool = {
     };
   },
 };
+
 const agregarParticipante: Tool = {
   ...definirTool(
     'agregar_participante',
@@ -3067,6 +3159,7 @@ const agregarParticipante: Tool = {
     return { ok: true, total_participantes: lista.length, instruccion: 'Confirma y preguntale si falta alguien mas.' };
   },
 };
+
 const finalizarMatricula: Tool = {
   ...definirTool(
     'finalizar_matricula',
@@ -3113,6 +3206,7 @@ const enviarLinkDocumentos: Tool = {
     };
   },
 };
+
 const MATRICULA: Record<string, Tool> = {
   iniciar_matricula: iniciarMatricula,
   agregar_participante: agregarParticipante,
@@ -3136,6 +3230,8 @@ const MATRICULA: Record<string, Tool> = {
 
 
 
+
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
@@ -3147,6 +3243,7 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
   pqr:           PQR,
   matricula:     MATRICULA,
 };
+
 function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
   const todas = { ...COMUNES, ...(EXTRA[agente] || {}) };
   // AgentePrompt.tools_habilitadas permite recortar (nunca ampliar) el set sin
@@ -3158,6 +3255,7 @@ function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
 // Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
+
 async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
@@ -3178,6 +3276,7 @@ function base64(buf: ArrayBuffer): string {
   }
   return btoa(bin);
 }
+
 async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
@@ -3202,6 +3301,7 @@ async function describirImagen(
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
 const GRAPH = 'https://graph.facebook.com/v19.0';
+
 const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
@@ -3218,6 +3318,7 @@ async function descargarMedia(mediaId: string, waToken: string) {
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
 }
+
 async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
@@ -3271,6 +3372,7 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
 
   return null;
 }
+
 async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
@@ -3296,6 +3398,7 @@ async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToke
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
 const API = (token: string) => `https://api.telegram.org/bot${token}`;
+
 const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
@@ -3308,6 +3411,7 @@ async function descargarMedia(fileId: string, tgToken: string) {
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
 }
+
 async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
@@ -3357,6 +3461,7 @@ async function normalizar(
 
   return null;
 }
+
 async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -3365,6 +3470,7 @@ async function enviar(destino: string, texto: string, env: { tgToken: string }) 
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
 }
+
 async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
@@ -3484,6 +3590,8 @@ function secretoIgual(recibido: string | null, esperado: string): boolean {
 //
 // Los dos cambios estructurales frente al motor viejo son rutear ANTES de
 // cargar, y encolar siempre en vez de entregar inline.
+
+
 
 
 

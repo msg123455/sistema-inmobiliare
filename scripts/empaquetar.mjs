@@ -36,7 +36,20 @@ const soloCheck = args.includes('--check');
 const objetivos = args.filter((a) => !a.startsWith('--'));
 const funciones = objetivos.length ? objetivos : EMPAQUETAR;
 
-const RE_IMPORT_REL = /^\s*import\s+(?:type\s+)?(?:[\s\S]*?)\s+from\s+'(\.[^']+)';?\s*$/gm;
+// `H` = espacio horizontal: todo lo blanco MENOS los saltos de linea.
+//
+// Con `\s*` el borrado se comia los saltos: "// nota\r\n\r\nexport type X" quedaba
+// como "// nota\rtype X", con un \r suelto que tecnicamente sigue siendo
+// terminador —por eso compilaba— pero dejaba el bundle como una sola linea para
+// grep y cualquier editor. Peor: Base44 lo normaliza al desplegar y devuelve un
+// archivo distinto del que genera este script, asi que `--check` fallaba en cada
+// despliegue y habia que reempaquetar y volver a subir, en bucle.
+const H = '[^\\S\\r\\n]';
+
+const RE_IMPORT_REL = new RegExp(
+  `^${H}*import${H}+(?:type${H}+)?(?:[\\s\\S]*?)${H}+from${H}+'(\\.[^']+)';?${H}*$`,
+  'gm',
+);
 
 /** Quita imports/exports entre modulos propios; conserva los de npm/deno. */
 function limpiar(src, esEntry) {
@@ -45,9 +58,9 @@ function limpiar(src, esEntry) {
   // y dejar los `export` haria que Deno lo trate como modulo con exports sueltos.
   if (!esEntry) {
     out = out
-      .replace(/^\s*export\s+(const|function|async function|class|interface|type|enum)\b/gm, '$1')
-      .replace(/^\s*export\s+default\s+/gm, '')
-      .replace(/^\s*export\s*\{[^}]*\};?\s*$/gm, '');
+      .replace(new RegExp(`^${H}*export${H}+(const|function|async function|class|interface|type|enum)\\b`, 'gm'), '$1')
+      .replace(new RegExp(`^${H}*export${H}+default${H}+`, 'gm'), '')
+      .replace(new RegExp(`^${H}*export${H}*\\{[^}]*\\};?${H}*$`, 'gm'), '');
   }
   return out.trim();
 }
