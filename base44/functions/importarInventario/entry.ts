@@ -82,7 +82,10 @@ const MOJIBAKE: Array<[RegExp, string]> = [
  * forma de saberlo: escribir cualquiera de los dos seria inventar el dato. Se
  * dejan como estan y la funcion los reporta para que se corrijan en el origen.
  */
-export const acentoRoto = (s: string) => /[\u00C2\u00C3]/.test(s);
+// Sin `export`: un entry de Base44 es un script, no un modulo. Basta un export
+// suelto para que Deno lo trate como modulo ES, Base44 no lo registre y la
+// funcion responda 404 \u2014 que es justo lo que paso al agregar esta linea.
+const acentoRoto = (s: string) => /[\u00C2\u00C3]/.test(s);
 
 function repararAcentos(s: string): string {
   if (!s.includes('\u00C3') && !s.includes('\u00C2')) return s;
