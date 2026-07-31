@@ -285,15 +285,34 @@ export default function ImportarInventario() {
         <Card className="rounded-2xl border-border/60">
           <CardContent className="p-5 space-y-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600" />
+              {resultado.error
+                ? <AlertTriangle className="w-4 h-4 text-destructive" />
+                : <CheckCircle2 className="w-4 h-4 text-green-600" />}
               <h2 className="text-sm font-semibold">
-                {resultado.simulado ? 'Simulación (no se escribió nada)' : 'Importación completada'}
+                {resultado.error
+                  ? 'La importación no pudo correr'
+                  : resultado.simulado ? 'Simulación (no se escribió nada)' : 'Importación completada'}
               </h2>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+
+            {/* El fallo de la llamada ENTERA vivia solo en un toast que se
+                desvanece, y el panel lo pintaba como "Importación completada"
+                con 0/0/0: una proteccion que salta se leia como exito y no
+                habia forma de saber por que no entraba nada. */}
+            {!!resultado.error && (
+              <div className="text-sm bg-destructive/10 rounded-xl p-4 space-y-1">
+                <p className="font-medium text-destructive">No se escribió nada</p>
+                <p className="text-muted-foreground break-words">{resultado.error}</p>
+              </div>
+            )}
+
+            <div className="grid grid-cols-4 gap-3">
               {[
                 { n: resultado.creados, l: resultado.simulado ? 'se crearían' : 'creados' },
                 { n: resultado.actualizados, l: 'actualizados' },
+                // Se separa de "sin código" a proposito: dejarlos fuera es una
+                // decision, no un dato malo.
+                { n: resultado.omitidosFecha, l: `anteriores a ${DESDE_ANIO}` },
                 { n: resultado.omitidos, l: 'omitidos (sin código)' },
               ].map((x) => (
                 <div key={x.l} className="bg-muted/40 rounded-xl p-3 text-center">
