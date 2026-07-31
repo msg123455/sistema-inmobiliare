@@ -174,6 +174,43 @@ Deno.serve(async (req) => {
 
   if (body?.token !== TOKEN) return json({ error: 'No autorizado' }, 401);
 
+  const apiKey = Deno.env.get('BASE44_API_KEY') || '';
+  if (!apiKey) return json({ error: 'BASE44_API_KEY no configurada' }, 500);
+  const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
+
+  // ── Diagnostico del esquema vivo ───────────────────────────────────────────
+  //
+  // El esquema de Base44 no se puede leer desde el repo: la plataforma revierte
+  // las ediciones a los .jsonc, asi que un campo puede estar en el archivo y no
+  // existir en la base. Y cuando no existe, Base44 lo DESCARTA EN SILENCIO al
+  // escribir: no falla, simplemente se pierde el dato.
+  //
+  // Esto lee una fila real y reporta que campos volvieron. Es la unica forma de
+  // saber con que estamos trabajando antes de meter 400 inmuebles.
+  if (body?.diagnostico === true) {
+    const r = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
+    if (!r.ok) return json({ error: `No se pudo leer Propiedad: ${r.status}` }, 500);
+    const filas0 = await r.json();
+    const muestra = Array.isArray(filas0) ? filas0[0] : null;
+
+    const NECESARIOS = ['proveedor', 'codigo_externo', 'zona', 'procedencia', 'portales'];
+    const presentes = muestra ? Object.keys(muestra) : [];
+    const faltan = NECESARIOS.filter((c) => !presentes.includes(c));
+
+    return json({
+      ok: true,
+      modo: 'diagnostico',
+      hay_inmuebles: !!muestra,
+      total_campos: presentes.length,
+      campos: presentes.sort(),
+      faltan,
+      dedup_posible: faltan.includes('codigo_externo') || faltan.includes('proveedor') ? false : true,
+      nota: faltan.length
+        ? `Faltan ${faltan.length} campos en Propiedad. Sin codigo_externo + proveedor la importacion DUPLICA todo el catalogo en cada corrida.`
+        : 'Propiedad tiene todo lo necesario para importar sin duplicar.',
+    });
+  }
+
   const filas: Record<string, unknown>[] = Array.isArray(body?.filas) ? body.filas : [];
   const proveedor: string = txt(body?.proveedor) || 'simi';
   const desde = Number(body?.desde) || 0;
@@ -181,9 +218,33 @@ Deno.serve(async (req) => {
 
   if (!filas.length) return json({ error: 'No llegaron filas' }, 400);
 
-  const apiKey = Deno.env.get('BASE44_API_KEY') || '';
-  if (!apiKey) return json({ error: 'BASE44_API_KEY no configurada' }, 500);
-  const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
+  // Antes de escribir nada, comprobar que Propiedad puede deduplicar. Sin
+  // codigo_externo + proveedor, cada corrida crearia el catalogo entero de nuevo:
+  // con 400 inmuebles, tres importaciones dejan 1200 registros y limpiarlos a
+  // mano no es viable. Se falla ruidoso en vez de ensuciar la base.
+  //
+  // Solo en la primera tanda: revisarlo en cada lote serian 10 lecturas de mas.
+  if (desde === 0 && !simular) {
+    const rEsq = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
+    if (rEsq.ok) {
+      const arr = await rEsq.json();
+      const muestra = Array.isArray(arr) ? arr[0] : null;
+      // Si no hay ni un inmueble no se puede inspeccionar el esquema. Se deja
+      // pasar: la primera importacion no tiene nada con que duplicar.
+      if (muestra) {
+        const faltan = ['codigo_externo', 'proveedor'].filter((c) => !(c in muestra));
+        if (faltan.length) {
+          return json({
+            error: 'esquema_incompleto',
+            faltan,
+            mensaje: `Propiedad no tiene ${faltan.join(' ni ')}. Sin esos campos la importacion `
+              + 'duplicaria todo el catalogo en cada corrida. Creelos en Base44 (Datos > Propiedad) '
+              + 'y vuelve a intentar. Para ver el esquema actual: llama con { diagnostico: true }.',
+          }, 409);
+        }
+      }
+    }
+  }
 
   const lote = filas.slice(desde, desde + LOTE_MAX);
   const res = { creados: 0, actualizados: 0, omitidos: 0, errores: [] as string[] };

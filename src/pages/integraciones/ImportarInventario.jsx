@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +32,17 @@ const COLUMNAS_ESPERADAS = [
 const normalizar = (s) =>
   String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s_]/g, '');
 
+
+/** Aviso bloqueante. Se usa cuando el esquema de Base44 impide importar bien. */
+function Alerta({ children }) {
+  return (
+    <div className="flex items-start gap-2.5 text-sm text-destructive bg-destructive/10 rounded-xl p-4">
+      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <div>{children}</div>
+    </div>
+  );
+}
+
 export default function ImportarInventario() {
   const qc = useQueryClient();
   const inputRef = useRef(null);
@@ -42,6 +53,17 @@ export default function ImportarInventario() {
   const [progreso, setProgreso] = useState(null); // { hechas, total }
   const [resultado, setResultado] = useState(null);
   const [corriendo, setCorriendo] = useState(false);
+
+  // Revisa que Propiedad pueda deduplicar ANTES de dejar importar. El esquema de
+  // Base44 no se puede leer desde el repo —la plataforma revierte los .jsonc— y
+  // un campo que no existe se DESCARTA EN SILENCIO al escribir. Sin esta
+  // comprobacion, la unica forma de enterarse seria ver el catalogo duplicado.
+  const [esquema, setEsquema] = useState(null);
+  useEffect(() => {
+    callFunction('importarInventario', { diagnostico: true })
+      .then(setEsquema)
+      .catch(() => setEsquema(null));
+  }, []);
 
   const leerArchivo = async (file) => {
     if (!file) return;
@@ -65,6 +87,7 @@ export default function ImportarInventario() {
   // acentos, mayusculas y espacios.
   const tieneColumna = (esperada) => columnas.some((c) => normalizar(c) === normalizar(esperada));
   const faltaRequerida = COLUMNAS_ESPERADAS.filter((c) => c.requerida && !tieneColumna(c.nombre));
+  const esquemaIncompleto = (esquema?.faltan?.length || 0) > 0;
 
   const ejecutar = async (simular) => {
     if (!filas.length) return;
@@ -112,6 +135,24 @@ export default function ImportarInventario() {
           volver a importar el mismo archivo sin duplicar nada.
         </p>
       </div>
+
+      {/* Estado del esquema: si Propiedad no puede deduplicar, importar duplica todo */}
+      {esquema?.faltan?.length > 0 && (
+        <Alerta>
+          <p className="font-medium">
+            Faltan {esquema.faltan.length} campos en la tabla Propiedad de Base44
+          </p>
+          <p className="mt-1">
+            Sin <strong>{esquema.faltan.join('</strong>, <strong>')}</strong> cada importación
+            volvería a crear el catálogo entero en vez de actualizarlo. Con 400 inmuebles, tres
+            importaciones dejan 1.200 registros.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Se crean en Base44 → Datos → Propiedad, todos de tipo texto. La importación queda
+            bloqueada hasta entonces.
+          </p>
+        </Alerta>
+      )}
 
       {/* Carga */}
       <Card className="rounded-2xl border-border/60">
@@ -180,14 +221,14 @@ export default function ImportarInventario() {
             <div className="flex gap-2 pt-1">
               <Button
                 variant="outline"
-                disabled={corriendo || !!faltaRequerida.length}
+                disabled={corriendo || !!faltaRequerida.length || esquemaIncompleto}
                 onClick={() => ejecutar(true)}
                 className="rounded-lg gap-1.5"
               >
                 <Eye className="w-4 h-4" /> Simular
               </Button>
               <Button
-                disabled={corriendo || !!faltaRequerida.length}
+                disabled={corriendo || !!faltaRequerida.length || esquemaIncompleto}
                 onClick={() => ejecutar(false)}
                 className="rounded-lg gap-1.5"
               >

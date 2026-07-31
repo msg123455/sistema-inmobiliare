@@ -193,9 +193,11 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
   assert.ok(f2026.has('2026-01-12'), 'Reyes se corre al lunes 12');
   assert.ok(!f2026.has('2026-01-06'), 'Reyes NO queda el 6 (Ley Emiliani)');
 
-  // 2025: dos festivos coinciden (San Pedro y Sagrado Corazon el 30 de junio),
-  // asi que el Set trae 17 y no 18. Es correcto, no un bug de conteo.
-  assert.equal(festivosColombia(2025).size, 17, '2025: San Pedro y Sagrado Corazon coinciden');
+  // Hay anios donde dos festivos caen el mismo dia y el Set trae 17, no 18.
+  // Es correcto y no un error de conteo: se prueba con 2030, que es el proximo
+  // que lo tiene. El calculo corre siempre hacia adelante, asi que no tiene
+  // sentido anclar el test a un anio ya pasado.
+  assert.equal(festivosColombia(2030).size, 17, '2030: dos festivos coinciden');
 
   assert.equal(esHabil(new Date('2026-01-01T12:00:00Z')), false, 'festivo no es habil');
   assert.equal(esHabil(new Date('2026-08-01T12:00:00Z')), false, 'sabado no es habil');
