@@ -20,7 +20,7 @@
 // confirmado. Cuando lo este, esto se parte en _core/inventario/.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const TOKEN = Deno.env.get('IMPORT_TOKEN') || 'INVENTARIO2026';
 
 // Base44 corta las funciones alrededor de los 15s, asi que la importacion va
@@ -163,6 +163,10 @@ function json(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
 
   let body: any;

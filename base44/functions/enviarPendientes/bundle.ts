@@ -9,9 +9,7 @@
 //
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
-// equivocada.
-type Filtro = Record<string, string | number | boolean | undefined | null>;
-function crearDb(apiKey: string, baseUrl?: string) {
+// equivocada.type Filtro = Record<string, string | number | boolean | undefined | null>;function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
@@ -104,8 +102,7 @@ function crearDb(apiKey: string, baseUrl?: string) {
   }
 
   return { base, list, uno, crear, actualizar, guardar };
-}
-type Db = ReturnType<typeof crearDb>;
+}type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
@@ -464,8 +461,7 @@ No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmu
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.
-const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -537,8 +533,7 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.
-async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -622,8 +617,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};
-async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -633,8 +627,7 @@ async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: E
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.
-function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -670,8 +663,7 @@ function armarSystem(
 }
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
-// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
-async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
+// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
   fd.append('model', 'whisper-1');
@@ -690,8 +682,7 @@ function base64(buf: ArrayBuffer): string {
     bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
   }
   return btoa(bin);
-}
-async function describirImagen(
+}async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -714,8 +705,7 @@ async function describirImagen(
 }
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
-const GRAPH = 'https://graph.facebook.com/v19.0';
-const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
+const GRAPH = 'https://graph.facebook.com/v19.0';const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
   const d = String(t).replace(/\D/g, '');
@@ -730,8 +720,7 @@ async function descargarMedia(mediaId: string, waToken: string) {
   const rBin = await fetch(meta.url, { headers: { Authorization: `Bearer ${waToken}` } });
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
-}
-async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
+}async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
   if (!m?.from) return null;
@@ -783,8 +772,7 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
   }
 
   return null;
-}
-async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
+}async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.waToken}`, 'Content-Type': 'application/json' },
@@ -795,8 +783,7 @@ async function enviar(destino: string, texto: string, env: { waPhoneId: string; 
 }
 
 // Indicador de "escribiendo" real de Meta. Sustituye al sleep dentro del webhook:
-// la pausa la hace el worker de entrega, no el request.
-async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
+// la pausa la hace el worker de entrega, no el request.async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
   if (!msgId) return;
   try {
     await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
@@ -808,8 +795,7 @@ async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToke
 }
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
-const API = (token: string) => `https://api.telegram.org/bot${token}`;
-const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
+const API = (token: string) => `https://api.telegram.org/bot${token}`;const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
   const rInfo = await fetch(`${API(tgToken)}/getFile?file_id=${encodeURIComponent(fileId)}`);
@@ -820,8 +806,7 @@ async function descargarMedia(fileId: string, tgToken: string) {
   if (!rBin.ok) return null;
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
-}
-async function normalizar(
+}async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
 ): Promise<Entrada | null> {
@@ -869,16 +854,14 @@ async function normalizar(
   }
 
   return null;
-}
-async function enviar(destino: string, texto: string, env: { tgToken: string }) {
+}async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: Number(destino), text: texto }),
   });
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
-}
-async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
+}async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -924,8 +907,7 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
   matricula:     'TELEGRAM_BOT_MATRICULA',
 };
 
-/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */
-function tokenDeAgente(agente?: string | null): string {
+/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */function tokenDeAgente(agente?: string | null): string {
   const compartido = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
   if (!agente || !esAgente(agente)) return compartido;
   return Deno.env.get(VAR_POR_AGENTE[agente]) || compartido;
@@ -934,14 +916,12 @@ function tokenDeAgente(agente?: string | null): string {
 /**
  * Agente al que pertenece esta peticion, segun `?agente=` de la URL del webhook.
  * Devuelve null si no viene o no es valido — ahi manda el router, como siempre.
- */
-function agenteDeUrl(url: URL): Agente | null {
+ */function agenteDeUrl(url: URL): Agente | null {
   const v = url.searchParams.get('agente');
   return v && esAgente(v) ? v : null;
 }
 
-/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */
-function agentesConBot(): Agente[] {
+/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */function agentesConBot(): Agente[] {
   return (Object.keys(VAR_POR_AGENTE) as Agente[])
     .filter((a) => !!Deno.env.get(VAR_POR_AGENTE[a]));
 }
@@ -955,9 +935,6 @@ function agentesConBot(): Agente[] {
 //
 // La simulacion de tipeo vive aqui, no en el webhook: el request de entrada
 // tiene 15s y no puede gastarlos durmiendo.
-
-
-
 
 
 const MAX_POR_CORRIDA = 40;
