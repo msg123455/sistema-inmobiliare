@@ -105,7 +105,6 @@ const NAV_SECTIONS = [
     basePath: '/integraciones',
     items: [
       { label: 'Importar inventario', path: '/integraciones/inventario' },
-      { label: 'WASI', path: '/integraciones/wasi' },
     ],
   },
 ];

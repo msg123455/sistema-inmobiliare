@@ -19,7 +19,6 @@ const CANAL_COLORS = {
   Referido: '#10B981',
   Portal_web: '#F59E0B',
   Redes_sociales: '#EC4899',
-  WASI: '#8B5CF6',
   Publicidad: '#3B82F6',
   Evento: '#14B8A6',
   Otro: '#9CA3AF',

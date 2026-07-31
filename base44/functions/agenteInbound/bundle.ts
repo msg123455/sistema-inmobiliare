@@ -2051,11 +2051,18 @@ const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
 }).format(Math.round(n)).replace(/\s+/g, '');
 
+// La ficha que se le manda al cliente. Se prefiere el portal donde el inmueble
+// esta publicado de verdad; `link_wasi` salio de aqui porque INMOBILIARE no usa
+// Wasi —era residuo de la app de la que se clono esto— y estaba de PRIMERO, asi
+// que bastaba que alguien llenara ese campo para mandarle al cliente el link de
+// otra plataforma.
 const linkFicha = (p: any): string => String(
-  p?.link_wasi
-  || p?.portales?.metrocuadrado
+  p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
+  || p?.portales?.lahaus
+  || p?.portales?.ciencuadras
+  || p?.portales?.properati
   || '',
 ).trim();
 

@@ -49,7 +49,7 @@ function CampanaForm({ initial = {}, propiedades = [], onSave, onCancel }) {
         <Textarea value={form.trigger_mensaje} onChange={e => set('trigger_mensaje', e.target.value)} rows={3} placeholder={"quiero mas informacion\ny estoy buscando\ncon gusto mi nombre es"} />
         <Label className="text-xs">Info que Valentina manda de una <span className="text-muted-foreground">(opcional; si se deja vacío, la arma con los inmuebles de abajo)</span></Label>
         <Textarea value={form.mensaje_bienvenida} onChange={e => set('mensaje_bienvenida', e.target.value)} rows={2} placeholder="Ej: La casa en Santa Ana: 480m², 3 hab, $8.700 millones. Con gusto coordinamos una visita." />
-        <Label className="text-xs">Link de la ficha (manual) <span className="text-muted-foreground">— pégalo tú para asegurar que sea el correcto; tiene prioridad sobre el de WASI</span></Label>
+        <Label className="text-xs">Link de la ficha (manual) <span className="text-muted-foreground">— es el que se le manda al cliente cuando pide fotos</span></Label>
         <Input value={form.link_ficha} onChange={e => set('link_ficha', e.target.value)} placeholder="https://... (la página con las fotos y detalles de ESTE inmueble)" />
       </div>
 

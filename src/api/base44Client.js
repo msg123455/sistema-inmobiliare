@@ -25,7 +25,6 @@ export const Nota = base44.entities.Nota;
 export const MensajeTemplate = base44.entities.MensajeTemplate;
 export const MensajeEnviado = base44.entities.MensajeEnviado;
 export const CampanaSocial = base44.entities.CampanaSocial;
-export const WasiConfig = base44.entities.WasiConfig;
 export const ConfigSEO = base44.entities.ConfigSEO;
 
 // IA Agente entities

@@ -155,15 +155,6 @@
       "default": false,
       "description": "Señal de ruteo nivel A: un cliente actual que escribe sin decir a que viene va a cartera, no a ventas"
     },
-    "fuente_wasi": {
-      "type": "boolean",
-      "description": "Lead proveniente de WASI",
-      "default": false
-    },
-    "wasi_lead_id": {
-      "type": "string",
-      "description": "ID del lead en WASI.co"
-    },
     "autoriza_tratamiento": {
       "type": "boolean",
       "default": false,

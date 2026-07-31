@@ -4,11 +4,11 @@
   "properties": {
     "titulo": {
       "type": "string",
-      "description": "T\u00edtulo del inmueble"
+      "description": "Título del inmueble"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripci\u00f3n del inmueble"
+      "description": "Descripción del inmueble"
     },
     "tipo": {
       "type": "string",
@@ -27,7 +27,7 @@
     },
     "operacion": {
       "type": "string",
-      "description": "Tipo de operaci\u00f3n",
+      "description": "Tipo de operación",
       "enum": [
         "Venta",
         "Arriendo",
@@ -57,36 +57,36 @@
     },
     "administracion": {
       "type": "number",
-      "description": "Cuota de administraci\u00f3n mensual en COP"
+      "description": "Cuota de administración mensual en COP"
     },
     "comision_pct": {
       "type": "number",
-      "description": "Porcentaje de comisi\u00f3n",
+      "description": "Porcentaje de comisión",
       "default": 3
     },
     "area_m2": {
       "type": "number",
-      "description": "\u00c1rea en metros cuadrados"
+      "description": "Área en metros cuadrados"
     },
     "habitaciones": {
       "type": "number",
-      "description": "N\u00famero de habitaciones"
+      "description": "Número de habitaciones"
     },
     "banos": {
       "type": "number",
-      "description": "N\u00famero de ba\u00f1os"
+      "description": "Número de baños"
     },
     "parqueaderos": {
       "type": "number",
-      "description": "N\u00famero de parqueaderos"
+      "description": "Número de parqueaderos"
     },
     "estrato": {
       "type": "number",
-      "description": "Estrato socioecon\u00f3mico (1-6)"
+      "description": "Estrato socioeconómico (1-6)"
     },
     "piso": {
       "type": "number",
-      "description": "N\u00famero de piso"
+      "description": "Número de piso"
     },
     "ciudad": {
       "type": "string",
@@ -98,7 +98,7 @@
     },
     "direccion": {
       "type": "string",
-      "description": "Direcci\u00f3n completa"
+      "description": "Dirección completa"
     },
     "latitud": {
       "type": "number",
@@ -121,7 +121,11 @@
     },
     "proveedor": {
       "type": "string",
-      "enum": ["simi", "wasi", "csv", "manual"],
+      "enum": [
+        "simi",
+        "csv",
+        "manual"
+      ],
       "default": "manual",
       "description": "De donde vino el registro. Clave unica: proveedor + codigo_externo."
     },
@@ -153,15 +157,16 @@
       "type": "object",
       "description": "Publicación en portales externos (columnas METROCUADRADO, FINCARAIZ, MERCADOLIBRE de la hoja Inventario)",
       "properties": {
-        "metrocuadrado": { "type": "string" },
-        "fincaraiz": { "type": "string" },
-        "mercadolibre": { "type": "string" }
+        "metrocuadrado": {
+          "type": "string"
+        },
+        "fincaraiz": {
+          "type": "string"
+        },
+        "mercadolibre": {
+          "type": "string"
+        }
       }
-    },
-    "publicado_wasi": {
-      "type": "boolean",
-      "description": "Publicado en WASI.co",
-      "default": false
     },
     "publicado_instagram": {
       "type": "boolean",
@@ -172,19 +177,6 @@
       "type": "boolean",
       "description": "Publicado en Facebook",
       "default": false
-    },
-    "fuente_wasi": {
-      "type": "boolean",
-      "description": "Importado desde WASI",
-      "default": false
-    },
-    "wasi_id": {
-      "type": "string",
-      "description": "ID de la propiedad en WASI.co"
-    },
-    "link_wasi": {
-      "type": "string",
-      "description": "URL de la propiedad en WASI.co"
     },
     "link_instagram": {
       "type": "string",

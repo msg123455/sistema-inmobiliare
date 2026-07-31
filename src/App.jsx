@@ -51,7 +51,6 @@ import AgenteSocial from '@/pages/marketing/AgenteSocial.jsx';
 import Campanas from '@/pages/marketing/Campanas.jsx';
 
 // Integraciones
-import WasiIntegracion from '@/pages/integraciones/WasiIntegracion.jsx';
 import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
 
 // Portal del cliente (arrendatarios y propietarios) — arbol aparte, sin auth de staff
@@ -151,7 +150,6 @@ const AuthenticatedApp = () => {
         <Route path="/marketing/campanas" element={<Campanas />} />
 
         {/* Integraciones */}
-        <Route path="/integraciones/wasi" element={<WasiIntegracion />} />
         <Route path="/integraciones/inventario" element={<ImportarInventario />} />
 
         {/* IA Agente */}

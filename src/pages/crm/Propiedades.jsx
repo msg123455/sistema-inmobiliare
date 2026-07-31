@@ -35,7 +35,7 @@ function PropiedadForm({ initial = {}, onSave, onCancel }) {
     titulo: '', tipo: 'Apartamento', operacion: 'Venta', estado: 'Disponible',
     precio_venta: '', canon_arriendo: '', area_m2: '', habitaciones: '',
     banos: '', parqueaderos: '', estrato: '', ciudad: '', barrio: '', direccion: '',
-    descripcion: '', comision_pct: '3', link_wasi: '', link_instagram: '',
+    descripcion: '', comision_pct: '3', link_instagram: '',
     ...initial,
   });
   const [loading, setLoading] = useState(false);
@@ -110,7 +110,6 @@ function PropiedadForm({ initial = {}, onSave, onCancel }) {
       </div>
       <div><Label>Dirección</Label><Input value={form.direccion} onChange={e => set('direccion', e.target.value)} /></div>
       <div><Label>Descripción</Label><Textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)} rows={3} /></div>
-      <div><Label>Link de fotos (WASI)</Label><Input value={form.link_wasi || ''} onChange={e => set('link_wasi', e.target.value)} placeholder="https://... (Valentina lo manda cuando el lead pide fotos)" /></div>
       <div><Label>Link de Instagram (video)</Label><Input value={form.link_instagram || ''} onChange={e => set('link_instagram', e.target.value)} placeholder="https://instagram.com/... (Valentina lo manda cuando el lead pide video)" /></div>
       <div className="flex gap-2 pt-2">
         <Button className="flex-1" onClick={handleSave} disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
@@ -169,7 +168,6 @@ function PropiedadCard({ propiedad, onRefresh }) {
         </div>
 
         <div className="flex items-center gap-1 flex-wrap mb-3">
-          {propiedad.publicado_wasi && <Badge className="text-[10px] bg-blue-100 text-blue-700">WASI</Badge>}
           {propiedad.publicado_instagram && <Badge className="text-[10px] bg-pink-100 text-pink-700">IG</Badge>}
           {propiedad.publicado_facebook && <Badge className="text-[10px] bg-indigo-100 text-indigo-700">FB</Badge>}
         </div>
