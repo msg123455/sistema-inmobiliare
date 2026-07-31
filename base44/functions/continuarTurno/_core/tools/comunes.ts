@@ -2,6 +2,7 @@
 
 import { definirTool, str, strOpc, bool, lista, enumStr, AGENTES, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe, transferir } from '../state.ts';
+import { briefLead } from '../brief.ts';
 
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
@@ -121,10 +122,16 @@ export const escalarAHumano: Tool = {
     c.efectos.escalado = { motivo, prioridad };
 
     const nombre = String(c.estado.compartido.nombre || '') || `+${c.entrada.tel}`;
+
+    // Brief ejecutivo en vez de "telefono + una frase". Todo lo que guardar_dato
+    // acumulo durante la conversacion viaja con el escalamiento: sin esto el
+    // asesor volvia a preguntarle al cliente lo que ya habia contestado.
+    const brief = briefLead(c.estado, c.entrada.tel, c.entrada.canal, [`MOTIVO: ${motivo}`]);
+
     await c.db.crear('Tarea', {
       contacto_id: String(c.estado.compartido.contacto_id || ''),
       titulo: `Escalamiento ${c.estado.agente_activo}: ${nombre}`,
-      descripcion: `${motivo}\n\nCanal: ${c.entrada.canal}\nTelefono: ${c.entrada.tel}`,
+      descripcion: brief,
       fecha_limite: new Date(Date.now() + (prioridad === 'urgente' ? 0 : 864e5)).toISOString().split('T')[0],
       prioridad: prioridad === 'urgente' || prioridad === 'alta' ? 'Alta' : prioridad === 'baja' ? 'Baja' : 'Media',
       completada: false,
@@ -132,8 +139,8 @@ export const escalarAHumano: Tool = {
     });
 
     c.efectos.notificar.push(
-      `ESCALAMIENTO (${prioridad}) — agente ${c.estado.agente_activo}\n` +
-      `Cliente: ${nombre}\nTelefono: ${c.entrada.tel} (${c.entrada.canal})\n\n${motivo}\n\n` +
+      `ESCALAMIENTO (${prioridad.toUpperCase()}) — desde ${c.estado.agente_activo}\n\n` +
+      `${brief}\n\n` +
       `La IA quedo en pausa para este chat. Responde desde la Bandeja.`,
     );
     return { ok: true, escalado: true };

@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (27 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (29 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -586,12 +586,205 @@ area de estudio debe validarla. Nunca recibas fotos o archivos por chat.
 No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.`,
 };
 
+// ─── _core/habiles.ts ────────────────────────────────────────────
+// Dias habiles en Colombia: festivos y suma de plazos.
+//
+// POR QUE NO ALCANZA CON "SALTAR SABADOS Y DOMINGOS": Colombia tiene 18
+// festivos al ano y la mayoria NO cae en fecha fija. La Ley 51 de 1983
+// ("Ley Emiliani") corre varios al lunes siguiente, y cinco dependen de la
+// Pascua, que se calcula con el algoritmo de Butcher. Un plazo legal contado
+// mal por dos dias es un plazo incumplido.
+//
+// Se usa para el termino de respuesta de PQR (Ley 1755/2015), que corre en
+// dias habiles desde la radicacion.
+
+/** Domingo de Pascua del año dado (algoritmo de Butcher, calendario gregoriano). */
+function pascua(anio: number): Date {
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
+const dia = 86_400_000;
+const sumar = (f: Date, n: number) => new Date(f.getTime() + n * dia);
+const clave = (f: Date) => f.toISOString().slice(0, 10);
+
+/** Corre la fecha al lunes siguiente si no es lunes (Ley Emiliani). */
+function alLunes(f: Date): Date {
+  const d = f.getUTCDay(); // 0 domingo … 6 sabado
+  return d === 1 ? f : sumar(f, (8 - d) % 7);
+}
+
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
+function festivosColombia(anio: number): Set<string> {
+  const p = pascua(anio);
+  const fechas: Date[] = [
+    // Fijos: no se mueven.
+    new Date(Date.UTC(anio, 0, 1)),   // Año nuevo
+    new Date(Date.UTC(anio, 4, 1)),   // Día del trabajo
+    new Date(Date.UTC(anio, 6, 20)),  // Independencia
+    new Date(Date.UTC(anio, 7, 7)),   // Batalla de Boyacá
+    new Date(Date.UTC(anio, 11, 8)),  // Inmaculada Concepción
+    new Date(Date.UTC(anio, 11, 25)), // Navidad
+
+    // Movibles al lunes (Ley Emiliani).
+    alLunes(new Date(Date.UTC(anio, 0, 6))),   // Reyes Magos
+    alLunes(new Date(Date.UTC(anio, 2, 19))),  // San José
+    alLunes(new Date(Date.UTC(anio, 5, 29))),  // San Pedro y San Pablo
+    alLunes(new Date(Date.UTC(anio, 7, 15))),  // Asunción
+    alLunes(new Date(Date.UTC(anio, 9, 12))),  // Día de la Raza
+    alLunes(new Date(Date.UTC(anio, 10, 1))),  // Todos los Santos
+    alLunes(new Date(Date.UTC(anio, 10, 11))), // Independencia de Cartagena
+
+    // Ligados a la Pascua. Jueves y Viernes Santo NO se mueven; los otros sí.
+    sumar(p, -3),           // Jueves Santo
+    sumar(p, -2),           // Viernes Santo
+    alLunes(sumar(p, 43)),  // Ascensión
+    alLunes(sumar(p, 64)),  // Corpus Christi
+    alLunes(sumar(p, 71)),  // Sagrado Corazón
+  ];
+  return new Set(fechas.map(clave));
+}
+
+// Los festivos se recalculan una vez por año y se recuerdan: sumar un plazo
+// puede cruzar hasta tres años y no vale la pena repetir el cálculo.
+const cache = new Map<number, Set<string>>();
+function festivos(anio: number): Set<string> {
+  let s = cache.get(anio);
+  if (!s) { s = festivosColombia(anio); cache.set(anio, s); }
+  return s;
+}
+
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
+function esHabil(f: Date): boolean {
+  const d = f.getUTCDay();
+  if (d === 0 || d === 6) return false;
+  return !festivos(f.getUTCFullYear()).has(clave(f));
+}
+
+/**
+ * Suma días hábiles a una fecha.
+ *
+ * El día de radicación NO cuenta: el término empieza a correr el hábil
+ * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
+ * "a los 15 días" incluya ese día completo.
+ */
+function sumarHabiles(desde: Date, dias: number): Date {
+  let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  let restantes = Math.max(0, Math.floor(dias));
+  while (restantes > 0) {
+    f = sumar(f, 1);
+    if (esHabil(f)) restantes--;
+  }
+  return new Date(f.getTime() + dia - 1000);
+}
+
+/** Días hábiles entre dos fechas (negativo si ya venció). */
+function habilesHasta(desde: Date, hasta: Date): number {
+  const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
+  const signo = fin >= ini ? 1 : -1;
+  let [a, b] = signo > 0 ? [ini, fin] : [fin, ini];
+  let n = 0;
+  while (a < b) { a = sumar(a, 1); if (esHabil(a)) n++; }
+  return n * signo;
+}
+
+// ─── _core/horario.ts ────────────────────────────────────────────
+// Horario del equipo comercial y que hacer fuera de el.
+//
+// LA REGLA QUE MANDA: fuera de horario el agente NO difiere, REEMPLAZA al
+// comercial. Agenda el mismo la cita y deja el lead listo. "Manana te contacta
+// un asesor" es el ultimo recurso, no la salida por defecto: un lead que llega
+// a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
+// manana ya escribio a otra inmobiliaria.
+
+/** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
+const OFFSET_BOGOTA_H = -5;
+interface Horario {
+  dias: number[];   // 1 = lunes … 7 = domingo (ISO)
+  desde: number;    // hora local de inicio
+  hasta: number;    // hora local de fin
+}
+
+/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
+const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+function horarioDe(config: Record<string, any>): Horario {
+  const h = config?.horario_equipo;
+  if (!h) return HORARIO_DEFECTO;
+  try {
+    const p = typeof h === 'string' ? JSON.parse(h) : h;
+    return {
+      dias: Array.isArray(p.dias) && p.dias.length ? p.dias.map(Number) : HORARIO_DEFECTO.dias,
+      desde: Number.isFinite(Number(p.desde)) ? Number(p.desde) : HORARIO_DEFECTO.desde,
+      hasta: Number.isFinite(Number(p.hasta)) ? Number(p.hasta) : HORARIO_DEFECTO.hasta,
+    };
+  } catch {
+    return HORARIO_DEFECTO;
+  }
+}
+
+/** Fecha/hora en Bogota, como componentes. */
+function enBogota(f: Date) {
+  const b = new Date(f.getTime() + OFFSET_BOGOTA_H * 3_600_000);
+  const diaISO = b.getUTCDay() === 0 ? 7 : b.getUTCDay(); // 1 lun … 7 dom
+  return { hora: b.getUTCHours(), diaISO, fecha: b };
+}
+
+/**
+ * ¿Hay alguien del equipo disponible ahora?
+ *
+ * Un festivo cuenta como fuera de horario: el equipo no esta, aunque caiga
+ * entre semana. Es el mismo calendario que usan los plazos de PQR.
+ */
+function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
+  const h = horarioDe(config);
+  const { hora, diaISO, fecha } = enBogota(ahora);
+  if (!h.dias.includes(diaISO)) return false;
+  if (!esHabil(fecha)) return false;
+  return hora >= h.desde && hora < h.hasta;
+}
+
+/**
+ * Instruccion que se le inyecta al agente segun el momento.
+ *
+ * Fuera de horario NO cambia lo que el agente puede hacer —las herramientas son
+ * las mismas— cambia a que se compromete. Dentro de horario puede decir "un
+ * asesor te contacta ya"; fuera, tiene que resolver el solo hasta donde llegue.
+ */
+function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
+  if (hayEquipo(ahora, config)) {
+    return 'El equipo comercial esta disponible en este momento: si entregas el lead o '
+      + 'escalas, un asesor lo toma hoy mismo.';
+  }
+  const h = horarioDe(config);
+  return 'FUERA DE HORARIO. El equipo atiende de lunes a viernes, '
+    + `de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: `
+    + 'resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. '
+    + 'Agenda la visita o la llamada con la herramienta que corresponda, registra lo que '
+    + 'haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo '
+    + 'contacta el siguiente dia habil. Nunca uses eso como primera salida.';
+}
+
 // ─── _core/contexto.ts ───────────────────────────────────────────
 // Cargadores de contexto por agente.
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.
+const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -663,7 +856,8 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.
+async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -747,7 +941,8 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};
+async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -757,7 +952,8 @@ const CARGADORES: Record<Agente, Cargador> = {
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.
+function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -767,6 +963,11 @@ const CARGADORES: Record<Agente, Cargador> = {
   partes.push(base.identidadMarca || IDENTIDAD_MARCA);
   partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
   if (base.rag) partes.push(base.rag);
+
+  // El horario cambia a que se compromete el agente, no lo que puede hacer.
+  // Fuera de horario tiene que resolver el solo: "manana te contacta un asesor"
+  // es el ultimo recurso, no la salida por defecto.
+  partes.push(`=== MOMENTO ===\n${instruccionHorario(new Date(), base.config || {})}`);
 
   const nombre = String(estado.compartido.nombre || '');
   const i = estado.identidad;
@@ -1311,8 +1512,109 @@ async function clasificar(
   });
 }
 
+// ─── _core/brief.ts ──────────────────────────────────────────────
+// Resumen ejecutivo del lead para cuando entra un humano.
+//
+// POR QUE EXISTE: al escalar, el equipo recibia nombre, telefono y una frase
+// que redacto el propio modelo. Todo lo que `guardar_dato` habia acumulado
+// durante la conversacion —presupuesto, zona, operacion, timing, forma de pago—
+// se quedaba en el estado y no viajaba. El asesor abria la Bandeja y tenia que
+// reconstruir el contexto desde cero, o peor, volvia a preguntarle al cliente
+// lo que ya habia contestado.
+//
+// Lo ironico es que el brief bueno ya existia: calificar_lead armaba uno
+// completo. Simplemente no se usaba en el escalamiento, que es donde mas falta
+// hace.
+//
+// Se manda un RESUMEN, no la transcripcion: el humano necesita decidir en diez
+// segundos si llama ya, no leer treinta mensajes.
+
+const ETIQUETAS: Record<string, string> = {
+  operacion: 'Operacion',
+  tipo_prop: 'Tipo de inmueble',
+  tipo_inmueble: 'Tipo de inmueble',
+  zona: 'Zona',
+  barrio: 'Zona',
+  presupuesto: 'Presupuesto',
+  habitaciones: 'Habitaciones',
+  timing: 'Cuando se muda',
+  forma_pago: 'Forma de pago',
+  decide_solo: 'Decide solo',
+  otra_inmobiliaria: 'Ya trabaja con otra inmobiliaria',
+  direccion_inmueble: 'Direccion del inmueble',
+  documento: 'Documento',
+  email: 'Correo',
+};
+
+const fmt = (v: unknown): string => {
+  if (typeof v === 'boolean') return v ? 'si' : 'no';
+  if (typeof v === 'number') {
+    return v >= 1000
+      ? new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+          .format(v).replace(/\s+/g, '')
+      : String(v);
+  }
+  return String(v ?? '').trim();
+};
+
+/**
+ * Arma el brief. `extra` permite agregar lineas propias del motivo del
+ * escalamiento sin que este modulo tenga que conocerlas.
+ */
+function briefLead(estado: Estado, tel: string, canal: string, extra: string[] = []): string {
+  const lineas: string[] = [];
+
+  const nombre = String(estado.compartido.nombre || '').trim();
+  lineas.push(nombre ? `${nombre} — wa.me/${tel}` : `Sin nombre — wa.me/${tel}`);
+  lineas.push(`Canal: ${canal}`);
+
+  // Por donde paso la conversacion. Un lead que arranco en ventas y termino en
+  // PQR cuenta una historia distinta a uno que entro directo a PQR.
+  const ruta = (estado.agente_historial || []).map((s) => s.agente);
+  if (ruta.length > 1) lineas.push(`Paso por: ${ruta.join(' -> ')}`);
+
+  const i = estado.identidad;
+  if (i?.verificado && i.expira && new Date(i.expira) > new Date()) {
+    lineas.push('Identidad verificada: SI');
+  }
+
+  // Lo que el cliente conto, venga del scratch del agente o de compartido.
+  const datos: Record<string, unknown> = {
+    ...(estado.compartido || {}),
+    ...((estado.ctx?.[estado.agente_activo]?.datos as Record<string, unknown>) || {}),
+  };
+
+  const relevantes: string[] = [];
+  for (const [clave, etiqueta] of Object.entries(ETIQUETAS)) {
+    const v = datos[clave];
+    if (v === undefined || v === null || v === '') continue;
+    const texto = fmt(v);
+    if (texto) relevantes.push(`  ${etiqueta}: ${texto}`);
+  }
+  if (relevantes.length) {
+    lineas.push('', 'LO QUE YA CONTO:', ...relevantes);
+  }
+
+  // Calificacion, si el agente alcanzo a hacerla.
+  const ctxAg = estado.ctx?.[estado.agente_activo] || {};
+  if (ctxAg.temperatura) {
+    lineas.push('', `Calificacion: ${String(ctxAg.temperatura).toUpperCase()}${ctxAg.score ? ` (${ctxAg.score}/100)` : ''}`);
+  }
+
+  if (extra.length) lineas.push('', ...extra);
+
+  // Ultimo mensaje del cliente: da el tono con el que llega.
+  const ultimo = [...(estado.historial || [])].reverse().find((m) => m.role === 'user');
+  if (ultimo?.content) {
+    lineas.push('', `Ultimo mensaje: "${String(ultimo.content).slice(0, 200)}"`);
+  }
+
+  return lineas.join('\n');
+}
+
 // ─── _core/tools/comunes.ts ──────────────────────────────────────
 // Las cuatro tools que recibe TODO agente.
+
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
 const COMPARTIDOS = new Set(['nombre', 'email', 'documento', 'direccion_inmueble']);
@@ -1423,10 +1725,16 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     c.efectos.escalado = { motivo, prioridad };
 
     const nombre = String(c.estado.compartido.nombre || '') || `+${c.entrada.tel}`;
+
+    // Brief ejecutivo en vez de "telefono + una frase". Todo lo que guardar_dato
+    // acumulo durante la conversacion viaja con el escalamiento: sin esto el
+    // asesor volvia a preguntarle al cliente lo que ya habia contestado.
+    const brief = briefLead(c.estado, c.entrada.tel, c.entrada.canal, [`MOTIVO: ${motivo}`]);
+
     await c.db.crear('Tarea', {
       contacto_id: String(c.estado.compartido.contacto_id || ''),
       titulo: `Escalamiento ${c.estado.agente_activo}: ${nombre}`,
-      descripcion: `${motivo}\n\nCanal: ${c.entrada.canal}\nTelefono: ${c.entrada.tel}`,
+      descripcion: brief,
       fecha_limite: new Date(Date.now() + (prioridad === 'urgente' ? 0 : 864e5)).toISOString().split('T')[0],
       prioridad: prioridad === 'urgente' || prioridad === 'alta' ? 'Alta' : prioridad === 'baja' ? 'Baja' : 'Media',
       completada: false,
@@ -1434,8 +1742,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     });
 
     c.efectos.notificar.push(
-      `ESCALAMIENTO (${prioridad}) — agente ${c.estado.agente_activo}\n` +
-      `Cliente: ${nombre}\nTelefono: ${c.entrada.tel} (${c.entrada.canal})\n\n${motivo}\n\n` +
+      `ESCALAMIENTO (${prioridad.toUpperCase()}) — desde ${c.estado.agente_activo}\n\n` +
+      `${brief}\n\n` +
       `La IA quedo en pausa para este chat. Responde desde la Bandeja.`,
     );
     return { ok: true, escalado: true };
@@ -1647,6 +1955,24 @@ const buscarInmuebles: Tool = {
     const tipo = String(input.tipo || '').toLowerCase();
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
+
+    // Descubrimiento antes de mostrar inventario. Sin este gate, el unico
+    // parametro obligatorio era `operacion`: con todo lo demas en null el filtro
+    // no descartaba nada, la puntuacion daba 0 a todo y salian cinco inmuebles
+    // ARBITRARIOS desde el primer mensaje. Un broker no abre con un listado, y
+    // volcarlo ademas quema el inventario antes de saber que necesita el cliente.
+    //
+    // Va en codigo y no en el prompt porque dependia de que el modelo decidiera
+    // preguntar primero, y eso no es una garantia.
+    if (!barrio && !tope) {
+      return {
+        falta_discovery: true,
+        instruccion: 'Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas '
+          + 'al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor '
+          + 'en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario '
+          + 'ni digas que estas buscando.',
+      };
+    }
 
     const puntuados = props
       .filter((p) => {
@@ -2447,122 +2773,6 @@ const registrarSolicitudAvaluo: Tool = {
   registrar_solicitud_avaluo: registrarSolicitudAvaluo,
   cotizar_avaluo: cotizarAvaluo,
 };
-
-// ─── _core/habiles.ts ────────────────────────────────────────────
-// Dias habiles en Colombia: festivos y suma de plazos.
-//
-// POR QUE NO ALCANZA CON "SALTAR SABADOS Y DOMINGOS": Colombia tiene 18
-// festivos al ano y la mayoria NO cae en fecha fija. La Ley 51 de 1983
-// ("Ley Emiliani") corre varios al lunes siguiente, y cinco dependen de la
-// Pascua, que se calcula con el algoritmo de Butcher. Un plazo legal contado
-// mal por dos dias es un plazo incumplido.
-//
-// Se usa para el termino de respuesta de PQR (Ley 1755/2015), que corre en
-// dias habiles desde la radicacion.
-
-/** Domingo de Pascua del año dado (algoritmo de Butcher, calendario gregoriano). */
-function pascua(anio: number): Date {
-  const a = anio % 19;
-  const b = Math.floor(anio / 100);
-  const c = anio % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const mes = Math.floor((h + l - 7 * m + 114) / 31);
-  const dia = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(Date.UTC(anio, mes - 1, dia));
-}
-
-const dia = 86_400_000;
-const sumar = (f: Date, n: number) => new Date(f.getTime() + n * dia);
-const clave = (f: Date) => f.toISOString().slice(0, 10);
-
-/** Corre la fecha al lunes siguiente si no es lunes (Ley Emiliani). */
-function alLunes(f: Date): Date {
-  const d = f.getUTCDay(); // 0 domingo … 6 sabado
-  return d === 1 ? f : sumar(f, (8 - d) % 7);
-}
-
-/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
-function festivosColombia(anio: number): Set<string> {
-  const p = pascua(anio);
-  const fechas: Date[] = [
-    // Fijos: no se mueven.
-    new Date(Date.UTC(anio, 0, 1)),   // Año nuevo
-    new Date(Date.UTC(anio, 4, 1)),   // Día del trabajo
-    new Date(Date.UTC(anio, 6, 20)),  // Independencia
-    new Date(Date.UTC(anio, 7, 7)),   // Batalla de Boyacá
-    new Date(Date.UTC(anio, 11, 8)),  // Inmaculada Concepción
-    new Date(Date.UTC(anio, 11, 25)), // Navidad
-
-    // Movibles al lunes (Ley Emiliani).
-    alLunes(new Date(Date.UTC(anio, 0, 6))),   // Reyes Magos
-    alLunes(new Date(Date.UTC(anio, 2, 19))),  // San José
-    alLunes(new Date(Date.UTC(anio, 5, 29))),  // San Pedro y San Pablo
-    alLunes(new Date(Date.UTC(anio, 7, 15))),  // Asunción
-    alLunes(new Date(Date.UTC(anio, 9, 12))),  // Día de la Raza
-    alLunes(new Date(Date.UTC(anio, 10, 1))),  // Todos los Santos
-    alLunes(new Date(Date.UTC(anio, 10, 11))), // Independencia de Cartagena
-
-    // Ligados a la Pascua. Jueves y Viernes Santo NO se mueven; los otros sí.
-    sumar(p, -3),           // Jueves Santo
-    sumar(p, -2),           // Viernes Santo
-    alLunes(sumar(p, 43)),  // Ascensión
-    alLunes(sumar(p, 64)),  // Corpus Christi
-    alLunes(sumar(p, 71)),  // Sagrado Corazón
-  ];
-  return new Set(fechas.map(clave));
-}
-
-// Los festivos se recalculan una vez por año y se recuerdan: sumar un plazo
-// puede cruzar hasta tres años y no vale la pena repetir el cálculo.
-const cache = new Map<number, Set<string>>();
-function festivos(anio: number): Set<string> {
-  let s = cache.get(anio);
-  if (!s) { s = festivosColombia(anio); cache.set(anio, s); }
-  return s;
-}
-
-/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
-function esHabil(f: Date): boolean {
-  const d = f.getUTCDay();
-  if (d === 0 || d === 6) return false;
-  return !festivos(f.getUTCFullYear()).has(clave(f));
-}
-
-/**
- * Suma días hábiles a una fecha.
- *
- * El día de radicación NO cuenta: el término empieza a correr el hábil
- * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
- * "a los 15 días" incluya ese día completo.
- */
-function sumarHabiles(desde: Date, dias: number): Date {
-  let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
-  let restantes = Math.max(0, Math.floor(dias));
-  while (restantes > 0) {
-    f = sumar(f, 1);
-    if (esHabil(f)) restantes--;
-  }
-  return new Date(f.getTime() + dia - 1000);
-}
-
-/** Días hábiles entre dos fechas (negativo si ya venció). */
-function habilesHasta(desde: Date, hasta: Date): number {
-  const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
-  const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
-  const signo = fin >= ini ? 1 : -1;
-  let [a, b] = signo > 0 ? [ini, fin] : [fin, ini];
-  let n = 0;
-  while (a < b) { a = sumar(a, 1); if (esHabil(a)) n++; }
-  return n * signo;
-}
 
 // ─── _core/tools/pqr.ts ──────────────────────────────────────────
 // Palabra legal: dispara prioridad y notificacion inmediata al equipo.

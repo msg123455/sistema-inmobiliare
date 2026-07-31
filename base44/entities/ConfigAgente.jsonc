@@ -122,6 +122,10 @@
     "politica_datos_url": {
       "type": "string",
       "description": "URL de la politica de tratamiento de datos. Si esta vacia se usa la de _core/privacidad.ts."
+    },
+    "horario_equipo": {
+      "type": "string",
+      "description": "JSON con el horario del equipo comercial: {\"dias\":[1,2,3,4,5],\"desde\":9,\"hasta\":17}. Dias en ISO (1=lunes). Vacio usa lunes a viernes de 9 a 17."
     }
   },
   "required": [

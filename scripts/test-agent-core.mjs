@@ -11,6 +11,8 @@ import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook
 import { decidirAgente } from '../base44/functions/_core/router.ts';
 import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_core/habiles.ts';
 import { calificar } from '../base44/functions/_core/scoring.ts';
+import { briefLead } from '../base44/functions/_core/brief.ts';
+import { hayEquipo, instruccionHorario } from '../base44/functions/_core/horario.ts';
 import { responder } from '../base44/functions/_core/tools/comunes.ts';
 import {
   POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
@@ -298,13 +300,88 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
     salida: { globos: [], finTurno: false },
     efectos: { transferir: null, escalado: null, notificar: [] },
   };
+  // Con zona: pasa el gate de discovery y llega al camino de cero resultados,
+  // que es lo que se quiere probar aqui.
   const r = await buscarInmuebles.ejecutar(
-    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: null, habitaciones_min: null },
+    { operacion: 'arriendo', barrio: 'Chapinero', tipo: null, presupuesto_max: null, habitaciones_min: null },
     ctx,
   );
   assert.equal(r.encontrados, 0);
   assert.ok(r.instruccion, 'el caso sin resultados trae guia, no una lista vacia pelada');
   assert.ok(r.instruccion.includes('registrar_interes'), 'apunta a la tool que si existe');
+}
+
+// ── Gate de discovery ────────────────────────────────────────────────────────
+// El unico parametro obligatorio era `operacion`. Con todo lo demas en null el
+// filtro no descartaba nada y salian cinco inmuebles ARBITRARIOS en el primer
+// mensaje: un broker no abre con un listado.
+{
+  const ctx = {
+    ctxAgente: { catalogo: [{ id: 'p1', operacion: 'Arriendo', barrio: 'Chico', tipo: 'Apartamento', canon_arriendo: 3e6, habitaciones: 2 }] },
+    estado: estadoVacio(), entrada: entrada('busco algo'),
+    salida: { globos: [], finTurno: false },
+    efectos: { transferir: null, escalado: null, notificar: [] },
+  };
+  const sinNada = await buscarInmuebles.ejecutar(
+    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: null, habitaciones_min: null }, ctx);
+  assert.equal(sinNada.falta_discovery, true, 'sin zona ni presupuesto no se muestra inventario');
+  assert.equal(sinNada.inmuebles, undefined, 'no devuelve inmuebles');
+
+  // Con zona ya puede buscar.
+  const conZona = await buscarInmuebles.ejecutar(
+    { operacion: 'arriendo', barrio: 'Chico', tipo: null, presupuesto_max: null, habitaciones_min: null }, ctx);
+  assert.ok(conZona.falta_discovery === undefined, 'con zona si busca');
+  assert.equal(conZona.encontrados, 1);
+
+  // Con presupuesto tambien.
+  const conTope = await buscarInmuebles.ejecutar(
+    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: 4e6, habitaciones_min: null }, ctx);
+  assert.ok(conTope.falta_discovery === undefined, 'con presupuesto si busca');
+}
+
+// ── Horario del equipo ───────────────────────────────────────────────────────
+// Fuera de horario el agente REEMPLAZA al comercial: agenda el mismo. "Manana
+// te contacta un asesor" es el ultimo recurso, no la salida por defecto.
+{
+  // Bogota es UTC-5. 15:00 UTC = 10:00 en Bogota.
+  const juevesDiez = new Date('2026-08-06T15:00:00Z');   // jueves, 10am Bogota
+  const juevesNoche = new Date('2026-08-07T02:00:00Z');  // miercoles 9pm Bogota
+  const domingo = new Date('2026-08-09T15:00:00Z');      // domingo 10am
+
+  assert.equal(hayEquipo(juevesDiez), true, 'jueves 10am hay equipo');
+  assert.equal(hayEquipo(juevesNoche), false, '9pm no hay equipo');
+  assert.equal(hayEquipo(domingo), false, 'domingo no hay equipo');
+
+  // Un festivo entre semana cuenta como fuera de horario.
+  const festivo = new Date('2026-08-17T15:00:00Z'); // lunes 17 ago, Asuncion
+  assert.equal(hayEquipo(festivo), false, 'festivo no hay equipo aunque sea lunes');
+
+  assert.ok(instruccionHorario(juevesNoche).includes('FUERA DE HORARIO'));
+  assert.ok(!instruccionHorario(juevesDiez).includes('FUERA DE HORARIO'));
+}
+
+// ── Brief de escalamiento ────────────────────────────────────────────────────
+// El humano recibia telefono y una frase; todo lo que guardar_dato acumulo se
+// perdia y el asesor volvia a preguntar lo ya contestado.
+{
+  const st = estadoVacio();
+  st.compartido.nombre = 'Karen Gonzalez';
+  st.agente_activo = 'ventas';
+  st.ctx.ventas = { datos: { operacion: 'arriendo', zona: 'Chapinero', presupuesto: 3_000_000, timing: 'ya' }, temperatura: 'Caliente', score: 72 };
+  st.historial = [{ role: 'user', content: 'necesito algo urgente para el mes entrante' }];
+
+  const b = briefLead(st, '573001234567', 'whatsapp', ['MOTIVO: pide hablar con una persona']);
+  assert.ok(b.includes('Karen Gonzalez'));
+  assert.ok(b.includes('Chapinero'), 'la zona viaja');
+  assert.ok(b.includes('$3.000.000'), 'el presupuesto viaja formateado');
+  assert.ok(b.includes('CALIENTE'), 'la calificacion viaja');
+  assert.ok(b.includes('MOTIVO'), 'el motivo del escalamiento viaja');
+  assert.ok(b.includes('urgente para el mes'), 'el ultimo mensaje da el tono');
+
+  // Sin datos no revienta ni inventa.
+  const vacio = briefLead(estadoVacio(), '573009999999', 'telegram');
+  assert.ok(vacio.includes('Sin nombre'));
+  assert.ok(!vacio.includes('undefined'));
 }
 
 console.log('agent-core: OK');

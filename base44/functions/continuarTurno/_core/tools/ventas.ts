@@ -73,6 +73,24 @@ export const buscarInmuebles: Tool = {
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
 
+    // Descubrimiento antes de mostrar inventario. Sin este gate, el unico
+    // parametro obligatorio era `operacion`: con todo lo demas en null el filtro
+    // no descartaba nada, la puntuacion daba 0 a todo y salian cinco inmuebles
+    // ARBITRARIOS desde el primer mensaje. Un broker no abre con un listado, y
+    // volcarlo ademas quema el inventario antes de saber que necesita el cliente.
+    //
+    // Va en codigo y no en el prompt porque dependia de que el modelo decidiera
+    // preguntar primero, y eso no es una garantia.
+    if (!barrio && !tope) {
+      return {
+        falta_discovery: true,
+        instruccion: 'Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas '
+          + 'al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor '
+          + 'en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario '
+          + 'ni digas que estas buscando.',
+      };
+    }
+
     const puntuados = props
       .filter((p) => {
         const op = String(p.operacion || '');
