@@ -9,7 +9,9 @@
 //
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
-// equivocada.type Filtro = Record<string, string | number | boolean | undefined | null>;function crearDb(apiKey: string, baseUrl?: string) {
+// equivocada.
+type Filtro = Record<string, string | number | boolean | undefined | null>;
+function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
@@ -102,11 +104,13 @@
   }
 
   return { base, list, uno, crear, actualizar, guardar };
-}type Db = ReturnType<typeof crearDb>;
+}
+type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
 // Los prompts NO viven aqui — viven en filas de AgentePrompt (§A.5).
+
 // ─── Agentes ────────────────────────────────────────────────────────────────
 
 // 'encuestas' quedo FUERA del roster a proposito. Sus tools y su prompt existen
@@ -122,13 +126,17 @@
 // Encuesta.preguntas, (3) sacar `respuestas: []` del cargador en contexto.ts,
 // porque el Object.assign de agenteInbound lo reescribe en cada turno y borra
 // lo que el cliente ya habia contestado, y (4) una frase o boton de router.
-// El codigo de tools/encuestas.ts se conserva para ese momento.const AGENTES = [
+// El codigo de tools/encuestas.ts se conserva para ese momento.
+const AGENTES = [
   'recepcion', 'ventas', 'consignacion', 'cartera', 'mantenimiento',
   'avaluos', 'pqr', 'matricula',
-] as const;type Agente = typeof AGENTES[number];const esAgente = (v: unknown): v is Agente =>
+] as const;
+type Agente = typeof AGENTES[number];
+const esAgente = (v: unknown): v is Agente =>
   typeof v === 'string' && (AGENTES as readonly string[]).includes(v);
 
-// Etiquetas que ve el clasificador LLM del router nivel 2.const ETIQUETAS_AGENTE: Record<Agente, string> = {
+// Etiquetas que ve el clasificador LLM del router nivel 2.
+const ETIQUETAS_AGENTE: Record<Agente, string> = {
   recepcion:    'saludo suelto, mensaje ambiguo, o no encaja en ninguna otra categoria',
   ventas:       'busca comprar o arrendar un inmueble, pide fotos, precios, visitas',
   consignacion: 'ES DUENO de un inmueble y quiere venderlo, arrendarlo o ponerlo en administracion',
@@ -139,7 +147,8 @@
   matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
-// ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────interface Identidad {
+// ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────
+interface Identidad {
   verificado: boolean;
   metodo: string | null;
   arrendatario_id: string | null;
@@ -149,11 +158,15 @@
   expira: string | null;
   intentos: number;
   bloqueado_hasta: string | null;
-}interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }interface SaltoAgente { agente: Agente; desde: string; motivo: string }interface TurnoPendiente {
+}
+interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }
+interface SaltoAgente { agente: Agente; desde: string; motivo: string }
+interface TurnoPendiente {
   mensajes: unknown[];      // historial de la conversacion con el modelo, tal cual
   continuaciones: number;
   agente: Agente;
-}interface Estado {
+}
+interface Estado {
   v: 2;
   agente_activo: Agente;
   agente_historial: SaltoAgente[];
@@ -166,7 +179,9 @@
   pausada: boolean;
 }
 
-// ─── Entrada normalizada (ambos canales) ────────────────────────────────────type Canal = 'whatsapp' | 'telegram';interface Entrada {
+// ─── Entrada normalizada (ambos canales) ────────────────────────────────────
+type Canal = 'whatsapp' | 'telegram';
+interface Entrada {
   canal: Canal;
   tel: string;              // clave universal de la conversacion
   texto: string;
@@ -176,7 +191,8 @@
   destino: string;          // a donde se responde (numero WA con indicativo, o chat id TG)
 }
 
-// ─── Tools ──────────────────────────────────────────────────────────────────interface EsquemaTool {
+// ─── Tools ──────────────────────────────────────────────────────────────────
+interface EsquemaTool {
   name: string;
   description: string;
   strict: true;
@@ -192,13 +208,15 @@
 // segunda llamada. `terminal: true` => corta el turno (solo `responder`).
 // `cierra: true` => deja al cliente con un siguiente paso concreto: una cita,
 // un radicado, una alerta de busqueda. Es lo que permite exigir que ninguna
-// conversacion termine en callejon sin salida.interface Tool {
+// conversacion termine en callejon sin salida.
+interface Tool {
   def: EsquemaTool;
   ejecutar: (input: any, c: CtxTool) => Promise<unknown> | unknown;
   retorna?: boolean;
   terminal?: boolean;
   cierra?: boolean;
-}interface CtxTool {
+}
+interface CtxTool {
   db: Db;
   estado: Estado;
   entrada: Entrada;
@@ -215,7 +233,8 @@
   };
 }
 
-// Azucar para declarar tools sin repetir strict/additionalProperties.function definirTool(
+// Azucar para declarar tools sin repetir strict/additionalProperties.
+function definirTool(
   name: string,
   description: string,
   props: Record<string, unknown>,
@@ -237,7 +256,14 @@
     },
     ...opts,
   };
-}const str = (description: string) => ({ type: 'string', description });const strOpc = (description: string) => ({ type: ['string', 'null'], description });const num = (description: string) => ({ type: 'number', description });const numOpc = (description: string) => ({ type: ['number', 'null'], description });const bool = (description: string) => ({ type: 'boolean', description });const enumStr = (description: string, valores: string[]) => ({ type: 'string', description, enum: valores });const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });
+}
+const str = (description: string) => ({ type: 'string', description });
+const strOpc = (description: string) => ({ type: ['string', 'null'], description });
+const num = (description: string) => ({ type: 'number', description });
+const numOpc = (description: string) => ({ type: ['number', 'null'], description });
+const bool = (description: string) => ({ type: 'boolean', description });
+const enumStr = (description: string, valores: string[]) => ({ type: 'string', description, enum: valores });
+const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });
 
 // ─── _core/prompts.ts ────────────────────────────────────────────
 // Prompts por defecto, en codigo.
@@ -251,7 +277,8 @@
 // conocimiento del negocio (politicas, tarifas, zonas) va en ConocimientoRAG,
 // que se edita sin desplegar.
 
-/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
+/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */
+const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
 reparaciones, seguro de arrendamiento y relocation corporativo.
 Calle 81 # 8 - 95, Bogota. Telefono 485 3000. www.inmobiliarelatam.com
@@ -301,7 +328,8 @@ LO QUE NUNCA HACES
  * Prompt por agente. Corto a proposito: el motor viejo tenia 350 lineas de
  * persona y se contradecia solo. Lo que cada agente necesita saber es su rol,
  * que datos tiene que conseguir y cuando termina.
- */const PROMPTS = {
+ */
+const PROMPTS = {
   recepcion: `ROL INTERNO: recepcion. Entiendes que necesita la persona y la llevas al especialista correcto.
 
 TU UNICO TRABAJO es identificar el motivo y usar transferir_a. No resuelves el tema,
@@ -522,7 +550,8 @@ function alLunes(f: Date): Date {
   return d === 1 ? f : sumar(f, (8 - d) % 7);
 }
 
-/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */function festivosColombia(anio: number): Set<string> {
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
+function festivosColombia(anio: number): Set<string> {
   const p = pascua(anio);
   const fechas: Date[] = [
     // Fijos: no se mueven.
@@ -561,7 +590,8 @@ function festivos(anio: number): Set<string> {
   return s;
 }
 
-/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */function esHabil(f: Date): boolean {
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
+function esHabil(f: Date): boolean {
   const d = f.getUTCDay();
   if (d === 0 || d === 6) return false;
   return !festivos(f.getUTCFullYear()).has(clave(f));
@@ -573,7 +603,8 @@ function festivos(anio: number): Set<string> {
  * El día de radicación NO cuenta: el término empieza a correr el hábil
  * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
  * "a los 15 días" incluya ese día completo.
- */function sumarHabiles(desde: Date, dias: number): Date {
+ */
+function sumarHabiles(desde: Date, dias: number): Date {
   let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   let restantes = Math.max(0, Math.floor(dias));
   while (restantes > 0) {
@@ -583,7 +614,8 @@ function festivos(anio: number): Set<string> {
   return new Date(f.getTime() + dia - 1000);
 }
 
-/** Días hábiles entre dos fechas (negativo si ya venció). */function habilesHasta(desde: Date, hasta: Date): number {
+/** Días hábiles entre dos fechas (negativo si ya venció). */
+function habilesHasta(desde: Date, hasta: Date): number {
   const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
   const signo = fin >= ini ? 1 : -1;
@@ -601,14 +633,18 @@ function festivos(anio: number): Set<string> {
 // un asesor" es el ultimo recurso, no la salida por defecto: un lead que llega
 // a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
 // manana ya escribio a otra inmobiliaria.
+
 /** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
-const OFFSET_BOGOTA_H = -5;interface Horario {
+const OFFSET_BOGOTA_H = -5;
+interface Horario {
   dias: number[];   // 1 = lunes … 7 = domingo (ISO)
   desde: number;    // hora local de inicio
   hasta: number;    // hora local de fin
 }
 
-/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };function horarioDe(config: Record<string, any>): Horario {
+/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
+const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+function horarioDe(config: Record<string, any>): Horario {
   const h = config?.horario_equipo;
   if (!h) return HORARIO_DEFECTO;
   try {
@@ -635,7 +671,8 @@ function enBogota(f: Date) {
  *
  * Un festivo cuenta como fuera de horario: el equipo no esta, aunque caiga
  * entre semana. Es el mismo calendario que usan los plazos de PQR.
- */function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
+ */
+function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
   const h = horarioDe(config);
   const { hora, diaISO, fecha } = enBogota(ahora);
   if (!h.dias.includes(diaISO)) return false;
@@ -649,7 +686,8 @@ function enBogota(f: Date) {
  * Fuera de horario NO cambia lo que el agente puede hacer —las herramientas son
  * las mismas— cambia a que se compromete. Dentro de horario puede decir "un
  * asesor te contacta ya"; fuera, tiene que resolver el solo hasta donde llegue.
- */function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
+ */
+function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
   if (hayEquipo(ahora, config)) {
     return 'El equipo comercial esta disponible en este momento: si entregas el lead o '
       + 'escalas, un asesor lo toma hoy mismo.';
@@ -668,7 +706,8 @@ function enBogota(f: Date) {
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.
+const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -685,7 +724,8 @@ function destinosDe(ch: ChunkRag): string[] {
  * Los chunks especificos entran antes que los comunes. Un chunk sin `agentes`
  * no se inyecta: el tenant anterior dejo conocimiento contaminado sin ese campo
  * y tratarlo como `todos` fue precisamente lo que mezclo las dos marcas.
- */function seleccionarRag(
+ */
+function seleccionarRag(
   chunks: ChunkRag[],
   agente: Agente,
   maxChars = MAX_RAG_CHARS,
@@ -719,9 +759,11 @@ function destinosDe(ch: ChunkRag): string[] {
   return { texto: trozos.join(''), titulos, chars: usado };
 }
 
-/** ConfigAgente.activo funciona como kill switch global. */function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
+/** ConfigAgente.activo funciona como kill switch global. */
+function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
   return config?.activo !== false;
-}interface Base {
+}
+interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
   identidadMarca: string;
@@ -737,7 +779,8 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.
+async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -821,7 +864,8 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};
+async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -831,7 +875,8 @@ const CARGADORES: Record<Agente, Cargador> = {
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.
+function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -872,7 +917,8 @@ const CARGADORES: Record<Agente, Cargador> = {
 }
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
-// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
+// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
+async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
   fd.append('model', 'whisper-1');
@@ -891,7 +937,8 @@ function base64(buf: ArrayBuffer): string {
     bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
   }
   return btoa(bin);
-}async function describirImagen(
+}
+async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -914,7 +961,8 @@ function base64(buf: ArrayBuffer): string {
 }
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
-const GRAPH = 'https://graph.facebook.com/v19.0';const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
+const GRAPH = 'https://graph.facebook.com/v19.0';
+const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
   const d = String(t).replace(/\D/g, '');
@@ -929,7 +977,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
   const rBin = await fetch(meta.url, { headers: { Authorization: `Bearer ${waToken}` } });
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
-}async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
+}
+async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
   if (!m?.from) return null;
@@ -981,7 +1030,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
   }
 
   return null;
-}async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
+}
+async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.waToken}`, 'Content-Type': 'application/json' },
@@ -992,7 +1042,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
 }
 
 // Indicador de "escribiendo" real de Meta. Sustituye al sleep dentro del webhook:
-// la pausa la hace el worker de entrega, no el request.async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
+// la pausa la hace el worker de entrega, no el request.
+async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
   if (!msgId) return;
   try {
     await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
@@ -1004,7 +1055,8 @@ async function descargarMedia(mediaId: string, waToken: string) {
 }
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
-const API = (token: string) => `https://api.telegram.org/bot${token}`;const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
+const API = (token: string) => `https://api.telegram.org/bot${token}`;
+const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
   const rInfo = await fetch(`${API(tgToken)}/getFile?file_id=${encodeURIComponent(fileId)}`);
@@ -1015,7 +1067,8 @@ async function descargarMedia(fileId: string, tgToken: string) {
   if (!rBin.ok) return null;
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
-}async function normalizar(
+}
+async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
 ): Promise<Entrada | null> {
@@ -1063,14 +1116,16 @@ async function descargarMedia(fileId: string, tgToken: string) {
   }
 
   return null;
-}async function enviar(destino: string, texto: string, env: { tgToken: string }) {
+}
+async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: Number(destino), text: texto }),
   });
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
-}async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
+}
+async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1116,7 +1171,8 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
   matricula:     'TELEGRAM_BOT_MATRICULA',
 };
 
-/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */function tokenDeAgente(agente?: string | null): string {
+/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */
+function tokenDeAgente(agente?: string | null): string {
   const compartido = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
   if (!agente || !esAgente(agente)) return compartido;
   return Deno.env.get(VAR_POR_AGENTE[agente]) || compartido;
@@ -1125,12 +1181,14 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
 /**
  * Agente al que pertenece esta peticion, segun `?agente=` de la URL del webhook.
  * Devuelve null si no viene o no es valido — ahi manda el router, como siempre.
- */function agenteDeUrl(url: URL): Agente | null {
+ */
+function agenteDeUrl(url: URL): Agente | null {
   const v = url.searchParams.get('agente');
   return v && esAgente(v) ? v : null;
 }
 
-/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */function agentesConBot(): Agente[] {
+/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */
+function agentesConBot(): Agente[] {
   return (Object.keys(VAR_POR_AGENTE) as Agente[])
     .filter((a) => !!Deno.env.get(VAR_POR_AGENTE[a]));
 }
@@ -1144,6 +1202,9 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
 //
 // La simulacion de tipeo vive aqui, no en el webhook: el request de entrada
 // tiene 15s y no puede gastarlos durmiendo.
+
+
+
 
 
 const MAX_POR_CORRIDA = 40;

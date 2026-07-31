@@ -9,7 +9,9 @@
 //
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
-// equivocada.type Filtro = Record<string, string | number | boolean | undefined | null>;function crearDb(apiKey: string, baseUrl?: string) {
+// equivocada.
+type Filtro = Record<string, string | number | boolean | undefined | null>;
+function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
@@ -102,11 +104,13 @@
   }
 
   return { base, list, uno, crear, actualizar, guardar };
-}type Db = ReturnType<typeof crearDb>;
+}
+type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
 // Los prompts NO viven aqui — viven en filas de AgentePrompt (§A.5).
+
 // ─── Agentes ────────────────────────────────────────────────────────────────
 
 // 'encuestas' quedo FUERA del roster a proposito. Sus tools y su prompt existen
@@ -122,13 +126,17 @@
 // Encuesta.preguntas, (3) sacar `respuestas: []` del cargador en contexto.ts,
 // porque el Object.assign de agenteInbound lo reescribe en cada turno y borra
 // lo que el cliente ya habia contestado, y (4) una frase o boton de router.
-// El codigo de tools/encuestas.ts se conserva para ese momento.const AGENTES = [
+// El codigo de tools/encuestas.ts se conserva para ese momento.
+const AGENTES = [
   'recepcion', 'ventas', 'consignacion', 'cartera', 'mantenimiento',
   'avaluos', 'pqr', 'matricula',
-] as const;type Agente = typeof AGENTES[number];const esAgente = (v: unknown): v is Agente =>
+] as const;
+type Agente = typeof AGENTES[number];
+const esAgente = (v: unknown): v is Agente =>
   typeof v === 'string' && (AGENTES as readonly string[]).includes(v);
 
-// Etiquetas que ve el clasificador LLM del router nivel 2.const ETIQUETAS_AGENTE: Record<Agente, string> = {
+// Etiquetas que ve el clasificador LLM del router nivel 2.
+const ETIQUETAS_AGENTE: Record<Agente, string> = {
   recepcion:    'saludo suelto, mensaje ambiguo, o no encaja en ninguna otra categoria',
   ventas:       'busca comprar o arrendar un inmueble, pide fotos, precios, visitas',
   consignacion: 'ES DUENO de un inmueble y quiere venderlo, arrendarlo o ponerlo en administracion',
@@ -139,7 +147,8 @@
   matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
-// ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────interface Identidad {
+// ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────
+interface Identidad {
   verificado: boolean;
   metodo: string | null;
   arrendatario_id: string | null;
@@ -149,11 +158,15 @@
   expira: string | null;
   intentos: number;
   bloqueado_hasta: string | null;
-}interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }interface SaltoAgente { agente: Agente; desde: string; motivo: string }interface TurnoPendiente {
+}
+interface TurnoMsg { role: 'user' | 'assistant'; content: string; globos?: string[]; ts?: string }
+interface SaltoAgente { agente: Agente; desde: string; motivo: string }
+interface TurnoPendiente {
   mensajes: unknown[];      // historial de la conversacion con el modelo, tal cual
   continuaciones: number;
   agente: Agente;
-}interface Estado {
+}
+interface Estado {
   v: 2;
   agente_activo: Agente;
   agente_historial: SaltoAgente[];
@@ -166,7 +179,9 @@
   pausada: boolean;
 }
 
-// ─── Entrada normalizada (ambos canales) ────────────────────────────────────type Canal = 'whatsapp' | 'telegram';interface Entrada {
+// ─── Entrada normalizada (ambos canales) ────────────────────────────────────
+type Canal = 'whatsapp' | 'telegram';
+interface Entrada {
   canal: Canal;
   tel: string;              // clave universal de la conversacion
   texto: string;
@@ -176,7 +191,8 @@
   destino: string;          // a donde se responde (numero WA con indicativo, o chat id TG)
 }
 
-// ─── Tools ──────────────────────────────────────────────────────────────────interface EsquemaTool {
+// ─── Tools ──────────────────────────────────────────────────────────────────
+interface EsquemaTool {
   name: string;
   description: string;
   strict: true;
@@ -192,13 +208,15 @@
 // segunda llamada. `terminal: true` => corta el turno (solo `responder`).
 // `cierra: true` => deja al cliente con un siguiente paso concreto: una cita,
 // un radicado, una alerta de busqueda. Es lo que permite exigir que ninguna
-// conversacion termine en callejon sin salida.interface Tool {
+// conversacion termine en callejon sin salida.
+interface Tool {
   def: EsquemaTool;
   ejecutar: (input: any, c: CtxTool) => Promise<unknown> | unknown;
   retorna?: boolean;
   terminal?: boolean;
   cierra?: boolean;
-}interface CtxTool {
+}
+interface CtxTool {
   db: Db;
   estado: Estado;
   entrada: Entrada;
@@ -215,7 +233,8 @@
   };
 }
 
-// Azucar para declarar tools sin repetir strict/additionalProperties.function definirTool(
+// Azucar para declarar tools sin repetir strict/additionalProperties.
+function definirTool(
   name: string,
   description: string,
   props: Record<string, unknown>,
@@ -237,7 +256,14 @@
     },
     ...opts,
   };
-}const str = (description: string) => ({ type: 'string', description });const strOpc = (description: string) => ({ type: ['string', 'null'], description });const num = (description: string) => ({ type: 'number', description });const numOpc = (description: string) => ({ type: ['number', 'null'], description });const bool = (description: string) => ({ type: 'boolean', description });const enumStr = (description: string, valores: string[]) => ({ type: 'string', description, enum: valores });const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });
+}
+const str = (description: string) => ({ type: 'string', description });
+const strOpc = (description: string) => ({ type: ['string', 'null'], description });
+const num = (description: string) => ({ type: 'number', description });
+const numOpc = (description: string) => ({ type: ['number', 'null'], description });
+const bool = (description: string) => ({ type: 'boolean', description });
+const enumStr = (description: string, valores: string[]) => ({ type: 'string', description, enum: valores });
+const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });
 
 // ─── _core/cola.ts ───────────────────────────────────────────────
 // Encolado de salida. El webhook intenta entrega inline solo cuando la demora
@@ -247,6 +273,8 @@
 // un presupuesto total de 15s. Ahora escribe en ColaSalida y retorna; la
 // simulacion la hace enviarPendientes. `demora_respuesta_min = 0` pasa a
 // significar "encolar con delay 0", no "enviar inline".
+
+
 /**
  * Entrega un item de la cola YA, sin esperar al cron.
  *
@@ -255,7 +283,8 @@
  * intenta la entrega inmediata y, si falla, el item queda pendiente y el cron
  * la reintenta. La simulacion de tipeo sigue viviendo en el cron, no aqui: este
  * camino corre dentro del webhook, que tiene presupuesto.
- */async function entregarYa(
+ */
+async function entregarYa(
   db: Db,
   item: any,
   env: { waToken?: string; waPhoneId?: string },
@@ -286,7 +315,8 @@
     console.error('entregarYa error:', (e as Error).message);
     return false;
   }
-}async function encolar(
+}
+async function encolar(
   db: Db,
   datos: { canal: Canal; destino: string; globos: string[]; demoraMin?: number; conversacionId?: string; agente?: string },
 ) {
@@ -306,7 +336,8 @@
 }
 
 // Notificaciones internas al equipo. NUNCA al chat del cliente: el destino sale
-// de configuracion, y se compara contra el remitente antes de enviar.async function notificarEquipo(config: Record<string, any>, telCliente: string, mensajes: string[]) {
+// de configuracion, y se compara contra el remitente antes de enviar.
+async function notificarEquipo(config: Record<string, any>, telCliente: string, mensajes: string[]) {
   if (!mensajes.length) return;
   const texto = mensajes.join('\n\n———\n\n');
   const chat = String(config.telegram_notif_chat || '').trim();
@@ -354,7 +385,8 @@
 // conocimiento del negocio (politicas, tarifas, zonas) va en ConocimientoRAG,
 // que se edita sin desplegar.
 
-/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
+/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */
+const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
 reparaciones, seguro de arrendamiento y relocation corporativo.
 Calle 81 # 8 - 95, Bogota. Telefono 485 3000. www.inmobiliarelatam.com
@@ -404,7 +436,8 @@ LO QUE NUNCA HACES
  * Prompt por agente. Corto a proposito: el motor viejo tenia 350 lineas de
  * persona y se contradecia solo. Lo que cada agente necesita saber es su rol,
  * que datos tiene que conseguir y cuando termina.
- */const PROMPTS = {
+ */
+const PROMPTS = {
   recepcion: `ROL INTERNO: recepcion. Entiendes que necesita la persona y la llevas al especialista correcto.
 
 TU UNICO TRABAJO es identificar el motivo y usar transferir_a. No resuelves el tema,
@@ -625,7 +658,8 @@ function alLunes(f: Date): Date {
   return d === 1 ? f : sumar(f, (8 - d) % 7);
 }
 
-/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */function festivosColombia(anio: number): Set<string> {
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
+function festivosColombia(anio: number): Set<string> {
   const p = pascua(anio);
   const fechas: Date[] = [
     // Fijos: no se mueven.
@@ -664,7 +698,8 @@ function festivos(anio: number): Set<string> {
   return s;
 }
 
-/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */function esHabil(f: Date): boolean {
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
+function esHabil(f: Date): boolean {
   const d = f.getUTCDay();
   if (d === 0 || d === 6) return false;
   return !festivos(f.getUTCFullYear()).has(clave(f));
@@ -676,7 +711,8 @@ function festivos(anio: number): Set<string> {
  * El día de radicación NO cuenta: el término empieza a correr el hábil
  * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
  * "a los 15 días" incluya ese día completo.
- */function sumarHabiles(desde: Date, dias: number): Date {
+ */
+function sumarHabiles(desde: Date, dias: number): Date {
   let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   let restantes = Math.max(0, Math.floor(dias));
   while (restantes > 0) {
@@ -686,7 +722,8 @@ function festivos(anio: number): Set<string> {
   return new Date(f.getTime() + dia - 1000);
 }
 
-/** Días hábiles entre dos fechas (negativo si ya venció). */function habilesHasta(desde: Date, hasta: Date): number {
+/** Días hábiles entre dos fechas (negativo si ya venció). */
+function habilesHasta(desde: Date, hasta: Date): number {
   const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
   const signo = fin >= ini ? 1 : -1;
@@ -704,14 +741,18 @@ function festivos(anio: number): Set<string> {
 // un asesor" es el ultimo recurso, no la salida por defecto: un lead que llega
 // a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
 // manana ya escribio a otra inmobiliaria.
+
 /** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
-const OFFSET_BOGOTA_H = -5;interface Horario {
+const OFFSET_BOGOTA_H = -5;
+interface Horario {
   dias: number[];   // 1 = lunes … 7 = domingo (ISO)
   desde: number;    // hora local de inicio
   hasta: number;    // hora local de fin
 }
 
-/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };function horarioDe(config: Record<string, any>): Horario {
+/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
+const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+function horarioDe(config: Record<string, any>): Horario {
   const h = config?.horario_equipo;
   if (!h) return HORARIO_DEFECTO;
   try {
@@ -738,7 +779,8 @@ function enBogota(f: Date) {
  *
  * Un festivo cuenta como fuera de horario: el equipo no esta, aunque caiga
  * entre semana. Es el mismo calendario que usan los plazos de PQR.
- */function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
+ */
+function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
   const h = horarioDe(config);
   const { hora, diaISO, fecha } = enBogota(ahora);
   if (!h.dias.includes(diaISO)) return false;
@@ -752,7 +794,8 @@ function enBogota(f: Date) {
  * Fuera de horario NO cambia lo que el agente puede hacer —las herramientas son
  * las mismas— cambia a que se compromete. Dentro de horario puede decir "un
  * asesor te contacta ya"; fuera, tiene que resolver el solo hasta donde llegue.
- */function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
+ */
+function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
   if (hayEquipo(ahora, config)) {
     return 'El equipo comercial esta disponible en este momento: si entregas el lead o '
       + 'escalas, un asesor lo toma hoy mismo.';
@@ -771,7 +814,8 @@ function enBogota(f: Date) {
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.
+const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -788,7 +832,8 @@ function destinosDe(ch: ChunkRag): string[] {
  * Los chunks especificos entran antes que los comunes. Un chunk sin `agentes`
  * no se inyecta: el tenant anterior dejo conocimiento contaminado sin ese campo
  * y tratarlo como `todos` fue precisamente lo que mezclo las dos marcas.
- */function seleccionarRag(
+ */
+function seleccionarRag(
   chunks: ChunkRag[],
   agente: Agente,
   maxChars = MAX_RAG_CHARS,
@@ -822,9 +867,11 @@ function destinosDe(ch: ChunkRag): string[] {
   return { texto: trozos.join(''), titulos, chars: usado };
 }
 
-/** ConfigAgente.activo funciona como kill switch global. */function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
+/** ConfigAgente.activo funciona como kill switch global. */
+function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
   return config?.activo !== false;
-}interface Base {
+}
+interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
   identidadMarca: string;
@@ -840,7 +887,8 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.
+async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -924,7 +972,8 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};
+async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -934,7 +983,8 @@ const CARGADORES: Record<Agente, Cargador> = {
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.
+function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -983,6 +1033,7 @@ const CARGADORES: Record<Agente, Cargador> = {
 // La segunda llamada solo ocurre con tools de recuperacion, que genuinamente
 // necesitan el resultado para hablar. Si hace falta una tercera, el turno se
 // aparca en estado.turno_pendiente y lo reanuda el cron continuarTurno.
+
 const API = 'https://api.anthropic.com/v1/messages';
 
 // Capacidades por modelo. `effort` NO existe en Haiku 4.5 (devuelve error), y
@@ -991,11 +1042,13 @@ const API = 'https://api.anthropic.com/v1/messages';
 function paramsModelo(modelo: string, effort?: string) {
   if (/haiku/.test(modelo)) return {};
   return { output_config: { effort: effort || 'low' } };
-}interface RespuestaModelo {
+}
+interface RespuestaModelo {
   bloques: any[];
   stop_reason: string;
   modelo: string;
-}async function llamarModelo(opts: {
+}
+async function llamarModelo(opts: {
   apiKey: string;
   modelos: string[];
   system: string | any[];
@@ -1036,7 +1089,8 @@ function paramsModelo(modelo: string, effort?: string) {
     }
   }
   return null;
-}interface ResultadoAgente {
+}
+interface ResultadoAgente {
   globos: string[];
   finTurno: boolean;
   pendiente: { mensajes: any[] } | null;
@@ -1044,7 +1098,8 @@ function paramsModelo(modelo: string, effort?: string) {
 }
 
 // Un turno del agente. `mensajes` entra como el historial ya formateado para la
-// API; si viene de un turno aparcado, trae los tool_result pendientes.async function correrAgente(opts: {
+// API; si viene de un turno aparcado, trae los tool_result pendientes.
+async function correrAgente(opts: {
   apiKey: string;
   modelos: string[];
   system: string;
@@ -1156,15 +1211,20 @@ function paramsModelo(modelo: string, effort?: string) {
 // MemoriaChat es el UNICO almacen. La escritura dual a Nota queda retirada:
 // eran tres escritores sobre dos copias, y `pausada` se leia de la copia
 // equivocada.
+
+
 // Clave indexada de busqueda. Reemplaza el scan `?limit=500` que corria dos
-// veces por mensaje: no se despacha un full-table scan a cada WhatsApp que entra.const claveDe = (canal: string, tel: string) =>
-  `${canal === 'telegram' ? 'tg' : 'wa'}:${String(tel).replace(/\D/g, '')}`;function identidadVacia(): Identidad {
+// veces por mensaje: no se despacha un full-table scan a cada WhatsApp que entra.
+const claveDe = (canal: string, tel: string) =>
+  `${canal === 'telegram' ? 'tg' : 'wa'}:${String(tel).replace(/\D/g, '')}`;
+function identidadVacia(): Identidad {
   return {
     verificado: false, metodo: null,
     arrendatario_id: null, contrato_id: null, propietario_id: null,
     verificado_en: null, expira: null, intentos: 0, bloqueado_hasta: null,
   };
-}function estadoVacio(): Estado {
+}
+function estadoVacio(): Estado {
   return {
     v: 2,
     agente_activo: 'recepcion',
@@ -1181,7 +1241,8 @@ function paramsModelo(modelo: string, effort?: string) {
 
 // v1 -> v2. Perezosa (al leer) e idempotente: los hilos vivos no se rompen.
 // El estado v1 era plano — `datos`, `etapa_ventas`, `objeciones_activas` eran
-// del agente de ventas aunque nadie lo dijera. Aqui se nombra.function migrar(raw: unknown): Estado {
+// del agente de ventas aunque nadie lo dijera. Aqui se nombra.
+function migrar(raw: unknown): Estado {
   const v = estadoVacio();
   if (!raw || typeof raw !== 'object') return v;
   const o = raw as Record<string, any>;
@@ -1231,7 +1292,9 @@ function paramsModelo(modelo: string, effort?: string) {
       },
     },
   };
-}interface MemoriaCargada { id: string | null; estado: Estado; fila: Record<string, any> | null }async function cargarEstado(db: Db, canal: string, tel: string): Promise<MemoriaCargada> {
+}
+interface MemoriaCargada { id: string | null; estado: Estado; fila: Record<string, any> | null }
+async function cargarEstado(db: Db, canal: string, tel: string): Promise<MemoriaCargada> {
   const clave = claveDe(canal, tel);
   // Primero por clave indexada; el fallback por telefono cubre las filas que
   // aun no tienen `clave` escrita (se rellena al guardar, una sola vez).
@@ -1242,14 +1305,16 @@ function paramsModelo(modelo: string, effort?: string) {
   let bruto: unknown = {};
   try { bruto = JSON.parse(fila.estado_json || '{}'); } catch { /* estado corrupto: se arranca limpio */ }
   return { id: fila.id, estado: migrar(bruto), fila };
-}function ctxDe(estado: Estado, agente: Agente): Record<string, any> {
+}
+function ctxDe(estado: Estado, agente: Agente): Record<string, any> {
   if (!estado.ctx[agente]) estado.ctx[agente] = {};
   return estado.ctx[agente];
 }
 
 // El handoff preserva todo: fija el agente, deja rastro en agente_historial y
 // empuja un marcador al historial compartido para que el agente nuevo entienda
-// por que le llego la conversacion a medias.function transferir(estado: Estado, destino: Agente, motivo: string) {
+// por que le llego la conversacion a medias.
+function transferir(estado: Estado, destino: Agente, motivo: string) {
   const origen = estado.agente_activo;
   if (origen === destino) return;
   estado.agente_activo = destino;
@@ -1262,7 +1327,8 @@ function paramsModelo(modelo: string, effort?: string) {
     content: `[Sistema: transferido de ${origen} a ${destino}. Motivo: ${motivo}]`,
     ts: new Date().toISOString(),
   });
-}async function guardarEstado(
+}
+async function guardarEstado(
   db: Db,
   memoriaId: string | null,
   canal: string,
@@ -1305,6 +1371,7 @@ function paramsModelo(modelo: string, effort?: string) {
 //
 // Se manda un RESUMEN, no la transcripcion: el humano necesita decidir en diez
 // segundos si llama ya, no leer treinta mensajes.
+
 const ETIQUETAS: Record<string, string> = {
   operacion: 'Operacion',
   tipo_prop: 'Tipo de inmueble',
@@ -1336,7 +1403,8 @@ const fmt = (v: unknown): string => {
 /**
  * Arma el brief. `extra` permite agregar lineas propias del motivo del
  * escalamiento sin que este modulo tenga que conocerlas.
- */function briefLead(estado: Estado, tel: string, canal: string, extra: string[] = []): string {
+ */
+function briefLead(estado: Estado, tel: string, canal: string, extra: string[] = []): string {
   const lineas: string[] = [];
 
   const nombre = String(estado.compartido.nombre || '').trim();
@@ -1389,10 +1457,14 @@ const fmt = (v: unknown): string => {
 
 // ─── _core/tools/comunes.ts ──────────────────────────────────────
 // Las cuatro tools que recibe TODO agente.
+
+
+
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
 const COMPARTIDOS = new Set(['nombre', 'email', 'documento', 'direccion_inmueble']);
-const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'area_m2', 'habitaciones', 'nps_score']);const responder: Tool = {
+const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'area_m2', 'habitaciones', 'nps_score']);
+const responder: Tool = {
   ...definirTool(
     'responder',
     'Envia tu respuesta al cliente y TERMINA tu turno. Cada elemento de `globos` se manda como un mensaje separado de WhatsApp, como escribe una persona. Usa 1 o 2 globos; 3 solo si de verdad hace falta. Siempre debes terminar tu turno con esta herramienta.',
@@ -1437,8 +1509,10 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 };
 
 // Regla dura heredada del agente original: nada de guiones largos hacia el
-// cliente. Es el tic que mas delata a un bot en espanol.const limpiar = (t: unknown) =>
-  String(t ?? '').replace(/\s*[—–]\s*/g, ', ').replace(/\s{2,}/g, ' ').trim();const guardarDato: Tool = {
+// cliente. Es el tic que mas delata a un bot en espanol.
+const limpiar = (t: unknown) =>
+  String(t ?? '').replace(/\s*[—–]\s*/g, ', ').replace(/\s{2,}/g, ' ').trim();
+const guardarDato: Tool = {
   ...definirTool(
     'guardar_dato',
     'Guarda un dato que el cliente acaba de dar, para no volver a preguntarlo. Llamala tantas veces como datos nuevos haya en el mensaje.',
@@ -1459,7 +1533,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     }
     return { ok: true, campo };
   },
-};const transferirA: Tool = {
+};
+const transferirA: Tool = {
   ...definirTool(
     'transferir_a',
     'Pasa la conversacion a otro agente especializado cuando el tema deja de ser el tuyo. El cliente NO ve el cambio: el otro agente lee el mismo historial y sigue. No anuncies la transferencia, solo hazla.',
@@ -1480,7 +1555,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 
 // Escalamiento. La escalera es identica en todos los agentes: frustracion,
 // 3 turnos sin avance, 3 fallos de verificacion, el cliente pide humano, monto
-// o disputa fuera de politica, PQR con palabra legal.const escalarAHumano: Tool = {
+// o disputa fuera de politica, PQR con palabra legal.
+const escalarAHumano: Tool = {
   ...definirTool(
     'escalar_a_humano',
     'Pasa la conversacion a una persona del equipo. Usala si el cliente lo pide, si esta molesto, si llevas 3 turnos sin avanzar, si el tema se sale de lo que puedes resolver, o si hay plata o un reclamo legal de por medio. Despues de llamarla, despidete con `responder` diciendo que un asesor le escribe; NO prometas tiempos.',
@@ -1522,14 +1598,16 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     );
     return { ok: true, escalado: true };
   },
-};const COMUNES: Record<string, Tool> = {
+};
+const COMUNES: Record<string, Tool> = {
   responder,
   guardar_dato: guardarDato,
   transferir_a: transferirA,
   escalar_a_humano: escalarAHumano,
 };
 
-// Helper compartido: exigir identidad verificada antes de tocar PII.function exigirVerificado(c: CtxTool): { error: string } | null {
+// Helper compartido: exigir identidad verificada antes de tocar PII.
+function exigirVerificado(c: CtxTool): { error: string } | null {
   const i = c.estado.identidad;
   if (i.bloqueado_hasta && new Date(i.bloqueado_hasta).getTime() > Date.now()) {
     return { error: 'bloqueado_por_intentos_fallidos' };
@@ -1538,7 +1616,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
     return { error: 'no_verificado' };
   }
   return null;
-}const enviarMenu: Tool = {
+}
+const enviarMenu: Tool = {
   ...definirTool(
     'enviar_menu',
     'Muestra el menu de opciones al cliente cuando no queda claro que necesita. Usalo maximo una vez por conversacion.',
@@ -1567,7 +1646,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 //
 // La rubrica vive en codigo y no en el prompt a proposito: un criterio de
 // priorizacion tiene que ser reproducible y auditable. Si el modelo decide la
-// temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.interface SenalesLead {
+// temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.
+interface SenalesLead {
   // Del CRM
   etapa_pipeline?: string;
   presupuesto_max?: number;
@@ -1585,7 +1665,8 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
   forma_pago?: string;      // 'credito_aprobado' | 'credito_tramite' | 'contado' | 'no_sabe'
   decide_solo?: boolean;
   otra_inmobiliaria?: boolean;
-}interface Calificacion {
+}
+interface Calificacion {
   score: number;             // 0-100
   temperatura: 'Frio' | 'Tibio' | 'Caliente' | 'Urgente';
   prioridad: 'Baja' | 'Media' | 'Alta';
@@ -1610,7 +1691,8 @@ const PAGO: Record<string, number> = {
  *
  * `motivos` acompaña al score para que un asesor pueda ver por que un lead
  * quedo tibio en vez de tener que confiar en el numero.
- */function calificar(s: SenalesLead): Calificacion {
+ */
+function calificar(s: SenalesLead): Calificacion {
   const motivos: string[] = [];
   let score = ETAPA[String(s.etapa_pipeline || '')] ?? 10;
 
@@ -1661,7 +1743,8 @@ const PAGO: Record<string, number> = {
 // ─── _core/tools/ventas.ts ───────────────────────────────────────
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
 // el primero que coincidia". Con 30+ asesores eso concentra todos los leads en
-// una persona: ahora se balancea por leads abiertos.async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
+// una persona: ahora se balancea por leads abiertos.
+async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
   const activos = await db.list('Asesor', { estado: 'Activo', limit: 100 });
   if (!activos.length) return null;
 
@@ -1694,15 +1777,18 @@ const PAGO: Record<string, number> = {
 }
 
 // El demo tiene que decir el valor real. Redondear $2.500.000 a "$3 millones"
-// cambia materialmente el canon y erosiona la confianza en el inventario.const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
+// cambia materialmente el canon y erosiona la confianza en el inventario.
+const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-}).format(Math.round(n)).replace(/\s+/g, '');const linkFicha = (p: any): string => String(
+}).format(Math.round(n)).replace(/\s+/g, '');
+const linkFicha = (p: any): string => String(
   p?.link_wasi
   || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
   || '',
-).trim();const buscarInmuebles: Tool = {
+).trim();
+const buscarInmuebles: Tool = {
   ...definirTool(
     'buscar_inmuebles',
     'Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui.',
@@ -1810,7 +1896,8 @@ const PAGO: Record<string, number> = {
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
     };
   },
-};const enviarFicha: Tool = {
+};
+const enviarFicha: Tool = {
   ...definirTool(
     'enviar_ficha',
     'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
@@ -1825,7 +1912,8 @@ const PAGO: Record<string, number> = {
     c.salida.globos.push(ficha);
     return { ok: true };
   },
-};const registrarInteres: Tool = {
+};
+const registrarInteres: Tool = {
   ...definirTool(
     'registrar_interes',
     'Guarda lo que el cliente busca para avisarle cuando entre un inmueble que encaje. Usala cuando buscar_inmuebles no encontro nada y el cliente acepta que le avisemos. Es la unica forma de que ese "te aviso" quede registrado: prometerlo en el mensaje no guarda nada.',
@@ -1871,7 +1959,8 @@ const PAGO: Record<string, number> = {
         + 'que encaje. NO prometas cuando: no lo sabes.',
     };
   },
-};const calificarLead: Tool = {
+};
+const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
     'Entrega el lead a un asesor humano. Llamala SOLO cuando tengas nombre, operacion (compra o arriendo) y una senal real del presupuesto del cliente. El precio de un inmueble NO es el presupuesto del cliente. El sistema escribe el mensaje de entrega: tu no lo redactas.',
@@ -1968,7 +2057,8 @@ const PAGO: Record<string, number> = {
         : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
     };
   },
-};const agendarVisita: Tool = {
+};
+const agendarVisita: Tool = {
   ...definirTool(
     'agendar_visita',
     'Deja registrada la intencion de visitar un inmueble. No confirma hora: el asesor coordina. Nunca prometas un horario concreto.',
@@ -1989,7 +2079,8 @@ const PAGO: Record<string, number> = {
     });
     return { ok: true, nota: 'Dile que el asesor le confirma el horario. No des una hora tu.' };
   },
-};const VENTAS: Record<string, Tool> = {
+};
+const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
   registrar_interes: registrarInteres,
@@ -2004,6 +2095,9 @@ const PAGO: Record<string, number> = {
 // puede pasar un id arbitrario. La comparacion ocurre aqui, server-side, y las
 // tools que leen PII no tienen parametros identificadores (ver tools/cartera.ts).
 // Solo este modulo escribe estado.identidad.
+
+
+
 const HORAS_VIGENCIA = 24;
 const MAX_INTENTOS = 3;
 const BLOQUEO_MIN = 60;
@@ -2014,7 +2108,8 @@ const soloDigitos = (s: unknown) => String(s ?? '').replace(/\D/g, '');
 async function sha256(txt: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}async function auditar(
+}
+async function auditar(
   db: Db,
   datos: { tipo: string; sujeto_id?: string; telefono: string; exito: boolean; detalle?: string },
 ) {
@@ -2034,7 +2129,8 @@ async function sha256(txt: string): Promise<string> {
 
 // ── Nivel A: implicito. El `from` del canal contra Arrendatario/Propietario. ──
 // Suficiente para RUTEAR a cartera. Nunca suficiente para divulgar: SIM swap,
-// telefonos familiares compartidos, numeros reasignados por el operador.async function reconocerTelefono(db: Db, tel: string) {
+// telefonos familiares compartidos, numeros reasignados por el operador.
+async function reconocerTelefono(db: Db, tel: string) {
   const t = soloDigitos(tel);
   if (!t) return { arrendatario: null, propietario: null, contrato: null };
   const [arrs, props] = await Promise.all([
@@ -2047,17 +2143,20 @@ async function sha256(txt: string): Promise<string> {
     contrato = (await db.list('ContratoArriendo', { arrendatario_id: arrendatario.id, estado: 'Activo', limit: 1 }))[0] || null;
   }
   return { arrendatario, propietario: props[0] || null, contrato };
-}function sesionVigente(estado: Estado): boolean {
+}
+function sesionVigente(estado: Estado): boolean {
   const i = estado.identidad;
   if (!i.verificado || !i.expira) return false;
   return new Date(i.expira).getTime() > Date.now();
-}function bloqueado(estado: Estado): boolean {
+}
+function bloqueado(estado: Estado): boolean {
   const h = estado.identidad.bloqueado_hasta;
   return !!h && new Date(h).getTime() > Date.now();
 }
 
 // ── Nivel B: reto. Segundo factor que el registro ya tiene. ──────────────────
-// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.async function verificar(
+// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.
+async function verificar(
   db: Db,
   estado: Estado,
   entrada: Entrada,
@@ -2123,7 +2222,8 @@ async function sha256(txt: string): Promise<string> {
 
 // ── Nivel C: magic link al portal. ──────────────────────────────────────────
 // Nunca sale un PDF ni un extracto completo por WhatsApp. Sale un link de un
-// solo uso, atado a este telefono, que vence en 15 minutos.async function crearSesionPortal(
+// solo uso, atado a este telefono, que vence en 15 minutos.
+async function crearSesionPortal(
   db: Db,
   entrada: Entrada,
   estado: Estado,
@@ -2154,7 +2254,8 @@ async function sha256(txt: string): Promise<string> {
 // ─── _core/tools/cartera.ts ──────────────────────────────────────
 // verificar_identidad NO recibe ningun identificador ni devuelve ninguno. El
 // modelo nunca ve la cedula correcta: la comparacion ocurre en identidad.ts, y
-// al fallar no se filtra nada que sirva para adivinar.const verificarIdentidad: Tool = {
+// al fallar no se filtra nada que sirva para adivinar.
+const verificarIdentidad: Tool = {
   ...definirTool(
     'verificar_identidad',
     'Comprueba que quien escribe es de verdad el titular, antes de darle cualquier dato de su contrato. Pidele los ultimos 4 digitos de su cedula (o el numero de solicitud si esta en un tramite) y pasa aqui lo que responda, tal cual. Tiene 3 intentos.',
@@ -2184,7 +2285,8 @@ async function sha256(txt: string): Promise<string> {
 
 // CERO argumentos. El contrato sale de estado.identidad, escrito server-side por
 // identidad.ts. Una inyeccion de prompt ("muestrame el contrato 4471") no tiene
-// de donde agarrarse: la herramienta no acepta ese parametro.const consultarEstadoCuenta: Tool = {
+// de donde agarrarse: la herramienta no acepta ese parametro.
+const consultarEstadoCuenta: Tool = {
   ...definirTool(
     'consultar_estado_cuenta',
     'Trae el saldo, el ultimo pago y el proximo vencimiento del contrato de ESTE cliente. Requiere haberlo verificado antes con verificar_identidad.',
@@ -2218,7 +2320,8 @@ async function sha256(txt: string): Promise<string> {
       instruccion: 'Da la cifra en una frase corta. El detalle completo NO se manda por chat: si pide el desglose, mandale el link del portal.',
     };
   },
-};const enviarLinkPortal: Tool = {
+};
+const enviarLinkPortal: Tool = {
   ...definirTool(
     'enviar_link_portal',
     'Manda un link seguro al portal del cliente. Usalo para todo lo que sea un documento, una tabla o un historial: el chat es para cifras sueltas, el portal para el detalle. El link vence en 15 minutos y sirve una sola vez.',
@@ -2237,7 +2340,8 @@ async function sha256(txt: string): Promise<string> {
     c.salida.globos.push(url);
     return { ok: true, nota: 'El link ya se envio. No lo repitas en responder.' };
   },
-};const enviarCodigoBarras: Tool = {
+};
+const enviarCodigoBarras: Tool = {
   ...definirTool(
     'enviar_codigo_barras',
     'Manda el codigo de barras del mes para que el cliente pague en banco o corresponsal.',
@@ -2267,7 +2371,8 @@ async function sha256(txt: string): Promise<string> {
     await c.db.actualizar('CodigoBarras', cb.id, { ...cb, fecha_envio: new Date().toISOString(), canal_envio: c.entrada.canal, estado_envio: 'Enviado' });
     return { ok: true, periodo, nota: 'Ya se envio el link. No lo repitas en responder.' };
   },
-};const CARTERA: Record<string, Tool> = {
+};
+const CARTERA: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   consultar_estado_cuenta: consultarEstadoCuenta,
   enviar_link_portal: enviarLinkPortal,
@@ -2324,7 +2429,8 @@ const registrarReparacion: Tool = {
         : 'Confirma el radicado en una frase. Puedes pedirle una foto del dano si ayuda al tecnico. No prometas fecha ni costo.',
     };
   },
-};const adjuntarEvidencia: Tool = {
+};
+const adjuntarEvidencia: Tool = {
   ...definirTool(
     'adjuntar_evidencia',
     'Guarda una foto que el cliente acaba de mandar como evidencia de la reparacion que ya radicaste.',
@@ -2343,7 +2449,8 @@ const registrarReparacion: Tool = {
     });
     return { ok: true };
   },
-};const consultarEstadoReparacion: Tool = {
+};
+const consultarEstadoReparacion: Tool = {
   ...definirTool(
     'consultar_estado_reparacion',
     'Consulta como van las reparaciones abiertas de este cliente.',
@@ -2371,7 +2478,8 @@ const registrarReparacion: Tool = {
       instruccion: 'Resume el estado en una frase. No prometas fechas que no aparecen aqui.',
     };
   },
-};const MANTENIMIENTO: Record<string, Tool> = {
+};
+const MANTENIMIENTO: Record<string, Tool> = {
   verificar_identidad: verificarIdentidad,
   registrar_reparacion: registrarReparacion,
   adjuntar_evidencia: adjuntarEvidencia,
@@ -2443,7 +2551,8 @@ const registrarConsignacion: Tool = {
       instruccion: 'Confirma que quedo registrado y que un asesor lo contacta para coordinar la visita y el avaluo. NO negocies comision ni des porcentajes: si pregunta por eso, escala.',
     };
   },
-};const agendarAvaluoPrevio: Tool = {
+};
+const agendarAvaluoPrevio: Tool = {
   ...definirTool(
     'agendar_avaluo_previo',
     'Deja pedida la visita de avaluo para una consignacion que ya registraste. Sirve para saber a que precio sale el inmueble.',
@@ -2460,7 +2569,8 @@ const registrarConsignacion: Tool = {
     );
     return { ok: true, nota: 'Dile que el asesor le confirma el dia. No des una hora tu.' };
   },
-};const CONSIGNACION: Record<string, Tool> = {
+};
+const CONSIGNACION: Record<string, Tool> = {
   registrar_consignacion: registrarConsignacion,
   agendar_avaluo_previo: agendarAvaluoPrevio,
 };
@@ -2515,7 +2625,8 @@ const registrarSolicitudAvaluo: Tool = {
         : `Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor del servicio, escala para cotizacion. ${raa}`,
     };
   },
-};const cotizarAvaluo: Tool = {
+};
+const cotizarAvaluo: Tool = {
   ...definirTool(
     'cotizar_avaluo',
     'Comprueba si existe un tarifario aprobado. Por ahora no hay uno cargado y debes escalar para cotizacion.',
@@ -2531,7 +2642,8 @@ const registrarSolicitudAvaluo: Tool = {
       instruccion: 'No des ninguna cifra ni formula. Escala con escalar_a_humano para que el equipo de avaluos cotice.',
     };
   },
-};const AVALUOS: Record<string, Tool> = {
+};
+const AVALUOS: Record<string, Tool> = {
   registrar_solicitud_avaluo: registrarSolicitudAvaluo,
   cotizar_avaluo: cotizarAvaluo,
 };
@@ -2560,7 +2672,8 @@ const DIAS_DEFECTO: Record<string, number> = {
   Reclamo:      15,
   Sugerencia:   15,
   Felicitacion: 15,
-};const registrarPqr: Tool = {
+};
+const registrarPqr: Tool = {
   ...definirTool(
     'registrar_pqr',
     'Radica una peticion, queja, reclamo, sugerencia o felicitacion. Antes de llamarla necesitas entender bien QUE paso: no radiques con una sola frase suelta.',
@@ -2627,7 +2740,8 @@ const DIAS_DEFECTO: Record<string, number> = {
         : `Dale el radicado ${radicado} y dile que el termino de respuesta es de ${Number(dias[tipo]) || 15} dias habiles. NO des la fecha exacta ni prometas que se resuelve antes: el plazo es el maximo de ley, no un compromiso de entrega.`,
     };
   },
-};const consultarEstadoPqr: Tool = {
+};
+const consultarEstadoPqr: Tool = {
   ...definirTool(
     'consultar_estado_pqr',
     'Consulta como va una PQR ya radicada, por su numero de radicado.',
@@ -2650,14 +2764,16 @@ const DIAS_DEFECTO: Record<string, number> = {
       respuesta: pqr.respuesta ?? null,
     };
   },
-};const PQR: Record<string, Tool> = {
+};
+const PQR: Record<string, Tool> = {
   registrar_pqr: registrarPqr,
   consultar_estado_pqr: consultarEstadoPqr,
 };
 
 // ─── _core/tools/matricula.ts ────────────────────────────────────
 // Matricula de contrato — intake de datos para reemplazar el formulario F117.
-// La lista documental y su canal seguro siguen pendientes de definicion.const iniciarMatricula: Tool = {
+// La lista documental y su canal seguro siguen pendientes de definicion.
+const iniciarMatricula: Tool = {
   ...definirTool(
     'iniciar_matricula',
     'Abre una solicitud de matricula de contrato para el inmueble que el cliente va a tomar en arriendo. Es el primer paso: despues se agregan los participantes.',
@@ -2703,7 +2819,8 @@ const DIAS_DEFECTO: Record<string, number> = {
       instruccion: `Dale el numero ${numero} y dile que lo guarde. Luego preguntale si va a arrendar solo o si hay coarrendatarios o codeudores.`,
     };
   },
-};const agregarParticipante: Tool = {
+};
+const agregarParticipante: Tool = {
   ...definirTool(
     'agregar_participante',
     'Agrega un codeudor o coarrendatario a la solicitud. Llamala una vez por persona, cuando tengas su nombre, documento y telefono.',
@@ -2743,7 +2860,8 @@ const DIAS_DEFECTO: Record<string, number> = {
 
     return { ok: true, total_participantes: lista.length, instruccion: 'Confirma y preguntale si falta alguien mas.' };
   },
-};const finalizarMatricula: Tool = {
+};
+const finalizarMatricula: Tool = {
   ...definirTool(
     'finalizar_matricula',
     'Cierra la captura de datos y deja la solicitud lista para el estudio. Llamala cuando el cliente confirme que no falta nadie mas.',
@@ -2773,7 +2891,8 @@ const DIAS_DEFECTO: Record<string, number> = {
 };
 
 // En matricula el link se emite contra el numero de solicitud, no contra una
-// verificacion de contrato: el cliente todavia no es arrendatario nuestro.const enviarLinkDocumentos: Tool = {
+// verificacion de contrato: el cliente todavia no es arrendatario nuestro.
+const enviarLinkDocumentos: Tool = {
   ...definirTool(
     'enviar_link_portal',
     'Comprueba si ya existe el canal seguro para documentos de matricula. Por ahora esta pendiente y debes escalar.',
@@ -2787,7 +2906,8 @@ const DIAS_DEFECTO: Record<string, number> = {
       instruccion: 'No envies ningun enlace. Escala para que el equipo confirme la lista documental y el canal seguro.',
     };
   },
-};const MATRICULA: Record<string, Tool> = {
+};
+const MATRICULA: Record<string, Tool> = {
   iniciar_matricula: iniciarMatricula,
   agregar_participante: agregarParticipante,
   finalizar_matricula: finalizarMatricula,
@@ -2801,6 +2921,15 @@ const DIAS_DEFECTO: Record<string, number> = {
 // instruccion que el modelo podia ignorar. Aqui es un esquema: el agente de
 // cartera no recibe `calificar_lead`, asi que es estructuralmente incapaz de
 // llamarla.
+
+
+
+
+
+
+
+
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
@@ -2811,7 +2940,8 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
   avaluos:       AVALUOS,
   pqr:           PQR,
   matricula:     MATRICULA,
-};function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
+};
+function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
   const todas = { ...COMUNES, ...(EXTRA[agente] || {}) };
   // AgentePrompt.tools_habilitadas permite recortar (nunca ampliar) el set sin
   // desplegar. `responder` no se puede quitar: sin ella el agente no habla.
@@ -2828,6 +2958,12 @@ const EXTRA: Record<Agente, Record<string, Tool>> = {
 // agente necesita una tercera llamada (encadenar dos recuperaciones, por
 // ejemplo), el turno se aparca en estado.turno_pendiente y este cron lo cierra.
 // Tope de 2 continuaciones; despues escala a un humano.
+
+
+
+
+
+
 
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
 const MAX_POR_CORRIDA = 5;
