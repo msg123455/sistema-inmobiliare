@@ -1,6 +1,6 @@
 // Reclasifica un lead: score, temperatura y prioridad. Scoring puro (sin IA).
 // POST { contacto_id }
-const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -9,6 +9,10 @@ const CORS = {
 const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 Deno.serve(async (req) => {
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   let body = {};
   try { body = await req.json(); } catch {}

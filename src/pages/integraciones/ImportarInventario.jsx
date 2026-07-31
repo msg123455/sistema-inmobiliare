@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,22 +15,46 @@ const COLUMNAS_ESPERADAS = [
   { nombre: 'Cod', requerida: true, nota: 'clave para no duplicar' },
   { nombre: 'Direccion', requerida: false },
   { nombre: 'Gestion', requerida: false, nota: 'Venta / Arriendo' },
-  { nombre: 'ValorVenta', requerida: false },
-  { nombre: 'ValorCanon', requerida: false },
+  { nombre: 'Valor Venta', requerida: false },
+  { nombre: 'Valor Canon', requerida: false },
   { nombre: 'Administracion', requerida: false },
-  { nombre: 'Tipoinmueble', requerida: false },
+  { nombre: 'Tipo Inmueble', requerida: false },
   { nombre: 'Estado', requerida: false },
   { nombre: 'Barrio', requerida: false },
   { nombre: 'Zona', requerida: false },
   { nombre: 'Ciudad', requerida: false },
   { nombre: 'Procedencia', requerida: false },
-  { nombre: 'METROCUADRADO', requerida: false },
-  { nombre: 'FINCARAIZ', requerida: false },
-  { nombre: 'MERCADOLIBRE', requerida: false },
+  { nombre: 'Asesores', requerida: false, nota: 'de aqui salen las zonas por asesor' },
+  { nombre: 'Fecha Consignado', requerida: false },
+  { nombre: 'Metro Cuadrado', requerida: false },
+  { nombre: 'FincaRaiz', requerida: false },
+  { nombre: 'MercadoLibre', requerida: false },
+  { nombre: 'La Haus', requerida: false },
+  { nombre: 'Zona Habitat', requerida: false },
+  { nombre: 'Ciencuadras', requerida: false },
+  { nombre: 'Idonde', requerida: false },
+  { nombre: 'Properati', requerida: false },
 ];
+
+// Corte de consignacion. Los 2703 inmuebles del export vienen marcados
+// 'Disponible', incluido uno de 2010: SIMI nunca cerro los vendidos. Importar
+// eso hace que el agente ofrezca inmuebles que ya no existen. Se sube el corte
+// cuando el inventario viejo este depurado en SIMI.
+const DESDE_ANIO = 2024;
 
 const normalizar = (s) =>
   String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s_]/g, '');
+
+
+/** Aviso bloqueante. Se usa cuando el esquema de Base44 impide importar bien. */
+function Alerta({ children }) {
+  return (
+    <div className="flex items-start gap-2.5 text-sm text-destructive bg-destructive/10 rounded-xl p-4">
+      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <div>{children}</div>
+    </div>
+  );
+}
 
 export default function ImportarInventario() {
   const qc = useQueryClient();
@@ -42,6 +66,17 @@ export default function ImportarInventario() {
   const [progreso, setProgreso] = useState(null); // { hechas, total }
   const [resultado, setResultado] = useState(null);
   const [corriendo, setCorriendo] = useState(false);
+
+  // Revisa que Propiedad pueda deduplicar ANTES de dejar importar. El esquema de
+  // Base44 no se puede leer desde el repo —la plataforma revierte los .jsonc— y
+  // un campo que no existe se DESCARTA EN SILENCIO al escribir. Sin esta
+  // comprobacion, la unica forma de enterarse seria ver el catalogo duplicado.
+  const [esquema, setEsquema] = useState(null);
+  useEffect(() => {
+    callFunction('importarInventario', { diagnostico: true })
+      .then(setEsquema)
+      .catch(() => setEsquema(null));
+  }, []);
 
   const leerArchivo = async (file) => {
     if (!file) return;
@@ -65,12 +100,13 @@ export default function ImportarInventario() {
   // acentos, mayusculas y espacios.
   const tieneColumna = (esperada) => columnas.some((c) => normalizar(c) === normalizar(esperada));
   const faltaRequerida = COLUMNAS_ESPERADAS.filter((c) => c.requerida && !tieneColumna(c.nombre));
+  const esquemaIncompleto = (esquema?.faltan?.length || 0) > 0;
 
   const ejecutar = async (simular) => {
     if (!filas.length) return;
     setCorriendo(true);
     setResultado(null);
-    const acum = { creados: 0, actualizados: 0, omitidos: 0, errores: [] };
+    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, errores: [], acentos: [], zonas: {} };
     let desde = 0;
 
     try {
@@ -79,12 +115,17 @@ export default function ImportarInventario() {
       while (desde !== null) {
         setProgreso({ hechas: desde, total: filas.length });
         const r = await callFunction('importarInventario', {
-          filas, proveedor: 'simi', desde, simular,
+          filas, proveedor: 'simi', desde, simular, desde_anio: DESDE_ANIO,
         });
         acum.creados += r.creados || 0;
         acum.actualizados += r.actualizados || 0;
         acum.omitidos += r.omitidos || 0;
+        acum.omitidosFecha += r.omitidos_por_fecha || 0;
         if (r.errores?.length) acum.errores.push(...r.errores);
+        for (const a of r.acentos_truncados || []) if (!acum.acentos.includes(a)) acum.acentos.push(a);
+        for (const [asesor, zs] of Object.entries(r.zonas_por_asesor || {})) {
+          acum.zonas[asesor] = [...new Set([...(acum.zonas[asesor] || []), ...zs])];
+        }
         desde = r.siguiente;
       }
       setProgreso({ hechas: filas.length, total: filas.length });
@@ -112,6 +153,24 @@ export default function ImportarInventario() {
           volver a importar el mismo archivo sin duplicar nada.
         </p>
       </div>
+
+      {/* Estado del esquema: si Propiedad no puede deduplicar, importar duplica todo */}
+      {esquema?.faltan?.length > 0 && (
+        <Alerta>
+          <p className="font-medium">
+            Faltan {esquema.faltan.length} campos en la tabla Propiedad de Base44
+          </p>
+          <p className="mt-1">
+            Sin <strong>{esquema.faltan.join('</strong>, <strong>')}</strong> cada importación
+            volvería a crear el catálogo entero en vez de actualizarlo. Con 400 inmuebles, tres
+            importaciones dejan 1.200 registros.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Se crean en Base44 → Datos → Propiedad, todos de tipo texto. La importación queda
+            bloqueada hasta entonces.
+          </p>
+        </Alerta>
+      )}
 
       {/* Carga */}
       <Card className="rounded-2xl border-border/60">
@@ -180,14 +239,14 @@ export default function ImportarInventario() {
             <div className="flex gap-2 pt-1">
               <Button
                 variant="outline"
-                disabled={corriendo || !!faltaRequerida.length}
+                disabled={corriendo || !!faltaRequerida.length || esquemaIncompleto}
                 onClick={() => ejecutar(true)}
                 className="rounded-lg gap-1.5"
               >
                 <Eye className="w-4 h-4" /> Simular
               </Button>
               <Button
-                disabled={corriendo || !!faltaRequerida.length}
+                disabled={corriendo || !!faltaRequerida.length || esquemaIncompleto}
                 onClick={() => ejecutar(false)}
                 className="rounded-lg gap-1.5"
               >

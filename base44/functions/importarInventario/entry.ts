@@ -20,7 +20,7 @@
 // confirmado. Cuando lo este, esto se parte en _core/inventario/.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const TOKEN = Deno.env.get('IMPORT_TOKEN') || 'INVENTARIO2026';
 
 // Base44 corta las funciones alrededor de los 15s, asi que la importacion va
@@ -39,7 +39,51 @@ const LOTE_MAX = 40;
 
 // ── Normalizadores ───────────────────────────────────────────────────────────
 
-const txt = (v: unknown) => String(v ?? '').trim();
+/**
+ * Repara acentos rotos por doble codificacion (mojibake).
+ *
+ * El export de SIMI sale en UTF-8 y en algun paso se lee como Latin-1, asi que
+ * "FincaRaiz" llega como "FincaRaÃ­z" y "Pinzon" como "PinzÃ³n". Guardar eso
+ * tal cual rompe la busqueda: un cliente que pregunta por Nariño nunca matchea
+ * contra "NariÃo".
+ *
+ * Se usa una tabla y no la conversion byte a byte a proposito: parte del
+ * archivo esta MAL de forma irreparable —cuando el segundo byte cae en el rango
+ * de control de Latin-1 se pierde, y "Nariño" ya llego como "NariÃo" sin la
+ * "±"—. Una conversion global fallaria entera por esos casos; la tabla arregla
+ * lo que se puede y deja intacto lo demas.
+ */
+// Solo secuencias COMPLETAS: los dos bytes presentes. El segundo caracter de
+// las mayusculas se escribe con \u porque cae en el rango de control de
+// Latin-1 y seria invisible en el editor.
+const MOJIBAKE: Array<[RegExp, string]> = [
+  [/\u00C3\u00A1/g, 'á'], [/\u00C3\u00A9/g, 'é'], [/\u00C3\u00AD/g, 'í'],
+  [/\u00C3\u00B3/g, 'ó'], [/\u00C3\u00BA/g, 'ú'], [/\u00C3\u00B1/g, 'ñ'],
+  [/\u00C3\u00BC/g, 'ü'],
+  [/\u00C3\u0081/g, 'Á'], [/\u00C3\u0089/g, 'É'], [/\u00C3\u008D/g, 'Í'],
+  [/\u00C3\u0093/g, 'Ó'], [/\u00C3\u009A/g, 'Ú'], [/\u00C3\u0091/g, 'Ñ'],
+  [/\u00C2\u00B0/g, '°'], [/\u00C2\u00A0/g, ' '],
+];
+
+/**
+ * Una "Ã" que sobrevive a la tabla es una secuencia TRUNCADA: el segundo byte
+ * cayo en el rango de control de Latin-1 y se perdio por el camino. "Nariño"
+ * llega como "NariÃo", ya sin el byte que lo identificaba como eñe.
+ *
+ * Esos NO se adivinan. "VocÃn" pudo ser "Vocón" o "Vocán" y desde aqui no hay
+ * forma de saberlo: escribir cualquiera de los dos seria inventar el dato. Se
+ * dejan como estan y la funcion los reporta para que se corrijan en el origen.
+ */
+export const acentoRoto = (s: string) => /[\u00C2\u00C3]/.test(s);
+
+function repararAcentos(s: string): string {
+  if (!s.includes('\u00C3') && !s.includes('\u00C2')) return s;
+  let r = s;
+  for (const [re, rep] of MOJIBAKE) r = r.replace(re, rep);
+  return r;
+}
+
+const txt = (v: unknown) => repararAcentos(String(v ?? '')).trim();
 
 /**
  * Convierte los numeros como vienen de una hoja colombiana.
@@ -147,11 +191,22 @@ function desdeFilaSimi(fila: Record<string, unknown>, proveedor: string) {
     zona: txt(campo(fila, 'Zona')),
     ciudad,
     procedencia: txt(campo(fila, 'Procedencia')),
-    // Propiedad.portales es un objeto anidado, no tres campos planos.
+    // Quien capto el inmueble. Es la unica fuente que conecta el inventario con
+    // la lista de asesores: de aqui salen las zonas que cada uno maneja de
+    // verdad, que la hoja de agentes no trae.
+    asesor: txt(campo(fila, 'Asesores', 'Asesor')),
+    fecha_consignado: txt(campo(fila, 'Fecha Consignado', 'FechaConsignado')),
+    // Propiedad.portales es un objeto anidado, no campos planos. La hoja trae
+    // ocho portales, no tres: los que no existan quedan en cadena vacia.
     portales: {
-      metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado')),
-      fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz')),
+      metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado', 'Metro Cuadrado')),
+      fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz', 'FincaRaiz')),
       mercadolibre: txt(campo(fila, 'MERCADOLIBRE', 'Mercadolibre', 'MercadoLibre')),
+      lahaus: txt(campo(fila, 'La Haus', 'LaHaus')),
+      zonahabitat: txt(campo(fila, 'Zona Habitat', 'ZonaHabitat')),
+      ciencuadras: txt(campo(fila, 'Ciencuadras')),
+      idonde: txt(campo(fila, 'Idonde')),
+      properati: txt(campo(fila, 'Properati')),
     },
   };
 }
@@ -163,6 +218,10 @@ function json(body: unknown, status = 200) {
 }
 
 Deno.serve(async (req) => {
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method !== 'POST') return json({ error: 'Method Not Allowed' }, 405);
 
   let body: any;
@@ -170,23 +229,162 @@ Deno.serve(async (req) => {
 
   if (body?.token !== TOKEN) return json({ error: 'No autorizado' }, 401);
 
-  const filas: Record<string, unknown>[] = Array.isArray(body?.filas) ? body.filas : [];
-  const proveedor: string = txt(body?.proveedor) || 'simi';
-  const desde = Number(body?.desde) || 0;
-  const simular = body?.simular === true;
-
-  if (!filas.length) return json({ error: 'No llegaron filas' }, 400);
-
   const apiKey = Deno.env.get('BASE44_API_KEY') || '';
   if (!apiKey) return json({ error: 'BASE44_API_KEY no configurada' }, 500);
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
 
+  // ── Diagnostico del esquema vivo ───────────────────────────────────────────
+  //
+  // El esquema de Base44 no se puede leer desde el repo: la plataforma revierte
+  // las ediciones a los .jsonc, asi que un campo puede estar en el archivo y no
+  // existir en la base. Y cuando no existe, Base44 lo DESCARTA EN SILENCIO al
+  // escribir: no falla, simplemente se pierde el dato.
+  //
+  // Esto lee una fila real y reporta que campos volvieron. Es la unica forma de
+  // saber con que estamos trabajando antes de meter 400 inmuebles.
+  if (body?.diagnostico === true) {
+    const r = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
+    if (!r.ok) return json({ error: `No se pudo leer Propiedad: ${r.status}` }, 500);
+    const filas0 = await r.json();
+    const muestra = Array.isArray(filas0) ? filas0[0] : null;
+
+    const NECESARIOS = ['proveedor', 'codigo_externo', 'zona', 'procedencia', 'portales'];
+    const presentes = muestra ? Object.keys(muestra) : [];
+    const faltan = NECESARIOS.filter((c) => !presentes.includes(c));
+
+    // Con el catalogo vacio no hay fila que inspeccionar y la lista de campos
+    // sale vacia: eso NO significa que falten, significa que no se sabe. Decir
+    // "faltan 5" ahi seria una alarma falsa, y decir "esta todo bien" seria
+    // peor. La comprobacion de verdad la hace la sonda al importar.
+    if (!muestra) {
+      return json({
+        ok: true,
+        modo: 'diagnostico',
+        hay_inmuebles: false,
+        campos: [],
+        faltan: [],
+        indeterminado: true,
+        nota: 'El catalogo esta vacio, asi que desde aqui no se puede leer el esquema. '
+          + 'Al importar se escribe una sonda que lo comprueba de verdad y se bloquea si faltan campos.',
+      });
+    }
+
+    return json({
+      ok: true,
+      modo: 'diagnostico',
+      hay_inmuebles: true,
+      total_campos: presentes.length,
+      campos: presentes.sort(),
+      faltan,
+      dedup_posible: !faltan.includes('codigo_externo') && !faltan.includes('proveedor'),
+      nota: faltan.length
+        ? `Faltan ${faltan.length} campos en Propiedad. Sin codigo_externo + proveedor la importacion DUPLICA todo el catalogo en cada corrida.`
+        : 'Propiedad tiene todo lo necesario para importar sin duplicar.',
+    });
+  }
+
+  const filas: Record<string, unknown>[] = Array.isArray(body?.filas) ? body.filas : [];
+  const proveedor: string = txt(body?.proveedor) || 'simi';
+  const desde = Number(body?.desde) || 0;
+  const simular = body?.simular === true;
+  // Corte por anio de consignacion. El export de SIMI marca 'Disponible' los
+  // 2703 inmuebles, incluido uno de 2010: el sistema nunca cerro los que se
+  // vendieron. Importar eso hace que el agente ofrezca inmuebles que ya no
+  // existen, con el precio de hace anos, y el cliente lo descubre en la primera
+  // llamada. Se filtra por fecha hasta que el inventario viejo se depure.
+  const desdeAnio = Number(body?.desde_anio) || 0;
+
+  if (!filas.length) return json({ error: 'No llegaron filas' }, 400);
+
+  // Antes de escribir nada, comprobar que Propiedad puede deduplicar. Sin
+  // codigo_externo + proveedor, cada corrida crearia el catalogo entero de nuevo:
+  // con 400 inmuebles, tres importaciones dejan 1200 registros y limpiarlos a
+  // mano no es viable. Se falla ruidoso en vez de ensuciar la base.
+  //
+  // Solo en la primera tanda: revisarlo en cada lote serian 10 lecturas de mas.
+  if (desde === 0 && !simular) {
+    const CLAVES = ['codigo_externo', 'proveedor'];
+    let faltan: string[] = [];
+
+    const rEsq = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
+    const arr = rEsq.ok ? await rEsq.json() : [];
+    const muestra = Array.isArray(arr) ? arr[0] : null;
+
+    if (muestra) {
+      faltan = CLAVES.filter((c) => !(c in muestra));
+    } else {
+      // Catalogo vacio: no hay fila que inspeccionar. Antes se dejaba pasar
+      // razonando que "la primera importacion no tiene nada con que duplicar",
+      // y era exactamente al reves: la primera corrida entra limpia, la SEGUNDA
+      // crea el catalogo entero de nuevo. El error no aparece cuando se comete
+      // sino la proxima vez que se actualice el inventario.
+      //
+      // Base44 descarta en silencio los campos que no existen, asi que la unica
+      // prueba concluyente es escribir una sonda y releerla: si los campos no
+      // vuelven, la tabla no los tiene.
+      const sonda = {
+        titulo: '__sonda de esquema__', tipo: 'Otro', operacion: 'Venta',
+        estado: 'No_disponible', codigo_externo: '__sonda__', proveedor: '__sonda__',
+      };
+      const rPost = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
+      });
+      if (rPost.ok) {
+        const creada = await rPost.json();
+        faltan = CLAVES.filter((c) => !creada?.[c]);
+        // Se borra siempre, incluso si la comprobacion fallo: dejar la sonda en
+        // el catalogo seria peor que no haberla escrito.
+        if (creada?.id) {
+          await fetch(`${BASE_URL}/api/entities/Propiedad/${creada.id}`, { method: 'DELETE', headers: hdrs })
+            .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
+        }
+      }
+    }
+
+    if (faltan.length) {
+      return json({
+        error: 'esquema_incompleto',
+        faltan,
+        mensaje: `Propiedad no tiene ${faltan.join(' ni ')}. Sin esos campos la importacion `
+          + 'duplicaria todo el catalogo en cada corrida. Creelos en Base44 (Datos > Propiedad) '
+          + 'y vuelve a intentar. Para ver el esquema actual: llama con { diagnostico: true }.',
+      }, 409);
+    }
+  }
+
   const lote = filas.slice(desde, desde + LOTE_MAX);
-  const res = { creados: 0, actualizados: 0, omitidos: 0, errores: [] as string[] };
+  const res = {
+    creados: 0, actualizados: 0, omitidos: 0,
+    // Se cuenta aparte de `omitidos` para no confundir "lo dejamos fuera a
+    // proposito" con "la fila venia mal".
+    omitidos_por_fecha: 0,
+    errores: [] as string[],
+    // Barrios cuyo acento llego truncado: no se adivinan, se reportan para que
+    // se corrijan en el origen. Un barrio mal escrito no lo encuentra nadie.
+    acentos_truncados: [] as string[],
+    // Zonas por asesor, derivadas del propio inventario. Es el dato que la hoja
+    // de agentes no traia y que permite repartir leads por zona en vez de solo
+    // por carga.
+    zonas_por_asesor: {} as Record<string, string[]>,
+  };
 
   for (const fila of lote) {
     const p = desdeFilaSimi(fila, proveedor);
     if (!p) { res.omitidos++; continue; }
+
+    if (desdeAnio) {
+      const anio = Number(String(p.fecha_consignado).slice(0, 4));
+      // Sin fecha no se descarta: la duda no puede costar un inmueble vigente.
+      if (anio && anio < desdeAnio) { res.omitidos_por_fecha++; continue; }
+    }
+
+    if (acentoRoto(p.barrio) && !res.acentos_truncados.includes(p.barrio)) {
+      res.acentos_truncados.push(p.barrio);
+    }
+    if (p.asesor && p.zona) {
+      const z = res.zonas_por_asesor[p.asesor] || (res.zonas_por_asesor[p.asesor] = []);
+      if (!z.includes(p.zona)) z.push(p.zona);
+    }
 
     if (simular) { res.creados++; continue; }
 

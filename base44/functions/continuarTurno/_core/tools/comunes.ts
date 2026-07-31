@@ -2,6 +2,7 @@
 
 import { definirTool, str, strOpc, bool, lista, enumStr, AGENTES, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe, transferir } from '../state.ts';
+import { briefLead } from '../brief.ts';
 
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
@@ -24,7 +25,30 @@ export const responder: Tool = {
       const t = limpiar(g);
       if (t) c.salida.globos.push(t);
     }
-    c.salida.finTurno = !!input.fin_turno;
+
+    // Cierre obligatorio: no se puede dar por terminada una conversacion sin
+    // dejar algo concreto. Antes un turno perfectamente valido era
+    // responder(["Cualquier cosa me escribes"], fin_turno=true) — cero
+    // compromiso, cero registro, y el lead se perdia en silencio.
+    //
+    // Vale como cierre cualquier tool marcada `cierra`: agendar una visita,
+    // radicar una PQR, registrar un interes, escalar a un humano. Tambien una
+    // transferencia, porque la conversacion sigue con otro rol y no muere aqui.
+    const quiereCerrar = !!input.fin_turno;
+    const hayCierre = c.hubo_cierre === true || c.efectos.transferir !== null || c.efectos.escalado !== null;
+    if (quiereCerrar && !hayCierre) {
+      c.salida.finTurno = false;
+      return {
+        ok: false,
+        error: 'cierre_sin_siguiente_paso',
+        instruccion: 'No cierres la conversacion en el aire. Deja algo concreto antes: '
+          + 'agenda una visita o una llamada, envia una ficha, registra el interes con '
+          + 'registrar_interes, radica la solicitud, o escala a un humano. Si de verdad no '
+          + 'hay nada que hacer, escala en vez de despedirte.',
+      };
+    }
+
+    c.salida.finTurno = quiereCerrar;
     return { ok: true };
   },
 };
@@ -87,6 +111,7 @@ export const escalarAHumano: Tool = {
       motivo: str('Que pasa y que necesita el cliente, en 1 o 2 frases'),
       prioridad: enumStr('Urgencia real', ['baja', 'media', 'alta', 'urgente']),
     },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const motivo = String(input.motivo || 'sin motivo').slice(0, 500);
@@ -97,10 +122,16 @@ export const escalarAHumano: Tool = {
     c.efectos.escalado = { motivo, prioridad };
 
     const nombre = String(c.estado.compartido.nombre || '') || `+${c.entrada.tel}`;
+
+    // Brief ejecutivo en vez de "telefono + una frase". Todo lo que guardar_dato
+    // acumulo durante la conversacion viaja con el escalamiento: sin esto el
+    // asesor volvia a preguntarle al cliente lo que ya habia contestado.
+    const brief = briefLead(c.estado, c.entrada.tel, c.entrada.canal, [`MOTIVO: ${motivo}`]);
+
     await c.db.crear('Tarea', {
       contacto_id: String(c.estado.compartido.contacto_id || ''),
       titulo: `Escalamiento ${c.estado.agente_activo}: ${nombre}`,
-      descripcion: `${motivo}\n\nCanal: ${c.entrada.canal}\nTelefono: ${c.entrada.tel}`,
+      descripcion: brief,
       fecha_limite: new Date(Date.now() + (prioridad === 'urgente' ? 0 : 864e5)).toISOString().split('T')[0],
       prioridad: prioridad === 'urgente' || prioridad === 'alta' ? 'Alta' : prioridad === 'baja' ? 'Baja' : 'Media',
       completada: false,
@@ -108,8 +139,8 @@ export const escalarAHumano: Tool = {
     });
 
     c.efectos.notificar.push(
-      `ESCALAMIENTO (${prioridad}) — agente ${c.estado.agente_activo}\n` +
-      `Cliente: ${nombre}\nTelefono: ${c.entrada.tel} (${c.entrada.canal})\n\n${motivo}\n\n` +
+      `ESCALAMIENTO (${prioridad.toUpperCase()}) — desde ${c.estado.agente_activo}\n\n` +
+      `${brief}\n\n` +
       `La IA quedo en pausa para este chat. Responde desde la Bandeja.`,
     );
     return { ok: true, escalado: true };

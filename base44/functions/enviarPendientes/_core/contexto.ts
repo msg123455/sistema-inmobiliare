@@ -7,6 +7,7 @@
 import type { Db } from './db.ts';
 import { type Agente, type Entrada, type Estado } from './protocol.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from './prompts.ts';
+import { instruccionHorario } from './horario.ts';
 
 export const MAX_RAG_CHARS = 6000;
 
@@ -189,6 +190,11 @@ export function armarSystem(
   partes.push(base.identidadMarca || IDENTIDAD_MARCA);
   partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
   if (base.rag) partes.push(base.rag);
+
+  // El horario cambia a que se compromete el agente, no lo que puede hacer.
+  // Fuera de horario tiene que resolver el solo: "manana te contacta un asesor"
+  // es el ultimo recurso, no la salida por defecto.
+  partes.push(`=== MOMENTO ===\n${instruccionHorario(new Date(), base.config || {})}`);
 
   const nombre = String(estado.compartido.nombre || '');
   const i = estado.identidad;

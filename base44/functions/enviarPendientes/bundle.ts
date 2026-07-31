@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (9 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (11 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -9,9 +9,7 @@
 //
 // La URL del backend sale de BASE44_APP_URL. No se hardcodea: el repo venia con
 // el tenant de ND en 17 archivos y bastaba olvidar uno para escribir en la app
-// equivocada.
-type Filtro = Record<string, string | number | boolean | undefined | null>;
-function crearDb(apiKey: string, baseUrl?: string) {
+// equivocada.type Filtro = Record<string, string | number | boolean | undefined | null>;function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
@@ -104,8 +102,7 @@ function crearDb(apiKey: string, baseUrl?: string) {
   }
 
   return { base, list, uno, crear, actualizar, guardar };
-}
-type Db = ReturnType<typeof crearDb>;
+}type Db = ReturnType<typeof crearDb>;
 
 // ─── _core/protocol.ts ───────────────────────────────────────────
 // Contratos compartidos: tipos de estado, forma de las tools y registro de agentes.
@@ -139,7 +136,7 @@ type Db = ReturnType<typeof crearDb>;
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
   pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
-  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
+  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────interface Identidad {
@@ -192,11 +189,15 @@ type Db = ReturnType<typeof crearDb>;
 }
 
 // `retorna: true` => el modelo necesita el resultado para hablar, cuesta una
-// segunda llamada. `terminal: true` => corta el turno (solo `responder`).interface Tool {
+// segunda llamada. `terminal: true` => corta el turno (solo `responder`).
+// `cierra: true` => deja al cliente con un siguiente paso concreto: una cita,
+// un radicado, una alerta de busqueda. Es lo que permite exigir que ninguna
+// conversacion termine en callejon sin salida.interface Tool {
   def: EsquemaTool;
   ejecutar: (input: any, c: CtxTool) => Promise<unknown> | unknown;
   retorna?: boolean;
   terminal?: boolean;
+  cierra?: boolean;
 }interface CtxTool {
   db: Db;
   estado: Estado;
@@ -204,6 +205,9 @@ type Db = ReturnType<typeof crearDb>;
   ctxAgente: Record<string, any>;   // lo que cargo contexto.ts para ESTE agente
   config: Record<string, any>;      // fila operativa de ConfigAgente
   salida: { globos: string[]; finTurno: boolean };
+  // Lo marca el bucle de llm.ts cuando corre una tool con `cierra: true`.
+  // `responder` lo consulta para no dejar la conversacion en el aire.
+  hubo_cierre?: boolean;
   efectos: {
     transferir: Agente | null;
     escalado: { motivo: string; prioridad: string } | null;
@@ -215,7 +219,7 @@ type Db = ReturnType<typeof crearDb>;
   name: string,
   description: string,
   props: Record<string, unknown>,
-  opts: { retorna?: boolean; terminal?: boolean } = {},
+  opts: { retorna?: boolean; terminal?: boolean; cierra?: boolean } = {},
 ): Omit<Tool, 'ejecutar'> & { def: EsquemaTool } {
   return {
     def: {
@@ -346,8 +350,15 @@ Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exac
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
 enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
 
-No pidas datos accesorios antes de calificar. Si no hay opciones, dilo y ofrece registrar
-el interes. Si el cliente se despide, responde una sola vez y termina el turno.`,
+No pidas datos accesorios antes de calificar.
+
+Si no hay opciones, dilo sin rodeos y ofrecele registrar el interes para avisarle cuando
+entre algo. Si acepta, llama a registrar_interes: prometerselo en el mensaje no guarda nada.
+
+NUNCA cierres la conversacion en el aire. Antes de despedirte deja algo concreto: una visita
+agendada, una ficha enviada, el interes registrado o el lead entregado a un asesor. Si de
+verdad no puedes hacer nada, escala en vez de despedirte. Si el cliente se despide, responde
+una sola vez y cierra, pero solo si ya quedo algo de eso hecho.`,
 
   consignacion: `ROL INTERNO: consignacion. Atiendes a propietarios que quieren poner su inmueble con nosotros.
 
@@ -418,8 +429,17 @@ QUE TIENES QUE CONSEGUIR
 3. area aproximada en m2, si la conoce
 4. proposito: venta, arriendo, credito, sucesion u otro
 
-Con los datos requeridos, llama a registrar_solicitud_avaluo y da el radicado. El avaluo
-es un peritaje profesional; no digas cuanto vale el inmueble.
+Con los datos requeridos, llama a registrar_solicitud_avaluo y da el radicado.
+
+QUIEN FIRMA UN AVALUO (Ley 1673 de 2013)
+Un avaluo con validez legal solo lo puede firmar un avaluador inscrito en el RAA (Registro
+Abierto de Avaluadores). Ni tu ni un asesor pueden emitirlo. Si el cliente lo necesita para
+un credito, una sucesion, un tramite tributario o un proceso judicial, dile eso: se le
+asigna un perito inscrito.
+
+Por eso NUNCA dices cuanto vale un inmueble, ni siquiera "un aproximado" o "un rango entre".
+Una cifra tuya no es un avaluo y ademas puede leerse como uno. Si insiste, explicale la
+diferencia entre una opinion comercial y un avaluo firmado, y ofrece radicar la solicitud.
 
 TARIFA PENDIENTE
 El tarifario real aun no esta confirmado. Hasta que el conocimiento aprobado indique que
@@ -435,7 +455,11 @@ FLUJO
 3. Llama a registrar_pqr. Da exactamente el radicado y la orientacion que devuelva.
 
 Reconoce la inconformidad sin dar ni quitar la razon. No justifiques a la empresa, no te
-disculpes en su nombre y no prometas una solucion, compensacion ni fecha exacta.
+disculpes en su nombre y no prometas una solucion ni una compensacion.
+
+El termino legal de respuesta SI se comunica: registrar_pqr te devuelve cuantos dias
+habiles son y esa cifra se le dice al cliente. Lo que no se da es la fecha exacta ni la
+promesa de resolver antes: el termino es el maximo de ley, no un compromiso de entrega.
 
 Si menciona tutela, demanda, abogado, Superintendencia, fiscalia o juzgado, radica sin
 opinar y escala de inmediato con prioridad urgente. Para una consulta posterior, usa
@@ -458,6 +482,198 @@ area de estudio debe validarla. Nunca recibas fotos o archivos por chat.
 
 No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.`,
 };
+
+// ─── _core/habiles.ts ────────────────────────────────────────────
+// Dias habiles en Colombia: festivos y suma de plazos.
+//
+// POR QUE NO ALCANZA CON "SALTAR SABADOS Y DOMINGOS": Colombia tiene 18
+// festivos al ano y la mayoria NO cae en fecha fija. La Ley 51 de 1983
+// ("Ley Emiliani") corre varios al lunes siguiente, y cinco dependen de la
+// Pascua, que se calcula con el algoritmo de Butcher. Un plazo legal contado
+// mal por dos dias es un plazo incumplido.
+//
+// Se usa para el termino de respuesta de PQR (Ley 1755/2015), que corre en
+// dias habiles desde la radicacion.
+
+/** Domingo de Pascua del año dado (algoritmo de Butcher, calendario gregoriano). */
+function pascua(anio: number): Date {
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
+const dia = 86_400_000;
+const sumar = (f: Date, n: number) => new Date(f.getTime() + n * dia);
+const clave = (f: Date) => f.toISOString().slice(0, 10);
+
+/** Corre la fecha al lunes siguiente si no es lunes (Ley Emiliani). */
+function alLunes(f: Date): Date {
+  const d = f.getUTCDay(); // 0 domingo … 6 sabado
+  return d === 1 ? f : sumar(f, (8 - d) % 7);
+}
+
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
+function festivosColombia(anio: number): Set<string> {
+  const p = pascua(anio);
+  const fechas: Date[] = [
+    // Fijos: no se mueven.
+    new Date(Date.UTC(anio, 0, 1)),   // Año nuevo
+    new Date(Date.UTC(anio, 4, 1)),   // Día del trabajo
+    new Date(Date.UTC(anio, 6, 20)),  // Independencia
+    new Date(Date.UTC(anio, 7, 7)),   // Batalla de Boyacá
+    new Date(Date.UTC(anio, 11, 8)),  // Inmaculada Concepción
+    new Date(Date.UTC(anio, 11, 25)), // Navidad
+
+    // Movibles al lunes (Ley Emiliani).
+    alLunes(new Date(Date.UTC(anio, 0, 6))),   // Reyes Magos
+    alLunes(new Date(Date.UTC(anio, 2, 19))),  // San José
+    alLunes(new Date(Date.UTC(anio, 5, 29))),  // San Pedro y San Pablo
+    alLunes(new Date(Date.UTC(anio, 7, 15))),  // Asunción
+    alLunes(new Date(Date.UTC(anio, 9, 12))),  // Día de la Raza
+    alLunes(new Date(Date.UTC(anio, 10, 1))),  // Todos los Santos
+    alLunes(new Date(Date.UTC(anio, 10, 11))), // Independencia de Cartagena
+
+    // Ligados a la Pascua. Jueves y Viernes Santo NO se mueven; los otros sí.
+    sumar(p, -3),           // Jueves Santo
+    sumar(p, -2),           // Viernes Santo
+    alLunes(sumar(p, 43)),  // Ascensión
+    alLunes(sumar(p, 64)),  // Corpus Christi
+    alLunes(sumar(p, 71)),  // Sagrado Corazón
+  ];
+  return new Set(fechas.map(clave));
+}
+
+// Los festivos se recalculan una vez por año y se recuerdan: sumar un plazo
+// puede cruzar hasta tres años y no vale la pena repetir el cálculo.
+const cache = new Map<number, Set<string>>();
+function festivos(anio: number): Set<string> {
+  let s = cache.get(anio);
+  if (!s) { s = festivosColombia(anio); cache.set(anio, s); }
+  return s;
+}
+
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
+function esHabil(f: Date): boolean {
+  const d = f.getUTCDay();
+  if (d === 0 || d === 6) return false;
+  return !festivos(f.getUTCFullYear()).has(clave(f));
+}
+
+/**
+ * Suma días hábiles a una fecha.
+ *
+ * El día de radicación NO cuenta: el término empieza a correr el hábil
+ * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
+ * "a los 15 días" incluya ese día completo.
+ */
+function sumarHabiles(desde: Date, dias: number): Date {
+  let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  let restantes = Math.max(0, Math.floor(dias));
+  while (restantes > 0) {
+    f = sumar(f, 1);
+    if (esHabil(f)) restantes--;
+  }
+  return new Date(f.getTime() + dia - 1000);
+}
+
+/** Días hábiles entre dos fechas (negativo si ya venció). */
+function habilesHasta(desde: Date, hasta: Date): number {
+  const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
+  const signo = fin >= ini ? 1 : -1;
+  let [a, b] = signo > 0 ? [ini, fin] : [fin, ini];
+  let n = 0;
+  while (a < b) { a = sumar(a, 1); if (esHabil(a)) n++; }
+  return n * signo;
+}
+
+// ─── _core/horario.ts ────────────────────────────────────────────
+// Horario del equipo comercial y que hacer fuera de el.
+//
+// LA REGLA QUE MANDA: fuera de horario el agente NO difiere, REEMPLAZA al
+// comercial. Agenda el mismo la cita y deja el lead listo. "Manana te contacta
+// un asesor" es el ultimo recurso, no la salida por defecto: un lead que llega
+// a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
+// manana ya escribio a otra inmobiliaria.
+
+/** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
+const OFFSET_BOGOTA_H = -5;
+interface Horario {
+  dias: number[];   // 1 = lunes … 7 = domingo (ISO)
+  desde: number;    // hora local de inicio
+  hasta: number;    // hora local de fin
+}
+
+/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
+const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
+function horarioDe(config: Record<string, any>): Horario {
+  const h = config?.horario_equipo;
+  if (!h) return HORARIO_DEFECTO;
+  try {
+    const p = typeof h === 'string' ? JSON.parse(h) : h;
+    return {
+      dias: Array.isArray(p.dias) && p.dias.length ? p.dias.map(Number) : HORARIO_DEFECTO.dias,
+      desde: Number.isFinite(Number(p.desde)) ? Number(p.desde) : HORARIO_DEFECTO.desde,
+      hasta: Number.isFinite(Number(p.hasta)) ? Number(p.hasta) : HORARIO_DEFECTO.hasta,
+    };
+  } catch {
+    return HORARIO_DEFECTO;
+  }
+}
+
+/** Fecha/hora en Bogota, como componentes. */
+function enBogota(f: Date) {
+  const b = new Date(f.getTime() + OFFSET_BOGOTA_H * 3_600_000);
+  const diaISO = b.getUTCDay() === 0 ? 7 : b.getUTCDay(); // 1 lun … 7 dom
+  return { hora: b.getUTCHours(), diaISO, fecha: b };
+}
+
+/**
+ * ¿Hay alguien del equipo disponible ahora?
+ *
+ * Un festivo cuenta como fuera de horario: el equipo no esta, aunque caiga
+ * entre semana. Es el mismo calendario que usan los plazos de PQR.
+ */
+function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
+  const h = horarioDe(config);
+  const { hora, diaISO, fecha } = enBogota(ahora);
+  if (!h.dias.includes(diaISO)) return false;
+  if (!esHabil(fecha)) return false;
+  return hora >= h.desde && hora < h.hasta;
+}
+
+/**
+ * Instruccion que se le inyecta al agente segun el momento.
+ *
+ * Fuera de horario NO cambia lo que el agente puede hacer —las herramientas son
+ * las mismas— cambia a que se compromete. Dentro de horario puede decir "un
+ * asesor te contacta ya"; fuera, tiene que resolver el solo hasta donde llegue.
+ */
+function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
+  if (hayEquipo(ahora, config)) {
+    return 'El equipo comercial esta disponible en este momento: si entregas el lead o '
+      + 'escalas, un asesor lo toma hoy mismo.';
+  }
+  const h = horarioDe(config);
+  return 'FUERA DE HORARIO. El equipo atiende de lunes a viernes, '
+    + `de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: `
+    + 'resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. '
+    + 'Agenda la visita o la llamada con la herramienta que corresponda, registra lo que '
+    + 'haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo '
+    + 'contacta el siguiente dia habil. Nunca uses eso como primera salida.';
+}
 
 // ─── _core/contexto.ts ───────────────────────────────────────────
 // Cargadores de contexto por agente.
@@ -645,6 +861,11 @@ function armarSystem(
   partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
   if (base.rag) partes.push(base.rag);
 
+  // El horario cambia a que se compromete el agente, no lo que puede hacer.
+  // Fuera de horario tiene que resolver el solo: "manana te contacta un asesor"
+  // es el ultimo recurso, no la salida por defecto.
+  partes.push(`=== MOMENTO ===\n${instruccionHorario(new Date(), base.config || {})}`);
+
   const nombre = String(estado.compartido.nombre || '');
   const i = estado.identidad;
   const estadoTxt = [
@@ -670,8 +891,7 @@ function armarSystem(
 }
 
 // ─── _core/canales/media.ts ──────────────────────────────────────
-// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.
-async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
+// Audio -> texto y imagen -> descripcion. Compartido por ambos canales.async function transcribir(buf: ArrayBuffer, mimeType: string, openaiKey: string): Promise<string | null> {
   const fd = new FormData();
   fd.append('file', new Blob([buf], { type: mimeType }), 'audio.ogg');
   fd.append('model', 'whisper-1');
@@ -690,8 +910,7 @@ function base64(buf: ArrayBuffer): string {
     bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 0x8000)));
   }
   return btoa(bin);
-}
-async function describirImagen(
+}async function describirImagen(
   buf: ArrayBuffer, mimeType: string, openaiKey: string, caption: string,
 ): Promise<string | null> {
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -714,8 +933,7 @@ async function describirImagen(
 }
 
 // ─── _core/canales/whatsapp.ts ───────────────────────────────────
-const GRAPH = 'https://graph.facebook.com/v19.0';
-const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
+const GRAPH = 'https://graph.facebook.com/v19.0';const esWhatsApp = (body: any) => !!body?.entry?.[0]?.changes;
 
 const conIndicativo = (t: string) => {
   const d = String(t).replace(/\D/g, '');
@@ -730,8 +948,7 @@ async function descargarMedia(mediaId: string, waToken: string) {
   const rBin = await fetch(meta.url, { headers: { Authorization: `Bearer ${waToken}` } });
   if (!rBin.ok) return null;
   return { buf: await rBin.arrayBuffer(), mimeType: meta.mime_type || 'application/octet-stream' };
-}
-async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
+}async function normalizar(body: any, env: { waToken: string; openaiKey: string }): Promise<Entrada | null> {
   const value = body?.entry?.[0]?.changes?.[0]?.value;
   const m = value?.messages?.[0];
   if (!m?.from) return null;
@@ -783,8 +1000,7 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
   }
 
   return null;
-}
-async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
+}async function enviar(destino: string, texto: string, env: { waPhoneId: string; waToken: string }) {
   const r = await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.waToken}`, 'Content-Type': 'application/json' },
@@ -795,8 +1011,7 @@ async function enviar(destino: string, texto: string, env: { waPhoneId: string; 
 }
 
 // Indicador de "escribiendo" real de Meta. Sustituye al sleep dentro del webhook:
-// la pausa la hace el worker de entrega, no el request.
-async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
+// la pausa la hace el worker de entrega, no el request.async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToken: string }) {
   if (!msgId) return;
   try {
     await fetch(`${GRAPH}/${env.waPhoneId}/messages`, {
@@ -808,8 +1023,7 @@ async function marcarEscribiendo(msgId: string, env: { waPhoneId: string; waToke
 }
 
 // ─── _core/canales/telegram.ts ───────────────────────────────────
-const API = (token: string) => `https://api.telegram.org/bot${token}`;
-const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
+const API = (token: string) => `https://api.telegram.org/bot${token}`;const esTelegram = (body: any) => !!(body?.message?.chat || body?.edited_message?.chat);
 
 async function descargarMedia(fileId: string, tgToken: string) {
   const rInfo = await fetch(`${API(tgToken)}/getFile?file_id=${encodeURIComponent(fileId)}`);
@@ -820,8 +1034,7 @@ async function descargarMedia(fileId: string, tgToken: string) {
   if (!rBin.ok) return null;
   const mimeType = /\.(jpe?g)$/i.test(path) ? 'image/jpeg' : /\.png$/i.test(path) ? 'image/png' : 'audio/ogg';
   return { buf: await rBin.arrayBuffer(), mimeType };
-}
-async function normalizar(
+}async function normalizar(
   body: any,
   env: { tgToken: string; openaiKey: string; tgBotKey?: string },
 ): Promise<Entrada | null> {
@@ -869,16 +1082,14 @@ async function normalizar(
   }
 
   return null;
-}
-async function enviar(destino: string, texto: string, env: { tgToken: string }) {
+}async function enviar(destino: string, texto: string, env: { tgToken: string }) {
   const r = await fetch(`${API(env.tgToken)}/sendMessage`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: Number(destino), text: texto }),
   });
   if (!r.ok) console.error('TG send error:', r.status, (await r.text()).slice(0, 200));
   return r.ok;
-}
-async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
+}async function marcarEscribiendo(destino: string, env: { tgToken: string }) {
   try {
     await fetch(`${API(env.tgToken)}/sendChatAction`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -924,8 +1135,7 @@ const VAR_POR_AGENTE: Record<Agente, string> = {
   matricula:     'TELEGRAM_BOT_MATRICULA',
 };
 
-/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */
-function tokenDeAgente(agente?: string | null): string {
+/** Token del bot de un agente. Cae al bot compartido si no tiene uno propio. */function tokenDeAgente(agente?: string | null): string {
   const compartido = Deno.env.get('TELEGRAM_BOT_TOKEN') || '';
   if (!agente || !esAgente(agente)) return compartido;
   return Deno.env.get(VAR_POR_AGENTE[agente]) || compartido;
@@ -934,14 +1144,12 @@ function tokenDeAgente(agente?: string | null): string {
 /**
  * Agente al que pertenece esta peticion, segun `?agente=` de la URL del webhook.
  * Devuelve null si no viene o no es valido — ahi manda el router, como siempre.
- */
-function agenteDeUrl(url: URL): Agente | null {
+ */function agenteDeUrl(url: URL): Agente | null {
   const v = url.searchParams.get('agente');
   return v && esAgente(v) ? v : null;
 }
 
-/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */
-function agentesConBot(): Agente[] {
+/** Agentes que hoy tienen bot propio configurado. Util para diagnostico. */function agentesConBot(): Agente[] {
   return (Object.keys(VAR_POR_AGENTE) as Agente[])
     .filter((a) => !!Deno.env.get(VAR_POR_AGENTE[a]));
 }
@@ -955,9 +1163,6 @@ function agentesConBot(): Agente[] {
 //
 // La simulacion de tipeo vive aqui, no en el webhook: el request de entrada
 // tiene 15s y no puede gastarlos durmiendo.
-
-
-
 
 
 const MAX_POR_CORRIDA = 40;

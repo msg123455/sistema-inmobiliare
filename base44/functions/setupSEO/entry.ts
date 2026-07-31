@@ -1,4 +1,4 @@
-// Siembra ConfigSEO con los datos reales de ND Inmobiliaria (idempotente).
+// Siembra ConfigSEO con la identidad de INMOBILIARE Julio Corredor (idempotente).
 // GET /api/functions/setupSEO?token=SEOND2026
 
 Deno.serve(async (req) => {
@@ -7,25 +7,35 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const BASE_URL  = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+  const BASE_URL  = Deno.env.get('BASE44_APP_URL') || '';
+  // Sin la variable, esta funcion escribiria contra el tenant del que se clono
+  // la app. Antes ese era el valor por defecto; ahora falla ruidoso.
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 
+  // Siembra la identidad de INMOBILIARE. Antes sembraba la de ND Inmobiliaria
+  // —el tenant del que se clonó esta app— con sus barrios de estrato 6 y sus
+  // pisos de $1.000M / $5M, que describen otra empresa y otro mercado.
+  //
+  // `zonas` y los rangos van VACÍOS a propósito: son decisiones comerciales que
+  // nadie ha aprobado, y seoEngine ya está preparado para hablar en términos
+  // cualitativos cuando faltan en vez de inventar cifras. Se cargan desde la
+  // pantalla de SEO cuando el negocio los defina.
   const config = {
     clave:               'general',
-    nombre_inmobiliaria: 'ND Inmobiliaria',
+    nombre_inmobiliaria: 'INMOBILIARE Julio Corredor',
     ciudad_principal:    'Bogotá',
-    anos_experiencia:    '17',
-    descripcion_marca:   'Firma boutique fundada por Natalia Duque, especializada en el mercado inmobiliario de alto valor de la zona norte de Bogotá. Venta, arriendo y oficinas en barrios estrato 6 entre la calle 70 y la calle 134. Trabaja con corredores externos bajo comisión compartida.',
-    zonas: [
-      'Los Rosales', 'La Cabrera', 'El Nogal', 'El Refugio', 'El Bagazal',
-      'Chicó Norte', 'Chicó Reservado', 'Chicó Alto', 'Rincón del Chicó',
-      'Santa Ana Oriental', 'Santa Bárbara', 'Usaquén', 'La Carolina', 'El Retiro',
-    ],
-    rango_venta_min:    1_000_000_000,
-    rango_arriendo_min: 5_000_000,
-    interlinks:         [],
-    activo:             true,
+    anos_experiencia:    String(new Date().getFullYear() - 1960),
+    descripcion_marca:   'Inmobiliaria bogotana fundada en 1960 (J.C.O Inversiones S.A.S). Venta y arriendo de inmuebles, administración de propiedades, recaudo de cánones, avalúos, reparaciones, seguro de arrendamiento y relocation corporativo.',
+    zonas:               [] as string[],
+    rango_venta_min:     0,
+    rango_arriendo_min:  0,
+    interlinks:          [],
+    activo:              true,
   };
 
   try {

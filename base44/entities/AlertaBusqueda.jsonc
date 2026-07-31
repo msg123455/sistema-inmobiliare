@@ -1,0 +1,70 @@
+{
+  "name": "AlertaBusqueda",
+  "type": "object",
+  "description": "Criterio de busqueda que un cliente dejo registrado porque hoy no hay inventario que le sirva. Cuando entre un inmueble que encaje, es a quien hay que avisarle. Antes el agente ofrecia 'te aviso cuando entre algo' y eso no quedaba en ninguna parte.",
+  "properties": {
+    "contacto_id": {
+      "type": "string",
+      "description": "Contacto que dejo el interes"
+    },
+    "contacto_nombre": {
+      "type": "string",
+      "description": "Nombre, desnormalizado para no tener que resolver el contacto al listar"
+    },
+    "contacto_telefono": {
+      "type": "string",
+      "description": "Telefono al que se avisa"
+    },
+    "operacion": {
+      "type": "string",
+      "enum": ["Venta", "Arriendo"],
+      "description": "Que buscaba"
+    },
+    "tipo_inmueble": {
+      "type": "string",
+      "description": "Tipo de inmueble buscado"
+    },
+    "zona": {
+      "type": "string",
+      "description": "Barrio o zona de interes"
+    },
+    "presupuesto_max": {
+      "type": "number",
+      "description": "Tope declarado en COP"
+    },
+    "habitaciones_min": {
+      "type": "number",
+      "description": "Minimo de habitaciones"
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["Activa", "Notificada", "Cerrada", "Vencida"],
+      "default": "Activa",
+      "description": "Activa mientras se le siga buscando"
+    },
+    "canal": {
+      "type": "string",
+      "description": "Canal por el que se registro"
+    },
+    "fecha_registro": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se registro"
+    },
+    "vigente_hasta": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Hasta cuando se le busca. Pasada esta fecha la alerta se considera vencida: nadie quiere una llamada por algo que pidio hace ocho meses."
+    },
+    "veces_notificado": {
+      "type": "number",
+      "default": 0,
+      "description": "Cuantas veces se le ha avisado de un inmueble que encajaba"
+    },
+    "notas": {
+      "type": "string",
+      "description": "Contexto adicional que dio el cliente"
+    }
+  },
+  "required": ["contacto_telefono", "operacion"]
+}

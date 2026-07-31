@@ -1,4 +1,4 @@
-// Motor SEO de ND Inmobiliaria — pipeline completo en una sola función.
+// Motor SEO de INMOBILIARE Julio Corredor — pipeline completo en una sola función.
 // POST /api/functions/seoEngine  { action, ...params }
 //
 // Acciones: sitemap_generate | research | generate_outline | generate_section
@@ -8,7 +8,7 @@
 // despliega en este app; el estilo index.ts con context.entities está muerto).
 // La generación del artículo va por secciones porque Base44 corta a los ~15s.
 
-const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const MODELO   = 'claude-haiku-4-5-20251001';
 
 const CORS = {
@@ -17,33 +17,41 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, api_key, authorization',
 };
 
-// ─── Identidad real de ND (fallback y guardarraíl de marca) ──────────────────
-const ND = {
-  nombre:    'ND Inmobiliaria',
-  fundadora: 'Natalia Duque',
-  anos:      '17',
+// ─── Identidad de marca (fallback y guardarraíl) ─────────────────────────────
+//
+// Antes vivía aquí la identidad del tenant del que se clonó esta app —con su
+// fundadora, sus barrios de estrato 6 y sus pisos de precio de
+// $1.000M / $5M. Todo eso describía otra empresa y otro mercado.
+//
+// Los campos que quedan vacíos NO se rellenan con suposiciones: `zonas` y los
+// pisos de precio son decisiones comerciales de INMOBILIARE. Vacíos, las reglas
+// de voz de abajo obligan a hablar en términos cualitativos en vez de inventar
+// cifras. Se cargan desde ConfigSEO cuando el negocio los apruebe.
+const MARCA = {
+  nombre:    'INMOBILIARE Julio Corredor',
+  razon:     'J.C.O Inversiones S.A.S',
+  anos:      String(new Date().getFullYear() - 1960),
   ciudad:    'Bogotá',
-  cobertura: 'zona norte de Bogotá, barrios estrato 6 entre la calle 70 y la calle 134',
-  servicios: 'venta de inmuebles, arriendos y oficinas',
-  zonas: [
-    'Los Rosales', 'La Cabrera', 'El Nogal', 'El Refugio', 'El Bagazal',
-    'Chicó Norte', 'Chicó Reservado', 'Chicó Alto', 'Rincón del Chicó',
-    'Santa Ana Oriental', 'Santa Bárbara', 'Usaquén', 'La Carolina', 'El Retiro',
-  ],
-  min_venta:    '1.000 millones de pesos',
-  min_arriendo: '5 millones de pesos mensuales',
+  cobertura: 'Bogotá',
+  servicios: 'venta y arriendo de inmuebles, administración de propiedades, recaudo de cánones, avalúos, reparaciones, seguro de arrendamiento y relocation corporativo',
+  zonas:     [] as string[],
+  min_venta:    '',
+  min_arriendo: '',
 };
 
 const REGLAS_VOZ = `REGLAS DE MARCA Y VOZ (obligatorias):
 - Español de Colombia, registro profesional y claro. Nada de lenguaje infantil.
 - PROHIBIDO usar emojis.
-- JAMÁS inventes cifras, estadísticas ni precios: usa ÚNICAMENTE los datos del contexto de ND que se te entrega. Si un dato no está, habla en términos cualitativos.
+- JAMÁS inventes cifras, estadísticas ni precios: usa ÚNICAMENTE los datos del contexto de marca que se te entrega. Si un dato no está, habla en términos cualitativos.
 - JAMÁS menciones inmobiliarias competidoras por su nombre.
-- Nunca menciones la edad de Natalia Duque.
-- Refuerza E-E-A-T: la experiencia de ${ND.anos} años y la especialización en ${ND.cobertura}.
+- Refuerza E-E-A-T: los ${MARCA.anos} años de trayectoria en ${MARCA.cobertura}.
 - Contenido útil y específico del mercado real, no relleno genérico.`;
 
 Deno.serve(async (req) => {
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   if (req.method !== 'POST') {
     return json({ error: 'Usa POST con { action, ... }' }, 405);
@@ -79,9 +87,9 @@ Deno.serve(async (req) => {
   }
 });
 
-// ─── Contexto de marca ND (ConfigSEO + ConocimientoRAG) ──────────────────────
+// ─── Contexto de marca (ConfigSEO + ConocimientoRAG) ──────────────────────────
 
-async function contextoND(hdrs: any) {
+async function contextoMarca(hdrs: any) {
   // Config de marca
   let cfg: any = {};
   try {
@@ -89,7 +97,7 @@ async function contextoND(hdrs: any) {
     if (r.ok) { const arr = await r.json(); cfg = arr[0] || {}; }
   } catch (err) { console.error('ConfigSEO load:', err.message); }
 
-  // Conocimiento real de ND — el mismo RAG que usa Valentina, para una sola voz.
+  // El mismo RAG que usan los agentes, para que la voz sea una sola.
   // Solo categorías de mercado/identidad: las de comportamiento de chat no aplican aquí.
   let chunks: any[] = [];
   try {
@@ -112,16 +120,20 @@ async function contextoND(hdrs: any) {
     conocimiento += bloque;
   }
 
-  const nombre = cfg.nombre_inmobiliaria || ND.nombre;
-  const zonas  = (cfg.zonas?.length ? cfg.zonas : ND.zonas).join(', ');
+  const nombre = cfg.nombre_inmobiliaria || MARCA.nombre;
+  const zonas  = (cfg.zonas?.length ? cfg.zonas : MARCA.zonas).join(', ');
+  const minVenta    = cfg.rango_venta_min || MARCA.min_venta;
+  const minArriendo = cfg.rango_arriendo_min || MARCA.min_arriendo;
 
+  // Las líneas de zonas y rangos solo entran si hay dato. Antes se emitían
+  // siempre y, sin valor, el modelo recibía "venta desde ; arriendo desde ;" —
+  // una invitación a completar el hueco por su cuenta.
   const brand = `=== LA EMPRESA (usar como fuente de verdad) ===
-${nombre}, fundada por ${ND.fundadora}, ${cfg.anos_experiencia || ND.anos} años en el mercado inmobiliario de alto valor de ${cfg.ciudad_principal || ND.ciudad}.
-Firma boutique. Cobertura EXCLUSIVA: ${ND.cobertura}.
-Servicios: ${ND.servicios}.
-Zonas que maneja: ${zonas}.
-Rangos: venta desde ${ND.min_venta}; arriendo desde ${ND.min_arriendo}; en oficinas los rangos son flexibles.
-Trabaja con corredores externos bajo comisión compartida.
+${nombre} (${MARCA.razon}), ${cfg.anos_experiencia || MARCA.anos} años en el mercado inmobiliario de ${cfg.ciudad_principal || MARCA.ciudad}, desde 1960.
+Cobertura: ${cfg.ciudad_principal || MARCA.cobertura}.
+Servicios: ${MARCA.servicios}.
+${zonas ? `Zonas que maneja: ${zonas}.` : ''}
+${minVenta && minArriendo ? `Rangos: venta desde ${minVenta}; arriendo desde ${minArriendo}.` : 'Los rangos de precio no están definidos: NO menciones cifras mínimas ni máximas.'}
 ${cfg.website_url ? `Sitio web: ${cfg.website_url}` : ''}
 ${cfg.whatsapp_numero ? `WhatsApp de contacto: ${cfg.whatsapp_numero}` : ''}
 
@@ -136,7 +148,7 @@ async function sitemapGenerate(body: any, hdrs: any, key: string) {
   const keyword = String(body.keyword || '').trim();
   if (!keyword) return json({ error: 'Falta keyword' }, 400);
 
-  const { brand, nombre } = await contextoND(hdrs);
+  const { brand, nombre } = await contextoMarca(hdrs);
 
   const system = `Eres arquitecto de información SEO senior especializado en el mercado inmobiliario de alto valor de Bogotá. Diseñas clusters de contenido para ${nombre}.
 ${REGLAS_VOZ}
@@ -150,8 +162,8 @@ Diseña un cluster de contenido SEO para la keyword semilla: "${keyword}"
 
 Reglas:
 - Exactamente 7 páginas: 1 pillar, 3 secondary, 3 blog.
-- Keywords realistas para ND: barrios que SÍ maneja y rangos que SÍ atiende.
-- Nada fuera de Bogotá ni estratos que ND no trabaja.
+- Keywords realistas: solo barrios y rangos que la empresa SÍ atiende, según el contexto de marca.
+- Nada fuera de la cobertura declarada en el contexto de marca.
 - Los títulos, máximo 60 caracteres.
 
 Devuelve SOLO este JSON, sin saltos de línea innecesarios:
@@ -198,7 +210,7 @@ async function research(body: any, hdrs: any, key: string) {
   if (!nodoId) return json({ error: 'Falta nodo_id' }, 400);
 
   const nodo = await getEntity(hdrs, 'NodoSitemap', nodoId);
-  const { brand, nombre } = await contextoND(hdrs);
+  const { brand, nombre } = await contextoMarca(hdrs);
 
   const system = `Eres investigador SEO senior del mercado inmobiliario de alto valor de Bogotá, trabajando para ${nombre}.
 ${REGLAS_VOZ}
@@ -218,9 +230,9 @@ Devuelve exactamente este JSON, respetando los máximos:
   "datos_clave": ["máximo 5 datos o cifras reales"],
   "preguntas_frecuentes": ["máximo 5 preguntas reales de clientes"],
   "subtemas": ["máximo 4 subtemas a cubrir"],
-  "zonas_relevantes": ["máximo 5 barrios de ND"],
+  "zonas_relevantes": ["máximo 5 barrios, solo del contexto de marca"],
   "intencion_usuario": "qué busca quien escribe esta keyword (1 frase)",
-  "diferenciador_nd": "autoridad única de ND en el tema (1 frase)"
+  "diferenciador": "autoridad de la empresa en el tema (1 frase)"
 }`;
 
   // 1400 tokens: con 1200 la salida se truncaba y fallaba de forma intermitente.
@@ -247,7 +259,7 @@ async function generateOutline(body: any, hdrs: any, key: string) {
   let research: any = {};
   try { research = JSON.parse(nodo.research_data); } catch {}
 
-  const { brand, nombre } = await contextoND(hdrs);
+  const { brand, nombre } = await contextoMarca(hdrs);
 
   const system = `Eres redactor SEO senior de ${nombre}, especialista en contenido inmobiliario de alto valor.
 ${REGLAS_VOZ}
@@ -326,7 +338,7 @@ async function generateSection(body: any, hdrs: any, key: string) {
   if (!item) return json({ error: `Índice fuera de rango: ${i}` }, 400);
 
   const contenido = await getEntity(hdrs, 'ContenidoSEO', contenido_id);
-  const { brand, nombre } = await contextoND(hdrs);
+  const { brand, nombre } = await contextoMarca(hdrs);
 
   const system = `Eres redactor SEO senior de ${nombre}, especialista en contenido inmobiliario de alto valor en Bogotá.
 ${REGLAS_VOZ}
@@ -344,7 +356,7 @@ Debe cubrir: ${item.cubrir || 'desarrolla el tema del H2'}
 Reglas:
 - Entre 150 y 250 palabras en total para la sección.
 - 2 o 3 párrafos. Puedes añadir una lista si aporta claridad real.
-- Menciona zonas concretas de ND cuando aplique.
+- Menciona zonas concretas solo si vienen en el contexto de marca.
 - Solo cifras que aparezcan en los datos reales de arriba.
 
 Devuelve exactamente este JSON:
@@ -378,7 +390,7 @@ async function generateFinalize(body: any, hdrs: any, key: string) {
   if (!contenidoId) return json({ error: 'Falta contenido_id' }, 400);
 
   const contenido = await getEntity(hdrs, 'ContenidoSEO', contenidoId);
-  const { brand, nombre, cfg } = await contextoND(hdrs);
+  const { brand, nombre, cfg } = await contextoMarca(hdrs);
 
   let secciones: any[] = [];
   try { secciones = JSON.parse(contenido.content_sections || '[]'); } catch {}
@@ -420,7 +432,7 @@ Genera entre 4 y 6 preguntas frecuentes.`;
     publisher: {
       '@type': 'RealEstateAgent',
       name: nombre,
-      areaServed: ND.cobertura,
+      areaServed: MARCA.cobertura,
       ...(cfg.website_url ? { url: cfg.website_url } : {}),
     },
   };
@@ -452,7 +464,7 @@ async function aeo(body: any, hdrs: any, key: string) {
   if (!contenidoId) return json({ error: 'Falta contenido_id' }, 400);
 
   const contenido = await getEntity(hdrs, 'ContenidoSEO', contenidoId);
-  const { brand, nombre } = await contextoND(hdrs);
+  const { brand, nombre } = await contextoMarca(hdrs);
 
   let secciones: any[] = [];
   try { secciones = JSON.parse(contenido.content_sections || '[]'); } catch {}

@@ -14,7 +14,7 @@ export const registrarConsignacion: Tool = {
       canon_esperado: numOpc('Canon mensual que espera, en pesos. null si no lo dijo.'),
       nombre_propietario: str('Nombre de quien escribe'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const tel = c.entrada.tel.replace(/\D/g, '');
@@ -72,6 +72,7 @@ export const agendarAvaluoPrevio: Tool = {
     'agendar_avaluo_previo',
     'Deja pedida la visita de avaluo para una consignacion que ya registraste. Sirve para saber a que precio sale el inmueble.',
     { preferencia: str('Cuando le queda bien al propietario, en sus palabras') },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const consId = String(c.ctxAgente.consignacion_id || '');

@@ -3,7 +3,13 @@
 // direction: "test" | "import_properties" | "pull" | "both"
 // Token público para llamadas server-to-server: ?token=SYNCWASI2026
 Deno.serve(async (req) => {
-  const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+  const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
+  // Sin la variable, esta funcion escribiria contra el tenant del que se clono
+  // la app. Antes ese era el valor por defecto; ahora falla ruidoso.
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   const base44Key = Deno.env.get('BASE44_API_KEY') || '';
   const hdrs = { 'api_key': base44Key, 'Content-Type': 'application/json' };
 

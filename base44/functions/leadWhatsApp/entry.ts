@@ -1,6 +1,6 @@
 // Envío rápido de WhatsApp a un contacto desde el CRM.
 // POST { contacto_id, variables: { mensaje } }  (o template_id + variables)
-const BASE_URL = Deno.env.get('BASE44_APP_URL') || 'https://ndsoftware.base44.app';
+const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -9,6 +9,10 @@ const CORS = {
 const json = (d, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 Deno.serve(async (req) => {
+  if (!BASE_URL) {
+    console.error('BASE44_APP_URL no configurada');
+    return new Response(JSON.stringify({ error: 'BASE44_APP_URL no configurada' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+  }
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
   let body = {};
   try { body = await req.json(); } catch {}
@@ -40,7 +44,14 @@ Deno.serve(async (req) => {
         for (const [k, v] of Object.entries(vars)) contenido = contenido.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), String(v || ''));
       }
     } else {
-      contenido = variables.mensaje || 'Hola, te contactamos desde ND Inmobiliaria.';
+      // Sin plantilla y sin mensaje no hay nada que decir. Aqui habia un texto por
+      // defecto que saludaba en nombre de "ND Inmobiliaria" —el tenant del que se
+      // clono esta app— y salia hacia el CLIENTE FINAL. Un mensaje que nombra a
+      // otra empresa es peor que no mandar ninguno.
+      contenido = String(variables.mensaje || '').trim();
+      if (!contenido) {
+        return json({ error: 'Sin contenido: manda variables.mensaje o un template_id.' }, 400);
+      }
     }
 
     const to = tel.startsWith('57') ? tel : `57${tel}`;

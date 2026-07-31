@@ -1,5 +1,6 @@
 import { definirTool, str, strOpc, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe } from '../state.ts';
+import { calificar } from '../scoring.ts';
 import type { Db } from '../db.ts';
 
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
@@ -72,6 +73,24 @@ export const buscarInmuebles: Tool = {
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
 
+    // Descubrimiento antes de mostrar inventario. Sin este gate, el unico
+    // parametro obligatorio era `operacion`: con todo lo demas en null el filtro
+    // no descartaba nada, la puntuacion daba 0 a todo y salian cinco inmuebles
+    // ARBITRARIOS desde el primer mensaje. Un broker no abre con un listado, y
+    // volcarlo ademas quema el inventario antes de saber que necesita el cliente.
+    //
+    // Va en codigo y no en el prompt porque dependia de que el modelo decidiera
+    // preguntar primero, y eso no es una garantia.
+    if (!barrio && !tope) {
+      return {
+        falta_discovery: true,
+        instruccion: 'Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas '
+          + 'al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor '
+          + 'en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario '
+          + 'ni digas que estas buscando.',
+      };
+    }
+
     const puntuados = props
       .filter((p) => {
         const op = String(p.operacion || '');
@@ -106,7 +125,20 @@ export const buscarInmuebles: Tool = {
       .sort((a, b) => b.s - a.s)
       .slice(0, 5);
 
-    if (!puntuados.length) return { encontrados: 0, inmuebles: [] };
+    // Cero resultados es el caso que mas se maltrataba: devolvia una lista
+    // vacia sin ninguna guia, mientras el prompt prometia "ofrece registrar el
+    // interes" y esa herramienta no existia. El agente terminaba prometiendo
+    // "te aviso cuando entre algo" y eso no quedaba registrado en ningun lado.
+    if (!puntuados.length) {
+      return {
+        encontrados: 0,
+        inmuebles: [],
+        instruccion: 'Hoy no hay nada que encaje. Dilo sin rodeos, NO ofrezcas alternativas '
+          + 'que no viste aqui, y ofrecele registrar el interes para avisarle cuando entre '
+          + 'algo: para eso llama a registrar_interes. Si el cliente acepta, esa llamada es '
+          + 'obligatoria, no basta con prometerselo.',
+      };
+    }
 
     return {
       encontrados: puntuados.length,
@@ -147,6 +179,54 @@ export const enviarFicha: Tool = {
   },
 };
 
+export const registrarInteres: Tool = {
+  ...definirTool(
+    'registrar_interes',
+    'Guarda lo que el cliente busca para avisarle cuando entre un inmueble que encaje. Usala cuando buscar_inmuebles no encontro nada y el cliente acepta que le avisemos. Es la unica forma de que ese "te aviso" quede registrado: prometerlo en el mensaje no guarda nada.',
+    {
+      operacion: enumStr('Que busca', ['venta', 'arriendo']),
+      zona: strOpc('Barrio o zona. null si no la dio.'),
+      tipo_inmueble: strOpc('Tipo de inmueble. null si no lo dijo.'),
+      presupuesto_max: numOpc('Tope en pesos. null si no lo dio.'),
+      habitaciones_min: numOpc('Minimo de habitaciones. null si no aplica.'),
+      notas: strOpc('Algo mas que deba saber quien le avise. null si no hay nada.'),
+    },
+    { retorna: true, cierra: true },
+  ),
+  ejecutar: async (input, c: CtxTool) => {
+    const ctx = ctxDe(c.estado, 'ventas');
+    const nombre = String(c.estado.compartido.nombre || '').trim();
+
+    // Vigencia por defecto: 90 dias. Pasado eso la alerta se marca vencida y no
+    // se llama al cliente. Nadie quiere que lo contacten por algo que pidio hace
+    // ocho meses; una alerta sin caducidad se vuelve una molestia.
+    const alerta = await c.db.crear('AlertaBusqueda', {
+      contacto_id: String(c.estado.compartido.contacto_id || ''),
+      contacto_nombre: nombre,
+      contacto_telefono: c.entrada.tel.replace(/\D/g, ''),
+      operacion: input.operacion === 'arriendo' ? 'Arriendo' : 'Venta',
+      tipo_inmueble: input.tipo_inmueble ? String(input.tipo_inmueble) : '',
+      zona: input.zona ? String(input.zona) : '',
+      presupuesto_max: Number(input.presupuesto_max) || 0,
+      habitaciones_min: Number(input.habitaciones_min) || 0,
+      estado: 'Activa',
+      canal: c.entrada.canal,
+      fecha_registro: new Date().toISOString(),
+      vigente_hasta: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+      veces_notificado: 0,
+      notas: input.notas ? String(input.notas).slice(0, 500) : '',
+    });
+    if (!alerta) return { ok: false, error: 'no_se_pudo_registrar' };
+    ctx.alerta_id = alerta.id;
+
+    return {
+      ok: true,
+      instruccion: 'Confirmale que quedo registrado y que le escribimos apenas entre algo '
+        + 'que encaje. NO prometas cuando: no lo sabes.',
+    };
+  },
+};
+
 export const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
@@ -159,7 +239,7 @@ export const calificarLead: Tool = {
       presupuesto: numOpc('Cifra en pesos. null si es un inversionista flexible o no quiso darla.'),
       observaciones: strOpc('Lo que el asesor deberia saber antes de llamar. null si no hay nada.'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const ctx = ctxDe(c.estado, 'ventas');
@@ -177,13 +257,33 @@ export const calificarLead: Tool = {
     ctx.asesor_id = asesor?.id || '';
     ctx.asesor_tel = asesor?.telefono || '';
 
+    // Temperatura y score REALES. Antes se escribia 'Caliente' literal para
+    // todo lead, asi que la columna no distinguia a nadie de nadie y el equipo
+    // no tenia como priorizar. Las señales de conversacion salen del ctx del
+    // agente, donde guardar_dato las fue dejando.
+    const cal = calificar({
+      etapa_pipeline: 'Lead',
+      presupuesto_max: Number(input.presupuesto) || undefined,
+      ciudad_interes: 'Bogota',
+      operacion: String(input.operacion),
+      zona: input.zona ? String(input.zona) : undefined,
+      timing: ctx.datos?.timing ? String(ctx.datos.timing) : undefined,
+      forma_pago: ctx.datos?.forma_pago ? String(ctx.datos.forma_pago) : undefined,
+      decide_solo: typeof ctx.datos?.decide_solo === 'boolean' ? ctx.datos.decide_solo : undefined,
+      otra_inmobiliaria: ctx.datos?.otra_inmobiliaria === true,
+      ultima_actividad: new Date().toISOString(),
+    });
+    ctx.score = cal.score;
+    ctx.temperatura = cal.temperatura;
+
     const contactoId = String(c.estado.compartido.contacto_id || '');
     if (contactoId) {
       await c.db.actualizar('Contacto', contactoId, {
         nombre,
         telefono: c.entrada.tel,
         ia_calificado: true,
-        temperatura: 'Caliente',
+        temperatura: cal.temperatura,
+        score_lead: cal.score,
         asignado_a: asesor?.nombre || '',
         broker_telefono: asesor?.telefono || '',
         estado_seguimiento: 'Asignado',
@@ -204,7 +304,9 @@ export const calificarLead: Tool = {
     }
 
     c.efectos.notificar.push(
-      `LEAD CALIFICADO — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
+      // La temperatura encabeza: es lo que le dice al asesor si atender ya o
+      // cuando pueda. Antes todos los leads llegaban iguales.
+      `LEAD ${cal.temperatura.toUpperCase()} (${cal.score}/100) — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
       `${input.operacion === 'arriendo' ? 'Arriendo' : 'Compra'} de ${input.tipo_inmueble || 'inmueble'}\n` +
       `Zona: ${input.zona || 'sin definir'}\n` +
       `Presupuesto: ${input.presupuesto ? fmtCOP(Number(input.presupuesto)) : 'flexible, confirmar en la llamada'}\n` +
@@ -232,6 +334,7 @@ export const agendarVisita: Tool = {
       inmueble_id: str('El id que devolvio buscar_inmuebles'),
       preferencia: str('Cuando le queda bien al cliente, en sus palabras'),
     },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     await c.db.crear('Visita', {
@@ -249,6 +352,7 @@ export const agendarVisita: Tool = {
 export const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
+  registrar_interes: registrarInteres,
   calificar_lead: calificarLead,
   agendar_visita: agendarVisita,
 };

@@ -80,7 +80,7 @@ export const enviarLinkPortal: Tool = {
     // Ofrecer una que no existe manda al cliente a un link que no lo lleva a
     // donde el agente le dijo: 'documentos' y 'mis-datos' se sacaron por eso.
     { seccion: enumStr('A donde debe llegar', ['estado-cuenta', 'pagos', 'contrato', 'reparaciones', 'liquidaciones']) },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);
@@ -98,7 +98,7 @@ export const enviarCodigoBarras: Tool = {
     'enviar_codigo_barras',
     'Manda el codigo de barras del mes para que el cliente pague en banco o corresponsal.',
     { periodo: strOpc('Mes en formato AAAA-MM. null para el mes en curso.') },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);
