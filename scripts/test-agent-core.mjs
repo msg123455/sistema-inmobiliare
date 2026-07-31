@@ -9,6 +9,7 @@ import {
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
+import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_core/habiles.ts';
 import {
   POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
 } from '../base44/functions/_core/privacidad.ts';
@@ -174,6 +175,31 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
   assert.equal(marca.autoriza_tratamiento, true);
   assert.equal(marca.politica_version, POLITICA_VERSION);
   assert.ok(!Number.isNaN(Date.parse(marca.fecha_autorizacion)), 'fecha_autorizacion es ISO valida');
+}
+
+// ── Dias habiles y festivos de Colombia (plazo legal de PQR) ─────────────────
+// Un plazo legal contado mal por dos dias es un plazo incumplido, y la mayoria
+// de festivos colombianos no cae en fecha fija: la Ley 51 de 1983 los corre al
+// lunes y cinco dependen de la Pascua.
+{
+  const f2026 = festivosColombia(2026);
+  assert.equal(f2026.size, 18, '2026 tiene 18 festivos');
+  assert.ok(f2026.has('2026-01-01'), 'ano nuevo es fijo');
+  assert.ok(f2026.has('2026-04-03'), 'Viernes Santo 2026 = 3 abr');
+  assert.ok(f2026.has('2026-01-12'), 'Reyes se corre al lunes 12');
+  assert.ok(!f2026.has('2026-01-06'), 'Reyes NO queda el 6 (Ley Emiliani)');
+
+  // 2025: dos festivos coinciden (San Pedro y Sagrado Corazon el 30 de junio),
+  // asi que el Set trae 17 y no 18. Es correcto, no un bug de conteo.
+  assert.equal(festivosColombia(2025).size, 17, '2025: San Pedro y Sagrado Corazon coinciden');
+
+  assert.equal(esHabil(new Date('2026-01-01T12:00:00Z')), false, 'festivo no es habil');
+  assert.equal(esHabil(new Date('2026-08-01T12:00:00Z')), false, 'sabado no es habil');
+
+  // Vie 31 jul 2026 + 15 habiles salta dos festivos de agosto (7 y 17).
+  const vence = sumarHabiles(new Date('2026-07-31T10:00:00Z'), 15);
+  assert.equal(vence.toISOString().slice(0, 10), '2026-08-25');
+  assert.ok(esHabil(vence), 'un vencimiento siempre cae en dia habil');
 }
 
 console.log('agent-core: OK');

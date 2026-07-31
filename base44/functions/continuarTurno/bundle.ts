@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (18 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (19 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -535,7 +535,11 @@ FLUJO
 3. Llama a registrar_pqr. Da exactamente el radicado y la orientacion que devuelva.
 
 Reconoce la inconformidad sin dar ni quitar la razon. No justifiques a la empresa, no te
-disculpes en su nombre y no prometas una solucion, compensacion ni fecha exacta.
+disculpes en su nombre y no prometas una solucion ni una compensacion.
+
+El termino legal de respuesta SI se comunica: registrar_pqr te devuelve cuantos dias
+habiles son y esa cifra se le dice al cliente. Lo que no se da es la fecha exacta ni la
+promesa de resolver antes: el termino es el maximo de ley, no un compromiso de entrega.
 
 Si menciona tutela, demanda, abogado, Superintendencia, fiscalia o juzgado, radica sin
 opinar y escala de inmediato con prioridad urgente. Para una consulta posterior, usa
@@ -1976,9 +1980,147 @@ const registrarSolicitudAvaluo: Tool = {
   cotizar_avaluo: cotizarAvaluo,
 };
 
+// ─── _core/habiles.ts ────────────────────────────────────────────
+// Dias habiles en Colombia: festivos y suma de plazos.
+//
+// POR QUE NO ALCANZA CON "SALTAR SABADOS Y DOMINGOS": Colombia tiene 18
+// festivos al ano y la mayoria NO cae en fecha fija. La Ley 51 de 1983
+// ("Ley Emiliani") corre varios al lunes siguiente, y cinco dependen de la
+// Pascua, que se calcula con el algoritmo de Butcher. Un plazo legal contado
+// mal por dos dias es un plazo incumplido.
+//
+// Se usa para el termino de respuesta de PQR (Ley 1755/2015), que corre en
+// dias habiles desde la radicacion.
+
+/** Domingo de Pascua del año dado (algoritmo de Butcher, calendario gregoriano). */
+function pascua(anio: number): Date {
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31);
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
+const dia = 86_400_000;
+const sumar = (f: Date, n: number) => new Date(f.getTime() + n * dia);
+const clave = (f: Date) => f.toISOString().slice(0, 10);
+
+/** Corre la fecha al lunes siguiente si no es lunes (Ley Emiliani). */
+function alLunes(f: Date): Date {
+  const d = f.getUTCDay(); // 0 domingo … 6 sabado
+  return d === 1 ? f : sumar(f, (8 - d) % 7);
+}
+
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
+function festivosColombia(anio: number): Set<string> {
+  const p = pascua(anio);
+  const fechas: Date[] = [
+    // Fijos: no se mueven.
+    new Date(Date.UTC(anio, 0, 1)),   // Año nuevo
+    new Date(Date.UTC(anio, 4, 1)),   // Día del trabajo
+    new Date(Date.UTC(anio, 6, 20)),  // Independencia
+    new Date(Date.UTC(anio, 7, 7)),   // Batalla de Boyacá
+    new Date(Date.UTC(anio, 11, 8)),  // Inmaculada Concepción
+    new Date(Date.UTC(anio, 11, 25)), // Navidad
+
+    // Movibles al lunes (Ley Emiliani).
+    alLunes(new Date(Date.UTC(anio, 0, 6))),   // Reyes Magos
+    alLunes(new Date(Date.UTC(anio, 2, 19))),  // San José
+    alLunes(new Date(Date.UTC(anio, 5, 29))),  // San Pedro y San Pablo
+    alLunes(new Date(Date.UTC(anio, 7, 15))),  // Asunción
+    alLunes(new Date(Date.UTC(anio, 9, 12))),  // Día de la Raza
+    alLunes(new Date(Date.UTC(anio, 10, 1))),  // Todos los Santos
+    alLunes(new Date(Date.UTC(anio, 10, 11))), // Independencia de Cartagena
+
+    // Ligados a la Pascua. Jueves y Viernes Santo NO se mueven; los otros sí.
+    sumar(p, -3),           // Jueves Santo
+    sumar(p, -2),           // Viernes Santo
+    alLunes(sumar(p, 43)),  // Ascensión
+    alLunes(sumar(p, 64)),  // Corpus Christi
+    alLunes(sumar(p, 71)),  // Sagrado Corazón
+  ];
+  return new Set(fechas.map(clave));
+}
+
+// Los festivos se recalculan una vez por año y se recuerdan: sumar un plazo
+// puede cruzar hasta tres años y no vale la pena repetir el cálculo.
+const cache = new Map<number, Set<string>>();
+function festivos(anio: number): Set<string> {
+  let s = cache.get(anio);
+  if (!s) { s = festivosColombia(anio); cache.set(anio, s); }
+  return s;
+}
+
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
+function esHabil(f: Date): boolean {
+  const d = f.getUTCDay();
+  if (d === 0 || d === 6) return false;
+  return !festivos(f.getUTCFullYear()).has(clave(f));
+}
+
+/**
+ * Suma días hábiles a una fecha.
+ *
+ * El día de radicación NO cuenta: el término empieza a correr el hábil
+ * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
+ * "a los 15 días" incluya ese día completo.
+ */
+function sumarHabiles(desde: Date, dias: number): Date {
+  let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  let restantes = Math.max(0, Math.floor(dias));
+  while (restantes > 0) {
+    f = sumar(f, 1);
+    if (esHabil(f)) restantes--;
+  }
+  return new Date(f.getTime() + dia - 1000);
+}
+
+/** Días hábiles entre dos fechas (negativo si ya venció). */
+function habilesHasta(desde: Date, hasta: Date): number {
+  const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
+  const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
+  const signo = fin >= ini ? 1 : -1;
+  let [a, b] = signo > 0 ? [ini, fin] : [fin, ini];
+  let n = 0;
+  while (a < b) { a = sumar(a, 1); if (esHabil(a)) n++; }
+  return n * signo;
+}
+
 // ─── _core/tools/pqr.ts ──────────────────────────────────────────
 // Palabra legal: dispara prioridad y notificacion inmediata al equipo.
-const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;const registrarPqr: Tool = {
+const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
+
+/**
+ * Terminos de respuesta en DIAS HABILES (Ley 1755/2015, art. 14).
+ *
+ * El termino corre por ministerio de la ley desde la radicacion, exista o no un
+ * campo en la base. Antes no se computaba y la tool instruia al modelo a callar
+ * sobre el plazo: eso protegia de prometer mal, pero dejaba un pasivo creciendo
+ * en silencio, sin nada que avisara antes del vencimiento.
+ *
+ * Los valores son configurables desde AppConfig{clave:'plazos_pqr'} porque la
+ * calificacion juridica de cada caso —peticion de interes particular, de
+ * documentos, consulta— la define el abogado de la empresa, no este codigo.
+ * Estos defaults son los del articulo y se usan mientras no haya politica
+ * cargada.
+ */
+const DIAS_DEFECTO: Record<string, number> = {
+  Peticion:     15,
+  Queja:        15,
+  Reclamo:      15,
+  Sugerencia:   15,
+  Felicitacion: 15,
+};const registrarPqr: Tool = {
   ...definirTool(
     'registrar_pqr',
     'Radica una peticion, queja, reclamo, sugerencia o felicitacion. Antes de llamarla necesitas entender bien QUE paso: no radiques con una sola frase suelta.',
@@ -1994,9 +2136,22 @@ const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[i
     const tipo = String(input.tipo);
     const texto = `${input.asunto} ${input.descripcion}`;
     const esLegal = LEGAL.test(texto);
-    const radicado = `PQR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
+
+    // El radicado usaba los ultimos 6 digitos de Date.now(), que se repiten cada
+    // ~16 minutos. Se le agregan 4 caracteres aleatorios: un radicado duplicado
+    // le entrega al cliente un numero que apunta a la PQR de otro.
+    const azar = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const radicado = `PQR-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}-${azar}`;
+
+    // Plazo legal. Se calcula SIEMPRE: el termino corre aunque el campo este
+    // vacio, y sin fecha no hay nada que pueda alertar antes del vencimiento.
+    const cfgPlazos = (await c.db.uno('AppConfig', { clave: 'plazos_pqr' }))?.valor_json;
+    let dias = DIAS_DEFECTO;
+    try { if (cfgPlazos) dias = { ...DIAS_DEFECTO, ...JSON.parse(cfgPlazos) }; } catch { /* usa los del articulo */ }
+    const fechaLimite = sumarHabiles(new Date(), Number(dias[tipo]) || 15);
 
     const pqr = await c.db.crear('PQR', {
+      fecha_limite_legal: fechaLimite.toISOString(),
       tipo,
       radicado,
       contacto_id: String(c.estado.compartido.contacto_id || ''),
@@ -2014,10 +2169,13 @@ const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[i
 
     // El agente de PQR SIEMPRE notifica: una queja que nadie ve es una queja
     // que se convierte en algo peor.
+    const venceEl = fechaLimite.toISOString().slice(0, 10);
     c.efectos.notificar.push(
       `${esLegal ? 'PQR CON MENCION LEGAL — REVISAR YA' : `PQR NUEVA (${tipo})`}\n` +
       `Radicado: ${radicado}\n${String(input.nombre)} — wa.me/${c.entrada.tel}\n` +
-      `Asunto: ${String(input.asunto)}\n\n${String(input.descripcion).slice(0, 500)}`,
+      `Asunto: ${String(input.asunto)}\n` +
+      `Vence: ${venceEl} (${Number(dias[tipo]) || 15} dias habiles)\n\n` +
+      `${String(input.descripcion).slice(0, 500)}`,
     );
 
     return {
@@ -2026,7 +2184,7 @@ const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[i
       mencion_legal: esLegal,
       instruccion: esLegal
         ? `Dale el radicado ${radicado}, dile que ya quedo en manos del equipo y llama tambien a escalar_a_humano con prioridad urgente. NO opines sobre lo legal ni asumas responsabilidad.`
-        : `Dale el radicado ${radicado}. El plazo aplicable aun no esta configurado: NO prometas una fecha ni menciones un termino legal; indica que el equipo confirmara el tramite.`,
+        : `Dale el radicado ${radicado} y dile que el termino de respuesta es de ${Number(dias[tipo]) || 15} dias habiles. NO des la fecha exacta ni prometas que se resuelve antes: el plazo es el maximo de ley, no un compromiso de entrega.`,
     };
   },
 };const consultarEstadoPqr: Tool = {
