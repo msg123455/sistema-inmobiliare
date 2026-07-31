@@ -136,7 +136,7 @@
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
   pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
-  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
+  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────interface Identidad {
@@ -189,11 +189,15 @@
 }
 
 // `retorna: true` => el modelo necesita el resultado para hablar, cuesta una
-// segunda llamada. `terminal: true` => corta el turno (solo `responder`).interface Tool {
+// segunda llamada. `terminal: true` => corta el turno (solo `responder`).
+// `cierra: true` => deja al cliente con un siguiente paso concreto: una cita,
+// un radicado, una alerta de busqueda. Es lo que permite exigir que ninguna
+// conversacion termine en callejon sin salida.interface Tool {
   def: EsquemaTool;
   ejecutar: (input: any, c: CtxTool) => Promise<unknown> | unknown;
   retorna?: boolean;
   terminal?: boolean;
+  cierra?: boolean;
 }interface CtxTool {
   db: Db;
   estado: Estado;
@@ -201,6 +205,9 @@
   ctxAgente: Record<string, any>;   // lo que cargo contexto.ts para ESTE agente
   config: Record<string, any>;      // fila operativa de ConfigAgente
   salida: { globos: string[]; finTurno: boolean };
+  // Lo marca el bucle de llm.ts cuando corre una tool con `cierra: true`.
+  // `responder` lo consulta para no dejar la conversacion en el aire.
+  hubo_cierre?: boolean;
   efectos: {
     transferir: Agente | null;
     escalado: { motivo: string; prioridad: string } | null;
@@ -212,7 +219,7 @@
   name: string,
   description: string,
   props: Record<string, unknown>,
-  opts: { retorna?: boolean; terminal?: boolean } = {},
+  opts: { retorna?: boolean; terminal?: boolean; cierra?: boolean } = {},
 ): Omit<Tool, 'ejecutar'> & { def: EsquemaTool } {
   return {
     def: {
@@ -343,8 +350,15 @@ Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exac
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
 enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
 
-No pidas datos accesorios antes de calificar. Si no hay opciones, dilo y ofrece registrar
-el interes. Si el cliente se despide, responde una sola vez y termina el turno.`,
+No pidas datos accesorios antes de calificar.
+
+Si no hay opciones, dilo sin rodeos y ofrecele registrar el interes para avisarle cuando
+entre algo. Si acepta, llama a registrar_interes: prometerselo en el mensaje no guarda nada.
+
+NUNCA cierres la conversacion en el aire. Antes de despedirte deja algo concreto: una visita
+agendada, una ficha enviada, el interes registrado o el lead entregado a un asesor. Si de
+verdad no puedes hacer nada, escala en vez de despedirte. Si el cliente se despide, responde
+una sola vez y cierra, pero solo si ya quedo algo de eso hecho.`,
 
   consignacion: `ROL INTERNO: consignacion. Atiendes a propietarios que quieren poner su inmueble con nosotros.
 

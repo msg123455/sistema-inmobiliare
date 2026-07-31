@@ -11,7 +11,7 @@ export const registrarSolicitudAvaluo: Tool = {
       area_m2: numOpc('Area en metros cuadrados. null si no la sabe.'),
       proposito: enumStr('Para que lo necesita', ['Venta', 'Arriendo', 'Credito', 'Sucesion', 'Otro']),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const av = await c.db.crear('Avaluo', {

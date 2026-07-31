@@ -24,7 +24,30 @@ export const responder: Tool = {
       const t = limpiar(g);
       if (t) c.salida.globos.push(t);
     }
-    c.salida.finTurno = !!input.fin_turno;
+
+    // Cierre obligatorio: no se puede dar por terminada una conversacion sin
+    // dejar algo concreto. Antes un turno perfectamente valido era
+    // responder(["Cualquier cosa me escribes"], fin_turno=true) — cero
+    // compromiso, cero registro, y el lead se perdia en silencio.
+    //
+    // Vale como cierre cualquier tool marcada `cierra`: agendar una visita,
+    // radicar una PQR, registrar un interes, escalar a un humano. Tambien una
+    // transferencia, porque la conversacion sigue con otro rol y no muere aqui.
+    const quiereCerrar = !!input.fin_turno;
+    const hayCierre = c.hubo_cierre === true || c.efectos.transferir !== null || c.efectos.escalado !== null;
+    if (quiereCerrar && !hayCierre) {
+      c.salida.finTurno = false;
+      return {
+        ok: false,
+        error: 'cierre_sin_siguiente_paso',
+        instruccion: 'No cierres la conversacion en el aire. Deja algo concreto antes: '
+          + 'agenda una visita o una llamada, envia una ficha, registra el interes con '
+          + 'registrar_interes, radica la solicitud, o escala a un humano. Si de verdad no '
+          + 'hay nada que hacer, escala en vez de despedirte.',
+      };
+    }
+
+    c.salida.finTurno = quiereCerrar;
     return { ok: true };
   },
 };
@@ -87,6 +110,7 @@ export const escalarAHumano: Tool = {
       motivo: str('Que pasa y que necesita el cliente, en 1 o 2 frases'),
       prioridad: enumStr('Urgencia real', ['baja', 'media', 'alta', 'urgente']),
     },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const motivo = String(input.motivo || 'sin motivo').slice(0, 500);

@@ -125,7 +125,18 @@ export async function correrAgente(opts: {
     let terminal = false;
     let necesitaOtraVuelta = false;
 
-    for (const uso of usos) {
+    // El terminal va de ULTIMO. Con tool use paralelo el modelo emite en un solo
+    // turno, por ejemplo, `registrar_interes` y `responder`, y el orden del array
+    // lo decide el modelo. Si `responder` corriera primero, revisaria si hubo
+    // cierre antes de que la otra tool lo marcara. Ordenarlo aqui elimina esa
+    // dependencia del orden en vez de confiar en que el modelo lo acomode.
+    const ordenados = [...usos].sort((a, b) => {
+      const ta = opts.tools[a.name]?.terminal ? 1 : 0;
+      const tb = opts.tools[b.name]?.terminal ? 1 : 0;
+      return ta - tb;
+    });
+
+    for (const uso of ordenados) {
       const tool = opts.tools[uso.name];
       if (!tool) {
         resultados.push({ type: 'tool_result', tool_use_id: uso.id, is_error: true, content: `Tool desconocida: ${uso.name}` });
@@ -139,6 +150,13 @@ export async function correrAgente(opts: {
         salida = { error: (e as Error).message };
         console.error(`tool ${uso.name} error:`, (e as Error).message);
       }
+
+      // Solo cuenta como cierre si de verdad se ejecuto: una tool que devuelve
+      // error no dejo ninguna cita ni radicado.
+      const s = salida as Record<string, unknown> | null;
+      const fallo = !s || s.error !== undefined || s.ok === false;
+      if (tool.cierra && !fallo) opts.ctx.hubo_cierre = true;
+
       resultados.push({
         type: 'tool_result',
         tool_use_id: uso.id,

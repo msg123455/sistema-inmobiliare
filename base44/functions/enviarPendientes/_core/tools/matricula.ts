@@ -13,7 +13,7 @@ export const iniciarMatricula: Tool = {
       email: str('Correo electronico'),
       direccion_inmueble: str('Direccion del inmueble que va a arrendar'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     if (c.ctxAgente.solicitud_id) {
@@ -98,7 +98,7 @@ export const finalizarMatricula: Tool = {
     'finalizar_matricula',
     'Cierra la captura de datos y deja la solicitud lista para el estudio. Llamala cuando el cliente confirme que no falta nadie mas.',
     {},
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const solId = String(c.ctxAgente.solicitud_id || '');

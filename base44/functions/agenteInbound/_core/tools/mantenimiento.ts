@@ -12,7 +12,7 @@ export const registrarReparacion: Tool = {
       urgencia: enumStr('Emergencia solo si hay riesgo real para personas o el inmueble', ['Emergencia', 'Alta', 'Media', 'Baja']),
       ubicacion: strOpc('En que parte del inmueble. null si no lo dijo.'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);

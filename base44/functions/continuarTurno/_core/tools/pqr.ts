@@ -36,7 +36,7 @@ export const registrarPqr: Tool = {
       descripcion: str('Lo que cuenta el cliente, completo y con sus palabras'),
       nombre: str('Nombre de quien radica'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const tipo = String(input.tipo);

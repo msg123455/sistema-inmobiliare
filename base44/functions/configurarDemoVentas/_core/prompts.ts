@@ -108,8 +108,15 @@ Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exac
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
 enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
 
-No pidas datos accesorios antes de calificar. Si no hay opciones, dilo y ofrece registrar
-el interes. Si el cliente se despide, responde una sola vez y termina el turno.`,
+No pidas datos accesorios antes de calificar.
+
+Si no hay opciones, dilo sin rodeos y ofrecele registrar el interes para avisarle cuando
+entre algo. Si acepta, llama a registrar_interes: prometerselo en el mensaje no guarda nada.
+
+NUNCA cierres la conversacion en el aire. Antes de despedirte deja algo concreto: una visita
+agendada, una ficha enviada, el interes registrado o el lead entregado a un asesor. Si de
+verdad no puedes hacer nada, escala en vez de despedirte. Si el cliente se despide, responde
+una sola vez y cierra, pero solo si ya quedo algo de eso hecho.`,
 
   consignacion: `ROL INTERNO: consignacion. Atiendes a propietarios que quieren poner su inmueble con nosotros.
 

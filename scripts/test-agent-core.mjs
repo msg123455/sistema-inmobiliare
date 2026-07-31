@@ -11,6 +11,7 @@ import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook
 import { decidirAgente } from '../base44/functions/_core/router.ts';
 import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_core/habiles.ts';
 import { calificar } from '../base44/functions/_core/scoring.ts';
+import { responder } from '../base44/functions/_core/tools/comunes.ts';
 import {
   POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
 } from '../base44/functions/_core/privacidad.ts';
@@ -242,6 +243,68 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
     decide_solo: true, visitas_realizadas: 3, visita_con_interes: true,
   }).score <= 100);
   assert.ok(calificar({ etapa_pipeline: 'Perdido', ultima_actividad: '2020-01-01T00:00:00Z' }).score >= 0);
+}
+
+// ── Cierre obligatorio ───────────────────────────────────────────────────────
+// Antes un turno perfectamente valido era responder(["Cualquier cosa me
+// escribes"], fin_turno=true): cero compromiso, cero registro, lead perdido en
+// silencio. Ahora no se puede cerrar sin dejar algo concreto.
+{
+  const ctxBase = () => ({
+    db: null, estado: estadoVacio(), entrada: entrada('hola'),
+    ctxAgente: {}, config: {},
+    salida: { globos: [], finTurno: false },
+    efectos: { transferir: null, escalado: null, notificar: [] },
+  });
+
+  // Cerrar sin haber hecho nada: se rechaza y el turno NO queda cerrado.
+  const sinCierre = ctxBase();
+  const r1 = responder.ejecutar({ globos: ['Cualquier cosa me escribes'], fin_turno: true }, sinCierre);
+  assert.equal(r1.ok, false, 'no se puede cerrar sin siguiente paso');
+  assert.equal(r1.error, 'cierre_sin_siguiente_paso');
+  assert.equal(sinCierre.salida.finTurno, false, 'el turno queda abierto');
+  assert.ok(sinCierre.salida.globos.length > 0, 'los globos si se envian: el cliente no se queda mudo');
+
+  // Con una tool de cierre ejecutada, si cierra.
+  const conCierre = ctxBase();
+  conCierre.hubo_cierre = true;
+  const r2 = responder.ejecutar({ globos: ['Listo, quedaste registrado'], fin_turno: true }, conCierre);
+  assert.equal(r2.ok, true);
+  assert.equal(conCierre.salida.finTurno, true);
+
+  // Escalar tambien cuenta: la conversacion pasa a un humano, no muere.
+  const escalado = ctxBase();
+  escalado.efectos.escalado = { motivo: 'x', prioridad: 'alta' };
+  assert.equal(responder.ejecutar({ globos: ['Un asesor te contacta'], fin_turno: true }, escalado).ok, true);
+
+  // Transferir tambien: sigue con otro rol.
+  const transferido = ctxBase();
+  transferido.efectos.transferir = 'cartera';
+  assert.equal(responder.ejecutar({ globos: ['Va'], fin_turno: true }, transferido).ok, true);
+
+  // Seguir la conversacion (fin_turno=false) nunca se bloquea: la mayoria de
+  // turnos son de descubrimiento y no tienen por que cerrar nada.
+  const sigue = ctxBase();
+  assert.equal(responder.ejecutar({ globos: ['Y en que zona la buscas?'], fin_turno: false }, sigue).ok, true);
+  assert.equal(sigue.salida.finTurno, false);
+}
+
+// ── Cero resultados guia hacia registrar_interes ─────────────────────────────
+// El prompt prometia "ofrece registrar el interes" y esa tool no existia: el
+// agente prometia "te aviso cuando entre algo" y no quedaba registrado.
+{
+  const ctx = {
+    ctxAgente: { catalogo: [] }, estado: estadoVacio(), entrada: entrada('busco algo'),
+    salida: { globos: [], finTurno: false },
+    efectos: { transferir: null, escalado: null, notificar: [] },
+  };
+  const r = await buscarInmuebles.ejecutar(
+    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: null, habitaciones_min: null },
+    ctx,
+  );
+  assert.equal(r.encontrados, 0);
+  assert.ok(r.instruccion, 'el caso sin resultados trae guia, no una lista vacia pelada');
+  assert.ok(r.instruccion.includes('registrar_interes'), 'apunta a la tool que si existe');
 }
 
 console.log('agent-core: OK');

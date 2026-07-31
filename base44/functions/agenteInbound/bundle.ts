@@ -136,7 +136,7 @@
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
   pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
-  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
+  matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
 // ─── Estado v2 (MemoriaChat.estado_json) ────────────────────────────────────interface Identidad {
@@ -189,11 +189,15 @@
 }
 
 // `retorna: true` => el modelo necesita el resultado para hablar, cuesta una
-// segunda llamada. `terminal: true` => corta el turno (solo `responder`).interface Tool {
+// segunda llamada. `terminal: true` => corta el turno (solo `responder`).
+// `cierra: true` => deja al cliente con un siguiente paso concreto: una cita,
+// un radicado, una alerta de busqueda. Es lo que permite exigir que ninguna
+// conversacion termine en callejon sin salida.interface Tool {
   def: EsquemaTool;
   ejecutar: (input: any, c: CtxTool) => Promise<unknown> | unknown;
   retorna?: boolean;
   terminal?: boolean;
+  cierra?: boolean;
 }interface CtxTool {
   db: Db;
   estado: Estado;
@@ -201,6 +205,9 @@
   ctxAgente: Record<string, any>;   // lo que cargo contexto.ts para ESTE agente
   config: Record<string, any>;      // fila operativa de ConfigAgente
   salida: { globos: string[]; finTurno: boolean };
+  // Lo marca el bucle de llm.ts cuando corre una tool con `cierra: true`.
+  // `responder` lo consulta para no dejar la conversacion en el aire.
+  hubo_cierre?: boolean;
   efectos: {
     transferir: Agente | null;
     escalado: { motivo: string; prioridad: string } | null;
@@ -212,7 +219,7 @@
   name: string,
   description: string,
   props: Record<string, unknown>,
-  opts: { retorna?: boolean; terminal?: boolean } = {},
+  opts: { retorna?: boolean; terminal?: boolean; cierra?: boolean } = {},
 ): Omit<Tool, 'ejecutar'> & { def: EsquemaTool } {
   return {
     def: {
@@ -446,8 +453,15 @@ Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exac
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
 enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
 
-No pidas datos accesorios antes de calificar. Si no hay opciones, dilo y ofrece registrar
-el interes. Si el cliente se despide, responde una sola vez y termina el turno.`,
+No pidas datos accesorios antes de calificar.
+
+Si no hay opciones, dilo sin rodeos y ofrecele registrar el interes para avisarle cuando
+entre algo. Si acepta, llama a registrar_interes: prometerselo en el mensaje no guarda nada.
+
+NUNCA cierres la conversacion en el aire. Antes de despedirte deja algo concreto: una visita
+agendada, una ficha enviada, el interes registrado o el lead entregado a un asesor. Si de
+verdad no puedes hacer nada, escala en vez de despedirte. Si el cliente se despide, responde
+una sola vez y cierra, pero solo si ya quedo algo de eso hecho.`,
 
   consignacion: `ROL INTERNO: consignacion. Atiendes a propietarios que quieren poner su inmueble con nosotros.
 
@@ -896,7 +910,18 @@ function paramsModelo(modelo: string, effort?: string) {
     let terminal = false;
     let necesitaOtraVuelta = false;
 
-    for (const uso of usos) {
+    // El terminal va de ULTIMO. Con tool use paralelo el modelo emite en un solo
+    // turno, por ejemplo, `registrar_interes` y `responder`, y el orden del array
+    // lo decide el modelo. Si `responder` corriera primero, revisaria si hubo
+    // cierre antes de que la otra tool lo marcara. Ordenarlo aqui elimina esa
+    // dependencia del orden en vez de confiar en que el modelo lo acomode.
+    const ordenados = [...usos].sort((a, b) => {
+      const ta = opts.tools[a.name]?.terminal ? 1 : 0;
+      const tb = opts.tools[b.name]?.terminal ? 1 : 0;
+      return ta - tb;
+    });
+
+    for (const uso of ordenados) {
       const tool = opts.tools[uso.name];
       if (!tool) {
         resultados.push({ type: 'tool_result', tool_use_id: uso.id, is_error: true, content: `Tool desconocida: ${uso.name}` });
@@ -910,6 +935,13 @@ function paramsModelo(modelo: string, effort?: string) {
         salida = { error: (e as Error).message };
         console.error(`tool ${uso.name} error:`, (e as Error).message);
       }
+
+      // Solo cuenta como cierre si de verdad se ejecuto: una tool que devuelve
+      // error no dejo ninguna cita ni radicado.
+      const s = salida as Record<string, unknown> | null;
+      const fallo = !s || s.error !== undefined || s.ok === false;
+      if (tool.cierra && !fallo) opts.ctx.hubo_cierre = true;
+
       resultados.push({
         type: 'tool_result',
         tool_use_id: uso.id,
@@ -1300,7 +1332,30 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
       const t = limpiar(g);
       if (t) c.salida.globos.push(t);
     }
-    c.salida.finTurno = !!input.fin_turno;
+
+    // Cierre obligatorio: no se puede dar por terminada una conversacion sin
+    // dejar algo concreto. Antes un turno perfectamente valido era
+    // responder(["Cualquier cosa me escribes"], fin_turno=true) — cero
+    // compromiso, cero registro, y el lead se perdia en silencio.
+    //
+    // Vale como cierre cualquier tool marcada `cierra`: agendar una visita,
+    // radicar una PQR, registrar un interes, escalar a un humano. Tambien una
+    // transferencia, porque la conversacion sigue con otro rol y no muere aqui.
+    const quiereCerrar = !!input.fin_turno;
+    const hayCierre = c.hubo_cierre === true || c.efectos.transferir !== null || c.efectos.escalado !== null;
+    if (quiereCerrar && !hayCierre) {
+      c.salida.finTurno = false;
+      return {
+        ok: false,
+        error: 'cierre_sin_siguiente_paso',
+        instruccion: 'No cierres la conversacion en el aire. Deja algo concreto antes: '
+          + 'agenda una visita o una llamada, envia una ficha, registra el interes con '
+          + 'registrar_interes, radica la solicitud, o escala a un humano. Si de verdad no '
+          + 'hay nada que hacer, escala en vez de despedirte.',
+      };
+    }
+
+    c.salida.finTurno = quiereCerrar;
     return { ok: true };
   },
 };
@@ -1357,6 +1412,7 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
       motivo: str('Que pasa y que necesita el cliente, en 1 o 2 frases'),
       prioridad: enumStr('Urgencia real', ['baja', 'media', 'alta', 'urgente']),
     },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const motivo = String(input.motivo || 'sin motivo').slice(0, 500);
@@ -1526,7 +1582,8 @@ function calificar(s: SenalesLead): Calificacion {
 // ─── _core/tools/ventas.ts ───────────────────────────────────────
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
 // el primero que coincidia". Con 30+ asesores eso concentra todos los leads en
-// una persona: ahora se balancea por leads abiertos.async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
+// una persona: ahora se balancea por leads abiertos.
+async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
   const activos = await db.list('Asesor', { estado: 'Activo', limit: 100 });
   if (!activos.length) return null;
 
@@ -1559,15 +1616,18 @@ function calificar(s: SenalesLead): Calificacion {
 }
 
 // El demo tiene que decir el valor real. Redondear $2.500.000 a "$3 millones"
-// cambia materialmente el canon y erosiona la confianza en el inventario.const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
+// cambia materialmente el canon y erosiona la confianza en el inventario.
+const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-}).format(Math.round(n)).replace(/\s+/g, '');const linkFicha = (p: any): string => String(
+}).format(Math.round(n)).replace(/\s+/g, '');
+const linkFicha = (p: any): string => String(
   p?.link_wasi
   || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
   || '',
-).trim();const buscarInmuebles: Tool = {
+).trim();
+const buscarInmuebles: Tool = {
   ...definirTool(
     'buscar_inmuebles',
     'Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui.',
@@ -1622,7 +1682,20 @@ function calificar(s: SenalesLead): Calificacion {
       .sort((a, b) => b.s - a.s)
       .slice(0, 5);
 
-    if (!puntuados.length) return { encontrados: 0, inmuebles: [] };
+    // Cero resultados es el caso que mas se maltrataba: devolvia una lista
+    // vacia sin ninguna guia, mientras el prompt prometia "ofrece registrar el
+    // interes" y esa herramienta no existia. El agente terminaba prometiendo
+    // "te aviso cuando entre algo" y eso no quedaba registrado en ningun lado.
+    if (!puntuados.length) {
+      return {
+        encontrados: 0,
+        inmuebles: [],
+        instruccion: 'Hoy no hay nada que encaje. Dilo sin rodeos, NO ofrezcas alternativas '
+          + 'que no viste aqui, y ofrecele registrar el interes para avisarle cuando entre '
+          + 'algo: para eso llama a registrar_interes. Si el cliente acepta, esa llamada es '
+          + 'obligatoria, no basta con prometerselo.',
+      };
+    }
 
     return {
       encontrados: puntuados.length,
@@ -1644,7 +1717,8 @@ function calificar(s: SenalesLead): Calificacion {
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
     };
   },
-};const enviarFicha: Tool = {
+};
+const enviarFicha: Tool = {
   ...definirTool(
     'enviar_ficha',
     'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
@@ -1659,7 +1733,55 @@ function calificar(s: SenalesLead): Calificacion {
     c.salida.globos.push(ficha);
     return { ok: true };
   },
-};const calificarLead: Tool = {
+};
+const registrarInteres: Tool = {
+  ...definirTool(
+    'registrar_interes',
+    'Guarda lo que el cliente busca para avisarle cuando entre un inmueble que encaje. Usala cuando buscar_inmuebles no encontro nada y el cliente acepta que le avisemos. Es la unica forma de que ese "te aviso" quede registrado: prometerlo en el mensaje no guarda nada.',
+    {
+      operacion: enumStr('Que busca', ['venta', 'arriendo']),
+      zona: strOpc('Barrio o zona. null si no la dio.'),
+      tipo_inmueble: strOpc('Tipo de inmueble. null si no lo dijo.'),
+      presupuesto_max: numOpc('Tope en pesos. null si no lo dio.'),
+      habitaciones_min: numOpc('Minimo de habitaciones. null si no aplica.'),
+      notas: strOpc('Algo mas que deba saber quien le avise. null si no hay nada.'),
+    },
+    { retorna: true, cierra: true },
+  ),
+  ejecutar: async (input, c: CtxTool) => {
+    const ctx = ctxDe(c.estado, 'ventas');
+    const nombre = String(c.estado.compartido.nombre || '').trim();
+
+    // Vigencia por defecto: 90 dias. Pasado eso la alerta se marca vencida y no
+    // se llama al cliente. Nadie quiere que lo contacten por algo que pidio hace
+    // ocho meses; una alerta sin caducidad se vuelve una molestia.
+    const alerta = await c.db.crear('AlertaBusqueda', {
+      contacto_id: String(c.estado.compartido.contacto_id || ''),
+      contacto_nombre: nombre,
+      contacto_telefono: c.entrada.tel.replace(/\D/g, ''),
+      operacion: input.operacion === 'arriendo' ? 'Arriendo' : 'Venta',
+      tipo_inmueble: input.tipo_inmueble ? String(input.tipo_inmueble) : '',
+      zona: input.zona ? String(input.zona) : '',
+      presupuesto_max: Number(input.presupuesto_max) || 0,
+      habitaciones_min: Number(input.habitaciones_min) || 0,
+      estado: 'Activa',
+      canal: c.entrada.canal,
+      fecha_registro: new Date().toISOString(),
+      vigente_hasta: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+      veces_notificado: 0,
+      notas: input.notas ? String(input.notas).slice(0, 500) : '',
+    });
+    if (!alerta) return { ok: false, error: 'no_se_pudo_registrar' };
+    ctx.alerta_id = alerta.id;
+
+    return {
+      ok: true,
+      instruccion: 'Confirmale que quedo registrado y que le escribimos apenas entre algo '
+        + 'que encaje. NO prometas cuando: no lo sabes.',
+    };
+  },
+};
+const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
     'Entrega el lead a un asesor humano. Llamala SOLO cuando tengas nombre, operacion (compra o arriendo) y una senal real del presupuesto del cliente. El precio de un inmueble NO es el presupuesto del cliente. El sistema escribe el mensaje de entrega: tu no lo redactas.',
@@ -1671,7 +1793,7 @@ function calificar(s: SenalesLead): Calificacion {
       presupuesto: numOpc('Cifra en pesos. null si es un inversionista flexible o no quiso darla.'),
       observaciones: strOpc('Lo que el asesor deberia saber antes de llamar. null si no hay nada.'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const ctx = ctxDe(c.estado, 'ventas');
@@ -1756,7 +1878,8 @@ function calificar(s: SenalesLead): Calificacion {
         : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
     };
   },
-};const agendarVisita: Tool = {
+};
+const agendarVisita: Tool = {
   ...definirTool(
     'agendar_visita',
     'Deja registrada la intencion de visitar un inmueble. No confirma hora: el asesor coordina. Nunca prometas un horario concreto.',
@@ -1764,6 +1887,7 @@ function calificar(s: SenalesLead): Calificacion {
       inmueble_id: str('El id que devolvio buscar_inmuebles'),
       preferencia: str('Cuando le queda bien al cliente, en sus palabras'),
     },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     await c.db.crear('Visita', {
@@ -1776,9 +1900,11 @@ function calificar(s: SenalesLead): Calificacion {
     });
     return { ok: true, nota: 'Dile que el asesor le confirma el horario. No des una hora tu.' };
   },
-};const VENTAS: Record<string, Tool> = {
+};
+const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
+  registrar_interes: registrarInteres,
   calificar_lead: calificarLead,
   agendar_visita: agendarVisita,
 };
@@ -2012,7 +2138,7 @@ async function sha256(txt: string): Promise<string> {
     // Ofrecer una que no existe manda al cliente a un link que no lo lleva a
     // donde el agente le dijo: 'documentos' y 'mis-datos' se sacaron por eso.
     { seccion: enumStr('A donde debe llegar', ['estado-cuenta', 'pagos', 'contrato', 'reparaciones', 'liquidaciones']) },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);
@@ -2028,7 +2154,7 @@ async function sha256(txt: string): Promise<string> {
     'enviar_codigo_barras',
     'Manda el codigo de barras del mes para que el cliente pague en banco o corresponsal.',
     { periodo: strOpc('Mes en formato AAAA-MM. null para el mes en curso.') },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);
@@ -2071,7 +2197,7 @@ const registrarReparacion: Tool = {
       urgencia: enumStr('Emergencia solo si hay riesgo real para personas o el inmueble', ['Emergencia', 'Alta', 'Media', 'Baja']),
       ubicacion: strOpc('En que parte del inmueble. null si no lo dijo.'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const err = exigirVerificado(c);
@@ -2178,7 +2304,7 @@ const registrarConsignacion: Tool = {
       canon_esperado: numOpc('Canon mensual que espera, en pesos. null si no lo dijo.'),
       nombre_propietario: str('Nombre de quien escribe'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const tel = c.entrada.tel.replace(/\D/g, '');
@@ -2234,6 +2360,7 @@ const registrarConsignacion: Tool = {
     'agendar_avaluo_previo',
     'Deja pedida la visita de avaluo para una consignacion que ya registraste. Sirve para saber a que precio sale el inmueble.',
     { preferencia: str('Cuando le queda bien al propietario, en sus palabras') },
+    { cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const consId = String(c.ctxAgente.consignacion_id || '');
@@ -2245,8 +2372,7 @@ const registrarConsignacion: Tool = {
     );
     return { ok: true, nota: 'Dile que el asesor le confirma el dia. No des una hora tu.' };
   },
-};
-const CONSIGNACION: Record<string, Tool> = {
+};const CONSIGNACION: Record<string, Tool> = {
   registrar_consignacion: registrarConsignacion,
   agendar_avaluo_previo: agendarAvaluoPrevio,
 };
@@ -2263,7 +2389,7 @@ const registrarSolicitudAvaluo: Tool = {
       area_m2: numOpc('Area en metros cuadrados. null si no la sabe.'),
       proposito: enumStr('Para que lo necesita', ['Venta', 'Arriendo', 'Credito', 'Sucesion', 'Otro']),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const av = await c.db.crear('Avaluo', {
@@ -2472,7 +2598,7 @@ const DIAS_DEFECTO: Record<string, number> = {
       descripcion: str('Lo que cuenta el cliente, completo y con sus palabras'),
       nombre: str('Nombre de quien radica'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const tipo = String(input.tipo);
@@ -2570,7 +2696,7 @@ const iniciarMatricula: Tool = {
       email: str('Correo electronico'),
       direccion_inmueble: str('Direccion del inmueble que va a arrendar'),
     },
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     if (c.ctxAgente.solicitud_id) {
@@ -2651,7 +2777,7 @@ const iniciarMatricula: Tool = {
     'finalizar_matricula',
     'Cierra la captura de datos y deja la solicitud lista para el estudio. Llamala cuando el cliente confirme que no falta nadie mas.',
     {},
-    { retorna: true },
+    { retorna: true, cierra: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
     const solId = String(c.ctxAgente.solicitud_id || '');
