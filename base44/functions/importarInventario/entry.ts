@@ -21,7 +21,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
-const TOKEN = Deno.env.get('IMPORT_TOKEN') || 'INVENTARIO2026';
+// Mismo token que el resto de funciones que llama la app. Antes esta usaba un
+// `IMPORT_TOKEN` propio con un valor por defecto quemado, asi que la pantalla
+// mandaba FUNCTIONS_TOKEN, la funcion comparaba contra otra cosa y devolvia
+// "No autorizado" sin decir contra que.
+//
+// Sin valor por defecto: uno quemado en un repo publico no protege nada y
+// ademas disimula que falta configurarlo. Si no esta la variable, se falla y se
+// dice cual es.
+const TOKEN = Deno.env.get('FUNCTIONS_TOKEN') || Deno.env.get('IMPORT_TOKEN') || '';
 
 // Base44 corta las funciones alrededor de los 15s, asi que la importacion va
 // por lotes: el cliente manda un lote, recibe un cursor y vuelve a llamar.
@@ -227,7 +235,20 @@ Deno.serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
 
-  if (body?.token !== TOKEN) return json({ error: 'No autorizado' }, 401);
+  // El mensaje distingue "falta configurar" de "el token no coincide": son dos
+  // problemas distintos y "No autorizado" a secas no dejaba saber cual era.
+  if (!TOKEN) {
+    return json({
+      error: 'Falta la variable FUNCTIONS_TOKEN en Base44 (Configuracion > Secretos). '
+        + 'Su valor tiene que ser el mismo que usa la app al llamar a las funciones.',
+    }, 500);
+  }
+  if (body?.token !== TOKEN) {
+    return json({
+      error: 'El token de la app no coincide con FUNCTIONS_TOKEN. Revisa que el secreto '
+        + 'en Base44 y VITE_FUNCTIONS_TOKEN tengan exactamente el mismo valor.',
+    }, 401);
+  }
 
   const apiKey = Deno.env.get('BASE44_API_KEY') || '';
   if (!apiKey) return json({ error: 'BASE44_API_KEY no configurada' }, 500);
