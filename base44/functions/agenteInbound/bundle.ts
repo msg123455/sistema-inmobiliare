@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (26 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (27 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -518,8 +518,17 @@ QUE TIENES QUE CONSEGUIR
 3. area aproximada en m2, si la conoce
 4. proposito: venta, arriendo, credito, sucesion u otro
 
-Con los datos requeridos, llama a registrar_solicitud_avaluo y da el radicado. El avaluo
-es un peritaje profesional; no digas cuanto vale el inmueble.
+Con los datos requeridos, llama a registrar_solicitud_avaluo y da el radicado.
+
+QUIEN FIRMA UN AVALUO (Ley 1673 de 2013)
+Un avaluo con validez legal solo lo puede firmar un avaluador inscrito en el RAA (Registro
+Abierto de Avaluadores). Ni tu ni un asesor pueden emitirlo. Si el cliente lo necesita para
+un credito, una sucesion, un tramite tributario o un proceso judicial, dile eso: se le
+asigna un perito inscrito.
+
+Por eso NUNCA dices cuanto vale un inmueble, ni siquiera "un aproximado" o "un rango entre".
+Una cifra tuya no es un avaluo y ademas puede leerse como uno. Si insiste, explicale la
+diferencia entre una opinion comercial y un avaluo firmado, y ofrece radicar la solicitud.
 
 TARIFA PENDIENTE
 El tarifario real aun no esta confirmado. Hasta que el conocimiento aprobado indique que
@@ -1408,6 +1417,112 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
   },
 };
 
+// ─── _core/scoring.ts ────────────────────────────────────────────
+// Calificacion de leads: rubrica unica, deterministica y testeable.
+//
+// POR QUE EXISTE: habia dos sistemas desconectados. leadClassify tenia una
+// rubrica buena pero solo corria si un humano pulsaba un boton en el CRM, y
+// calificar_lead —la que sí corre en cada conversacion— escribia
+// `temperatura: 'Caliente'` LITERAL para todo el mundo, sin mirar nada. Un
+// inversionista con 5.000 millones y alguien que dijo "estoy mirando" salian
+// identicos, y el equipo comercial no tenia como priorizar.
+//
+// La rubrica vive en codigo y no en el prompt a proposito: un criterio de
+// priorizacion tiene que ser reproducible y auditable. Si el modelo decide la
+// temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.
+interface SenalesLead {
+  // Del CRM
+  etapa_pipeline?: string;
+  presupuesto_max?: number;
+  ciudad_interes?: string;
+  habitaciones_min?: number;
+  ultima_actividad?: string;
+  visitas_realizadas?: number;
+  visita_con_interes?: boolean;
+
+  // De la conversacion. Antes se perdian: el agente las recogia con
+  // guardar_dato y no influian en la prioridad del lead.
+  operacion?: string;
+  zona?: string;
+  timing?: string;          // 'ya' | 'pronto' | 'explorando'
+  forma_pago?: string;      // 'credito_aprobado' | 'credito_tramite' | 'contado' | 'no_sabe'
+  decide_solo?: boolean;
+  otra_inmobiliaria?: boolean;
+}
+interface Calificacion {
+  score: number;             // 0-100
+  temperatura: 'Frio' | 'Tibio' | 'Caliente' | 'Urgente';
+  prioridad: 'Baja' | 'Media' | 'Alta';
+  motivos: string[];         // por que dio eso, para que sea auditable
+}
+
+const ETAPA: Record<string, number> = {
+  Lead: 10, Visita_Agendada: 35, Oferta: 55, Negociacion: 70,
+  Promesa: 85, Escritura: 95, Activo: 95, Perdido: 0,
+};
+
+/** Timing declarado por el cliente. Es el predictor mas fuerte que hay. */
+const TIMING: Record<string, number> = { ya: 20, pronto: 10, explorando: -10 };
+
+/** Capacidad de pago verificada pesa mas que el monto declarado. */
+const PAGO: Record<string, number> = {
+  credito_aprobado: 20, contado: 20, credito_tramite: 8, no_sabe: 0,
+};
+
+/**
+ * Califica un lead. Funcion pura: mismas señales, mismo resultado.
+ *
+ * `motivos` acompaña al score para que un asesor pueda ver por que un lead
+ * quedo tibio en vez de tener que confiar en el numero.
+ */
+function calificar(s: SenalesLead): Calificacion {
+  const motivos: string[] = [];
+  let score = ETAPA[String(s.etapa_pipeline || '')] ?? 10;
+
+  const suma = (n: number, motivo: string) => {
+    if (!n) return;
+    score += n;
+    motivos.push(`${n > 0 ? '+' : ''}${n} ${motivo}`);
+  };
+
+  // Datos de necesidad
+  if (s.presupuesto_max) suma(10, 'declaro presupuesto');
+  if (s.ciudad_interes)  suma(5, 'definio ciudad');
+  if (s.zona)            suma(5, 'definio zona');
+  if (s.habitaciones_min) suma(5, 'definio habitaciones');
+  if (s.operacion)       suma(5, 'definio operacion');
+
+  // Señales de intencion real
+  suma(TIMING[String(s.timing || '')] ?? 0, `timing: ${s.timing}`);
+  suma(PAGO[String(s.forma_pago || '')] ?? 0, `forma de pago: ${s.forma_pago}`);
+  if (s.decide_solo === true) suma(10, 'decide solo');
+  if (s.decide_solo === false) suma(-5, 'la decision no es solo suya');
+
+  // Competencia: no descalifica, pero baja la probabilidad de cierre.
+  if (s.otra_inmobiliaria) suma(-10, 'ya trabaja con otra inmobiliaria');
+
+  // Recorrido
+  if (s.visitas_realizadas) suma(15, 'ya visito inmuebles');
+  if (s.visita_con_interes) suma(10, 'mostro interes en una visita');
+
+  // Enfriamiento por silencio
+  if (s.ultima_actividad) {
+    const dias = Math.floor((Date.now() - new Date(s.ultima_actividad).getTime()) / 86_400_000);
+    if (dias > 10)     suma(-25, `${dias} dias sin actividad`);
+    else if (dias > 5) suma(-15, `${dias} dias sin actividad`);
+    else if (dias > 3) suma(-5, `${dias} dias sin actividad`);
+  }
+
+  score = Math.max(0, Math.min(100, score));
+
+  return {
+    score,
+    temperatura: score >= 80 ? 'Urgente' : score >= 55 ? 'Caliente' : score >= 30 ? 'Tibio' : 'Frio',
+    prioridad:   score >= 65 ? 'Alta'    : score >= 35 ? 'Media'    : 'Baja',
+    motivos,
+  };
+}
+
 // ─── _core/tools/ventas.ts ───────────────────────────────────────
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
 // el primero que coincidia". Con 30+ asesores eso concentra todos los leads en
@@ -1444,18 +1559,15 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 }
 
 // El demo tiene que decir el valor real. Redondear $2.500.000 a "$3 millones"
-// cambia materialmente el canon y erosiona la confianza en el inventario.
-const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
+// cambia materialmente el canon y erosiona la confianza en el inventario.const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-}).format(Math.round(n)).replace(/\s+/g, '');
-const linkFicha = (p: any): string => String(
+}).format(Math.round(n)).replace(/\s+/g, '');const linkFicha = (p: any): string => String(
   p?.link_wasi
   || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
   || '',
-).trim();
-const buscarInmuebles: Tool = {
+).trim();const buscarInmuebles: Tool = {
   ...definirTool(
     'buscar_inmuebles',
     'Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui.',
@@ -1577,13 +1689,33 @@ const buscarInmuebles: Tool = {
     ctx.asesor_id = asesor?.id || '';
     ctx.asesor_tel = asesor?.telefono || '';
 
+    // Temperatura y score REALES. Antes se escribia 'Caliente' literal para
+    // todo lead, asi que la columna no distinguia a nadie de nadie y el equipo
+    // no tenia como priorizar. Las señales de conversacion salen del ctx del
+    // agente, donde guardar_dato las fue dejando.
+    const cal = calificar({
+      etapa_pipeline: 'Lead',
+      presupuesto_max: Number(input.presupuesto) || undefined,
+      ciudad_interes: 'Bogota',
+      operacion: String(input.operacion),
+      zona: input.zona ? String(input.zona) : undefined,
+      timing: ctx.datos?.timing ? String(ctx.datos.timing) : undefined,
+      forma_pago: ctx.datos?.forma_pago ? String(ctx.datos.forma_pago) : undefined,
+      decide_solo: typeof ctx.datos?.decide_solo === 'boolean' ? ctx.datos.decide_solo : undefined,
+      otra_inmobiliaria: ctx.datos?.otra_inmobiliaria === true,
+      ultima_actividad: new Date().toISOString(),
+    });
+    ctx.score = cal.score;
+    ctx.temperatura = cal.temperatura;
+
     const contactoId = String(c.estado.compartido.contacto_id || '');
     if (contactoId) {
       await c.db.actualizar('Contacto', contactoId, {
         nombre,
         telefono: c.entrada.tel,
         ia_calificado: true,
-        temperatura: 'Caliente',
+        temperatura: cal.temperatura,
+        score_lead: cal.score,
         asignado_a: asesor?.nombre || '',
         broker_telefono: asesor?.telefono || '',
         estado_seguimiento: 'Asignado',
@@ -1604,7 +1736,9 @@ const buscarInmuebles: Tool = {
     }
 
     c.efectos.notificar.push(
-      `LEAD CALIFICADO — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
+      // La temperatura encabeza: es lo que le dice al asesor si atender ya o
+      // cuando pueda. Antes todos los leads llegaban iguales.
+      `LEAD ${cal.temperatura.toUpperCase()} (${cal.score}/100) — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
       `${input.operacion === 'arriendo' ? 'Arriendo' : 'Compra'} de ${input.tipo_inmueble || 'inmueble'}\n` +
       `Zona: ${input.zona || 'sin definir'}\n` +
       `Presupuesto: ${input.presupuesto ? fmtCOP(Number(input.presupuesto)) : 'flexible, confirmar en la llamada'}\n` +
@@ -2154,13 +2288,17 @@ const registrarSolicitudAvaluo: Tool = {
     );
 
     const noEstandar = ['Bodega', 'Lote', 'Finca', 'Otro'].includes(String(input.tipo_inmueble));
+    // El aviso del RAA viaja en el resultado de la tool y no solo en el prompt:
+    // es el momento en que el cliente pregunta por su avaluo, y es cuando tiene
+    // que quedar claro que quien lo firma es un perito inscrito (Ley 1673/2013).
+    const raa = 'Recuerdale que el avaluo con validez legal lo firma un avaluador inscrito en el RAA, no la inmobiliaria ni tu.';
     return {
       ok: true,
       radicado: av.id,
       tipo_no_estandar: noEstandar,
       instruccion: noEstandar
-        ? 'Este tipo de inmueble no tiene tarifa estandar. NO des un precio: escala con escalar_a_humano para que el perito cotice.'
-        : 'Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor, escala para cotizacion.',
+        ? `Este tipo de inmueble no tiene tarifa estandar. NO des un precio: escala con escalar_a_humano para que el perito cotice. ${raa}`
+        : `Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor del servicio, escala para cotizacion. ${raa}`,
     };
   },
 };const cotizarAvaluo: Tool = {

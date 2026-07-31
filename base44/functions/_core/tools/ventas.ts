@@ -1,5 +1,6 @@
 import { definirTool, str, strOpc, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe } from '../state.ts';
+import { calificar } from '../scoring.ts';
 import type { Db } from '../db.ts';
 
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
@@ -177,13 +178,33 @@ export const calificarLead: Tool = {
     ctx.asesor_id = asesor?.id || '';
     ctx.asesor_tel = asesor?.telefono || '';
 
+    // Temperatura y score REALES. Antes se escribia 'Caliente' literal para
+    // todo lead, asi que la columna no distinguia a nadie de nadie y el equipo
+    // no tenia como priorizar. Las señales de conversacion salen del ctx del
+    // agente, donde guardar_dato las fue dejando.
+    const cal = calificar({
+      etapa_pipeline: 'Lead',
+      presupuesto_max: Number(input.presupuesto) || undefined,
+      ciudad_interes: 'Bogota',
+      operacion: String(input.operacion),
+      zona: input.zona ? String(input.zona) : undefined,
+      timing: ctx.datos?.timing ? String(ctx.datos.timing) : undefined,
+      forma_pago: ctx.datos?.forma_pago ? String(ctx.datos.forma_pago) : undefined,
+      decide_solo: typeof ctx.datos?.decide_solo === 'boolean' ? ctx.datos.decide_solo : undefined,
+      otra_inmobiliaria: ctx.datos?.otra_inmobiliaria === true,
+      ultima_actividad: new Date().toISOString(),
+    });
+    ctx.score = cal.score;
+    ctx.temperatura = cal.temperatura;
+
     const contactoId = String(c.estado.compartido.contacto_id || '');
     if (contactoId) {
       await c.db.actualizar('Contacto', contactoId, {
         nombre,
         telefono: c.entrada.tel,
         ia_calificado: true,
-        temperatura: 'Caliente',
+        temperatura: cal.temperatura,
+        score_lead: cal.score,
         asignado_a: asesor?.nombre || '',
         broker_telefono: asesor?.telefono || '',
         estado_seguimiento: 'Asignado',
@@ -204,7 +225,9 @@ export const calificarLead: Tool = {
     }
 
     c.efectos.notificar.push(
-      `LEAD CALIFICADO — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
+      // La temperatura encabeza: es lo que le dice al asesor si atender ya o
+      // cuando pueda. Antes todos los leads llegaban iguales.
+      `LEAD ${cal.temperatura.toUpperCase()} (${cal.score}/100) — contactar\n\n${nombre}\nwa.me/${c.entrada.tel}\n` +
       `${input.operacion === 'arriendo' ? 'Arriendo' : 'Compra'} de ${input.tipo_inmueble || 'inmueble'}\n` +
       `Zona: ${input.zona || 'sin definir'}\n` +
       `Presupuesto: ${input.presupuesto ? fmtCOP(Number(input.presupuesto)) : 'flexible, confirmar en la llamada'}\n` +

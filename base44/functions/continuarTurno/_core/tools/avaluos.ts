@@ -36,13 +36,17 @@ export const registrarSolicitudAvaluo: Tool = {
     );
 
     const noEstandar = ['Bodega', 'Lote', 'Finca', 'Otro'].includes(String(input.tipo_inmueble));
+    // El aviso del RAA viaja en el resultado de la tool y no solo en el prompt:
+    // es el momento en que el cliente pregunta por su avaluo, y es cuando tiene
+    // que quedar claro que quien lo firma es un perito inscrito (Ley 1673/2013).
+    const raa = 'Recuerdale que el avaluo con validez legal lo firma un avaluador inscrito en el RAA, no la inmobiliaria ni tu.';
     return {
       ok: true,
       radicado: av.id,
       tipo_no_estandar: noEstandar,
       instruccion: noEstandar
-        ? 'Este tipo de inmueble no tiene tarifa estandar. NO des un precio: escala con escalar_a_humano para que el perito cotice.'
-        : 'Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor, escala para cotizacion.',
+        ? `Este tipo de inmueble no tiene tarifa estandar. NO des un precio: escala con escalar_a_humano para que el perito cotice. ${raa}`
+        : `Confirma que quedo radicado. El tarifario aun no esta aprobado: si pregunta el valor del servicio, escala para cotizacion. ${raa}`,
     };
   },
 };

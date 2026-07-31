@@ -10,6 +10,7 @@ import {
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
 import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_core/habiles.ts';
+import { calificar } from '../base44/functions/_core/scoring.ts';
 import {
   POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
 } from '../base44/functions/_core/privacidad.ts';
@@ -200,6 +201,47 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
   const vence = sumarHabiles(new Date('2026-07-31T10:00:00Z'), 15);
   assert.equal(vence.toISOString().slice(0, 10), '2026-08-25');
   assert.ok(esHabil(vence), 'un vencimiento siempre cae en dia habil');
+}
+
+// ── Scoring de leads ─────────────────────────────────────────────────────────
+// calificar_lead escribia temperatura: 'Caliente' LITERAL para todo el mundo.
+// Un inversionista listo para comprar y alguien que dijo que solo esta mirando
+// llegaban identicos al asesor, asi que la columna no priorizaba nada.
+{
+  const listo = calificar({
+    etapa_pipeline: 'Lead', presupuesto_max: 8e8, zona: 'Chico', operacion: 'venta',
+    timing: 'ya', forma_pago: 'credito_aprobado', decide_solo: true,
+  });
+  const mirando = calificar({
+    etapa_pipeline: 'Lead', operacion: 'arriendo',
+    timing: 'explorando', forma_pago: 'no_sabe', decide_solo: false,
+  });
+
+  assert.ok(listo.score > mirando.score, 'un lead listo puntua mas que uno que solo mira');
+  assert.equal(listo.temperatura, 'Urgente');
+  assert.equal(mirando.temperatura, 'Frio');
+  assert.notEqual(listo.temperatura, mirando.temperatura,
+    'dos perfiles opuestos NO pueden dar la misma temperatura');
+
+  // El score se explica solo: un asesor tiene que poder ver por que.
+  assert.ok(listo.motivos.length > 0, 'la calificacion trae motivos');
+  assert.ok(listo.motivos.some((m) => m.includes('timing')), 'el timing pesa y queda registrado');
+
+  // Trabajar con otra inmobiliaria baja la probabilidad, pero no descalifica.
+  const conCompetencia = calificar({ etapa_pipeline: 'Lead', presupuesto_max: 3e8, otra_inmobiliaria: true });
+  const sinCompetencia = calificar({ etapa_pipeline: 'Lead', presupuesto_max: 3e8 });
+  assert.ok(conCompetencia.score < sinCompetencia.score);
+  assert.ok(conCompetencia.score > 0, 'la competencia no descalifica');
+
+  // Determinista: mismas señales, mismo resultado.
+  assert.equal(calificar({ etapa_pipeline: 'Lead', presupuesto_max: 3e8 }).score, sinCompetencia.score);
+
+  // Nunca se sale del rango 0-100.
+  assert.ok(calificar({
+    etapa_pipeline: 'Escritura', presupuesto_max: 1e9, timing: 'ya', forma_pago: 'contado',
+    decide_solo: true, visitas_realizadas: 3, visita_con_interes: true,
+  }).score <= 100);
+  assert.ok(calificar({ etapa_pipeline: 'Perdido', ultima_actividad: '2020-01-01T00:00:00Z' }).score >= 0);
 }
 
 console.log('agent-core: OK');
