@@ -354,8 +354,7 @@
 // conocimiento del negocio (politicas, tarifas, zonas) va en ConocimientoRAG,
 // que se edita sin desplegar.
 
-/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */
-const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
+/** Comun a los ocho agentes. Se antepone al prompt de cada agente. */const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
 reparaciones, seguro de arrendamiento y relocation corporativo.
 Calle 81 # 8 - 95, Bogota. Telefono 485 3000. www.inmobiliarelatam.com
@@ -405,8 +404,7 @@ LO QUE NUNCA HACES
  * Prompt por agente. Corto a proposito: el motor viejo tenia 350 lineas de
  * persona y se contradecia solo. Lo que cada agente necesita saber es su rol,
  * que datos tiene que conseguir y cuando termina.
- */
-const PROMPTS = {
+ */const PROMPTS = {
   recepcion: `ROL INTERNO: recepcion. Entiendes que necesita la persona y la llevas al especialista correcto.
 
 TU UNICO TRABAJO es identificar el motivo y usar transferir_a. No resuelves el tema,
@@ -627,8 +625,7 @@ function alLunes(f: Date): Date {
   return d === 1 ? f : sumar(f, (8 - d) % 7);
 }
 
-/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */
-function festivosColombia(anio: number): Set<string> {
+/** Festivos nacionales de Colombia para un año, como 'YYYY-MM-DD'. */function festivosColombia(anio: number): Set<string> {
   const p = pascua(anio);
   const fechas: Date[] = [
     // Fijos: no se mueven.
@@ -667,8 +664,7 @@ function festivos(anio: number): Set<string> {
   return s;
 }
 
-/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */
-function esHabil(f: Date): boolean {
+/** ¿Es día hábil? Ni sábado, ni domingo, ni festivo nacional. */function esHabil(f: Date): boolean {
   const d = f.getUTCDay();
   if (d === 0 || d === 6) return false;
   return !festivos(f.getUTCFullYear()).has(clave(f));
@@ -680,8 +676,7 @@ function esHabil(f: Date): boolean {
  * El día de radicación NO cuenta: el término empieza a correr el hábil
  * siguiente. Devuelve el final del día (23:59:59 UTC) para que un vencimiento
  * "a los 15 días" incluya ese día completo.
- */
-function sumarHabiles(desde: Date, dias: number): Date {
+ */function sumarHabiles(desde: Date, dias: number): Date {
   let f = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   let restantes = Math.max(0, Math.floor(dias));
   while (restantes > 0) {
@@ -691,8 +686,7 @@ function sumarHabiles(desde: Date, dias: number): Date {
   return new Date(f.getTime() + dia - 1000);
 }
 
-/** Días hábiles entre dos fechas (negativo si ya venció). */
-function habilesHasta(desde: Date, hasta: Date): number {
+/** Días hábiles entre dos fechas (negativo si ya venció). */function habilesHasta(desde: Date, hasta: Date): number {
   const ini = new Date(Date.UTC(desde.getUTCFullYear(), desde.getUTCMonth(), desde.getUTCDate()));
   const fin = new Date(Date.UTC(hasta.getUTCFullYear(), hasta.getUTCMonth(), hasta.getUTCDate()));
   const signo = fin >= ini ? 1 : -1;
@@ -710,18 +704,14 @@ function habilesHasta(desde: Date, hasta: Date): number {
 // un asesor" es el ultimo recurso, no la salida por defecto: un lead que llega
 // a las 9 de la noche y solo recibe "manana te llamamos" es un lead que para
 // manana ya escribio a otra inmobiliaria.
-
 /** Bogota es UTC-5 todo el año: Colombia no tiene horario de verano. */
-const OFFSET_BOGOTA_H = -5;
-interface Horario {
+const OFFSET_BOGOTA_H = -5;interface Horario {
   dias: number[];   // 1 = lunes … 7 = domingo (ISO)
   desde: number;    // hora local de inicio
   hasta: number;    // hora local de fin
 }
 
-/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */
-const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
-function horarioDe(config: Record<string, any>): Horario {
+/** Lunes a viernes, 9 a 5. Confirmado por el cliente. */const HORARIO_DEFECTO: Horario = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };function horarioDe(config: Record<string, any>): Horario {
   const h = config?.horario_equipo;
   if (!h) return HORARIO_DEFECTO;
   try {
@@ -748,8 +738,7 @@ function enBogota(f: Date) {
  *
  * Un festivo cuenta como fuera de horario: el equipo no esta, aunque caiga
  * entre semana. Es el mismo calendario que usan los plazos de PQR.
- */
-function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
+ */function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
   const h = horarioDe(config);
   const { hora, diaISO, fecha } = enBogota(ahora);
   if (!h.dias.includes(diaISO)) return false;
@@ -763,8 +752,7 @@ function hayEquipo(ahora: Date, config: Record<string, any> = {}): boolean {
  * Fuera de horario NO cambia lo que el agente puede hacer —las herramientas son
  * las mismas— cambia a que se compromete. Dentro de horario puede decir "un
  * asesor te contacta ya"; fuera, tiene que resolver el solo hasta donde llegue.
- */
-function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
+ */function instruccionHorario(ahora: Date, config: Record<string, any> = {}): string {
   if (hayEquipo(ahora, config)) {
     return 'El equipo comercial esta disponible en este momento: si entregas el lead o '
       + 'escalas, un asesor lo toma hoy mismo.';
@@ -783,8 +771,7 @@ function instruccionHorario(ahora: Date, config: Record<string, any> = {}): stri
 //
 // El motor viejo cargaba el catalogo completo de 100 propiedades y todos los
 // chunks RAG aunque el mensaje fuera "quiero pagar mi arriendo". Aqui cada
-// agente pide solo lo suyo, y todo lo independiente va en paralelo.
-const MAX_RAG_CHARS = 6000;
+// agente pide solo lo suyo, y todo lo independiente va en paralelo.const MAX_RAG_CHARS = 6000;
 
 type ChunkRag = Record<string, any>;
 
@@ -801,8 +788,7 @@ function destinosDe(ch: ChunkRag): string[] {
  * Los chunks especificos entran antes que los comunes. Un chunk sin `agentes`
  * no se inyecta: el tenant anterior dejo conocimiento contaminado sin ese campo
  * y tratarlo como `todos` fue precisamente lo que mezclo las dos marcas.
- */
-function seleccionarRag(
+ */function seleccionarRag(
   chunks: ChunkRag[],
   agente: Agente,
   maxChars = MAX_RAG_CHARS,
@@ -836,11 +822,9 @@ function seleccionarRag(
   return { texto: trozos.join(''), titulos, chars: usado };
 }
 
-/** ConfigAgente.activo funciona como kill switch global. */
-function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
+/** ConfigAgente.activo funciona como kill switch global. */function agentesAutomaticosActivos(config: Record<string, any> | null | undefined): boolean {
   return config?.activo !== false;
-}
-interface Base {
+}interface Base {
   config: Record<string, any>;
   prompt: Record<string, any> | null;
   identidadMarca: string;
@@ -856,8 +840,7 @@ function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, a
 }
 
 // Lo que necesita CUALQUIER agente: la config operativa, su fila de prompt y
-// los chunks de conocimiento que le corresponden.
-async function cargarBase(db: Db, agente: Agente): Promise<Base> {
+// los chunks de conocimiento que le corresponden.async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   const [config, prompts, marcas, chunks] = await Promise.all([
     db.uno('ConfigAgente', { clave: 'general' }),
     db.list('AgentePrompt', { agente, limit: 100 }),
@@ -941,8 +924,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   avaluos: async () => ({}),
   pqr: async () => ({}),
   matricula: async () => ({}),
-};
-async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
+};async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
   try {
     return await CARGADORES[agente](db, estado, entrada);
   } catch (e) {
@@ -952,8 +934,7 @@ async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: E
 }
 
 // Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.
-function armarSystem(
+// el prompt del agente + estado inyectado + RAG filtrado.function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
@@ -1324,7 +1305,6 @@ function paramsModelo(modelo: string, effort?: string) {
 //
 // Se manda un RESUMEN, no la transcripcion: el humano necesita decidir en diez
 // segundos si llama ya, no leer treinta mensajes.
-
 const ETIQUETAS: Record<string, string> = {
   operacion: 'Operacion',
   tipo_prop: 'Tipo de inmueble',
@@ -1356,8 +1336,7 @@ const fmt = (v: unknown): string => {
 /**
  * Arma el brief. `extra` permite agregar lineas propias del motivo del
  * escalamiento sin que este modulo tenga que conocerlas.
- */
-function briefLead(estado: Estado, tel: string, canal: string, extra: string[] = []): string {
+ */function briefLead(estado: Estado, tel: string, canal: string, extra: string[] = []): string {
   const lineas: string[] = [];
 
   const nombre = String(estado.compartido.nombre || '').trim();
@@ -1410,7 +1389,6 @@ function briefLead(estado: Estado, tel: string, canal: string, extra: string[] =
 
 // ─── _core/tools/comunes.ts ──────────────────────────────────────
 // Las cuatro tools que recibe TODO agente.
-
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
 const COMPARTIDOS = new Set(['nombre', 'email', 'documento', 'direccion_inmueble']);
@@ -1589,8 +1567,7 @@ const NUMERICOS = new Set(['presupuesto', 'canon_esperado', 'valor_esperado', 'a
 //
 // La rubrica vive en codigo y no en el prompt a proposito: un criterio de
 // priorizacion tiene que ser reproducible y auditable. Si el modelo decide la
-// temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.
-interface SenalesLead {
+// temperatura, dos leads iguales pueden salir distintos y nadie sabe por que.interface SenalesLead {
   // Del CRM
   etapa_pipeline?: string;
   presupuesto_max?: number;
@@ -1608,8 +1585,7 @@ interface SenalesLead {
   forma_pago?: string;      // 'credito_aprobado' | 'credito_tramite' | 'contado' | 'no_sabe'
   decide_solo?: boolean;
   otra_inmobiliaria?: boolean;
-}
-interface Calificacion {
+}interface Calificacion {
   score: number;             // 0-100
   temperatura: 'Frio' | 'Tibio' | 'Caliente' | 'Urgente';
   prioridad: 'Baja' | 'Media' | 'Alta';
@@ -1634,8 +1610,7 @@ const PAGO: Record<string, number> = {
  *
  * `motivos` acompaña al score para que un asesor pueda ver por que un lead
  * quedo tibio en vez de tener que confiar en el numero.
- */
-function calificar(s: SenalesLead): Calificacion {
+ */function calificar(s: SenalesLead): Calificacion {
   const motivos: string[] = [];
   let score = ETAPA[String(s.etapa_pipeline || '')] ?? 10;
 
@@ -1686,8 +1661,7 @@ function calificar(s: SenalesLead): Calificacion {
 // ─── _core/tools/ventas.ts ───────────────────────────────────────
 // Reemplaza `asignarBrokerDinamico`, que leia ConfigAgente.brokers[] y "ganaba
 // el primero que coincidia". Con 30+ asesores eso concentra todos los leads en
-// una persona: ahora se balancea por leads abiertos.
-async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
+// una persona: ahora se balancea por leads abiertos.async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; operacion?: string }) {
   const activos = await db.list('Asesor', { estado: 'Activo', limit: 100 });
   if (!activos.length) return null;
 
@@ -1720,18 +1694,15 @@ async function asignarAsesor(db: Db, criterios: { zona?: string; tipo?: string; 
 }
 
 // El demo tiene que decir el valor real. Redondear $2.500.000 a "$3 millones"
-// cambia materialmente el canon y erosiona la confianza en el inventario.
-const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
+// cambia materialmente el canon y erosiona la confianza en el inventario.const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
-}).format(Math.round(n)).replace(/\s+/g, '');
-const linkFicha = (p: any): string => String(
+}).format(Math.round(n)).replace(/\s+/g, '');const linkFicha = (p: any): string => String(
   p?.link_wasi
   || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
   || '',
-).trim();
-const buscarInmuebles: Tool = {
+).trim();const buscarInmuebles: Tool = {
   ...definirTool(
     'buscar_inmuebles',
     'Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui.',
@@ -1839,8 +1810,7 @@ const buscarInmuebles: Tool = {
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
     };
   },
-};
-const enviarFicha: Tool = {
+};const enviarFicha: Tool = {
   ...definirTool(
     'enviar_ficha',
     'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
@@ -1855,8 +1825,7 @@ const enviarFicha: Tool = {
     c.salida.globos.push(ficha);
     return { ok: true };
   },
-};
-const registrarInteres: Tool = {
+};const registrarInteres: Tool = {
   ...definirTool(
     'registrar_interes',
     'Guarda lo que el cliente busca para avisarle cuando entre un inmueble que encaje. Usala cuando buscar_inmuebles no encontro nada y el cliente acepta que le avisemos. Es la unica forma de que ese "te aviso" quede registrado: prometerlo en el mensaje no guarda nada.',
@@ -1902,8 +1871,7 @@ const registrarInteres: Tool = {
         + 'que encaje. NO prometas cuando: no lo sabes.',
     };
   },
-};
-const calificarLead: Tool = {
+};const calificarLead: Tool = {
   ...definirTool(
     'calificar_lead',
     'Entrega el lead a un asesor humano. Llamala SOLO cuando tengas nombre, operacion (compra o arriendo) y una senal real del presupuesto del cliente. El precio de un inmueble NO es el presupuesto del cliente. El sistema escribe el mensaje de entrega: tu no lo redactas.',
@@ -2000,8 +1968,7 @@ const calificarLead: Tool = {
         : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
     };
   },
-};
-const agendarVisita: Tool = {
+};const agendarVisita: Tool = {
   ...definirTool(
     'agendar_visita',
     'Deja registrada la intencion de visitar un inmueble. No confirma hora: el asesor coordina. Nunca prometas un horario concreto.',
@@ -2022,8 +1989,7 @@ const agendarVisita: Tool = {
     });
     return { ok: true, nota: 'Dile que el asesor le confirma el horario. No des una hora tu.' };
   },
-};
-const VENTAS: Record<string, Tool> = {
+};const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   enviar_ficha: enviarFicha,
   registrar_interes: registrarInteres,
@@ -2691,8 +2657,7 @@ const DIAS_DEFECTO: Record<string, number> = {
 
 // ─── _core/tools/matricula.ts ────────────────────────────────────
 // Matricula de contrato — intake de datos para reemplazar el formulario F117.
-// La lista documental y su canal seguro siguen pendientes de definicion.
-const iniciarMatricula: Tool = {
+// La lista documental y su canal seguro siguen pendientes de definicion.const iniciarMatricula: Tool = {
   ...definirTool(
     'iniciar_matricula',
     'Abre una solicitud de matricula de contrato para el inmueble que el cliente va a tomar en arriendo. Es el primer paso: despues se agregan los participantes.',
@@ -2822,8 +2787,7 @@ const iniciarMatricula: Tool = {
       instruccion: 'No envies ningun enlace. Escala para que el equipo confirme la lista documental y el canal seguro.',
     };
   },
-};
-const MATRICULA: Record<string, Tool> = {
+};const MATRICULA: Record<string, Tool> = {
   iniciar_matricula: iniciarMatricula,
   agregar_participante: agregarParticipante,
   finalizar_matricula: finalizarMatricula,
