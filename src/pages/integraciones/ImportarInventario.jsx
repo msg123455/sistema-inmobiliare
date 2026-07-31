@@ -36,6 +36,12 @@ const COLUMNAS_ESPERADAS = [
   { nombre: 'Properati', requerida: false },
 ];
 
+// Corte de consignacion. Los 2703 inmuebles del export vienen marcados
+// 'Disponible', incluido uno de 2010: SIMI nunca cerro los vendidos. Importar
+// eso hace que el agente ofrezca inmuebles que ya no existen. Se sube el corte
+// cuando el inventario viejo este depurado en SIMI.
+const DESDE_ANIO = 2024;
+
 const normalizar = (s) =>
   String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s_]/g, '');
 
@@ -100,7 +106,7 @@ export default function ImportarInventario() {
     if (!filas.length) return;
     setCorriendo(true);
     setResultado(null);
-    const acum = { creados: 0, actualizados: 0, omitidos: 0, errores: [], acentos: [], zonas: {} };
+    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, errores: [], acentos: [], zonas: {} };
     let desde = 0;
 
     try {
@@ -109,11 +115,12 @@ export default function ImportarInventario() {
       while (desde !== null) {
         setProgreso({ hechas: desde, total: filas.length });
         const r = await callFunction('importarInventario', {
-          filas, proveedor: 'simi', desde, simular,
+          filas, proveedor: 'simi', desde, simular, desde_anio: DESDE_ANIO,
         });
         acum.creados += r.creados || 0;
         acum.actualizados += r.actualizados || 0;
         acum.omitidos += r.omitidos || 0;
+        acum.omitidosFecha += r.omitidos_por_fecha || 0;
         if (r.errores?.length) acum.errores.push(...r.errores);
         for (const a of r.acentos_truncados || []) if (!acum.acentos.includes(a)) acum.acentos.push(a);
         for (const [asesor, zs] of Object.entries(r.zonas_por_asesor || {})) {

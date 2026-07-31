@@ -252,14 +252,31 @@ Deno.serve(async (req) => {
     const presentes = muestra ? Object.keys(muestra) : [];
     const faltan = NECESARIOS.filter((c) => !presentes.includes(c));
 
+    // Con el catalogo vacio no hay fila que inspeccionar y la lista de campos
+    // sale vacia: eso NO significa que falten, significa que no se sabe. Decir
+    // "faltan 5" ahi seria una alarma falsa, y decir "esta todo bien" seria
+    // peor. La comprobacion de verdad la hace la sonda al importar.
+    if (!muestra) {
+      return json({
+        ok: true,
+        modo: 'diagnostico',
+        hay_inmuebles: false,
+        campos: [],
+        faltan: [],
+        indeterminado: true,
+        nota: 'El catalogo esta vacio, asi que desde aqui no se puede leer el esquema. '
+          + 'Al importar se escribe una sonda que lo comprueba de verdad y se bloquea si faltan campos.',
+      });
+    }
+
     return json({
       ok: true,
       modo: 'diagnostico',
-      hay_inmuebles: !!muestra,
+      hay_inmuebles: true,
       total_campos: presentes.length,
       campos: presentes.sort(),
       faltan,
-      dedup_posible: faltan.includes('codigo_externo') || faltan.includes('proveedor') ? false : true,
+      dedup_posible: !faltan.includes('codigo_externo') && !faltan.includes('proveedor'),
       nota: faltan.length
         ? `Faltan ${faltan.length} campos en Propiedad. Sin codigo_externo + proveedor la importacion DUPLICA todo el catalogo en cada corrida.`
         : 'Propiedad tiene todo lo necesario para importar sin duplicar.',
@@ -270,6 +287,12 @@ Deno.serve(async (req) => {
   const proveedor: string = txt(body?.proveedor) || 'simi';
   const desde = Number(body?.desde) || 0;
   const simular = body?.simular === true;
+  // Corte por anio de consignacion. El export de SIMI marca 'Disponible' los
+  // 2703 inmuebles, incluido uno de 2010: el sistema nunca cerro los que se
+  // vendieron. Importar eso hace que el agente ofrezca inmuebles que ya no
+  // existen, con el precio de hace anos, y el cliente lo descubre en la primera
+  // llamada. Se filtra por fecha hasta que el inventario viejo se depure.
+  const desdeAnio = Number(body?.desde_anio) || 0;
 
   if (!filas.length) return json({ error: 'No llegaron filas' }, 400);
 
@@ -280,30 +303,61 @@ Deno.serve(async (req) => {
   //
   // Solo en la primera tanda: revisarlo en cada lote serian 10 lecturas de mas.
   if (desde === 0 && !simular) {
+    const CLAVES = ['codigo_externo', 'proveedor'];
+    let faltan: string[] = [];
+
     const rEsq = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
-    if (rEsq.ok) {
-      const arr = await rEsq.json();
-      const muestra = Array.isArray(arr) ? arr[0] : null;
-      // Si no hay ni un inmueble no se puede inspeccionar el esquema. Se deja
-      // pasar: la primera importacion no tiene nada con que duplicar.
-      if (muestra) {
-        const faltan = ['codigo_externo', 'proveedor'].filter((c) => !(c in muestra));
-        if (faltan.length) {
-          return json({
-            error: 'esquema_incompleto',
-            faltan,
-            mensaje: `Propiedad no tiene ${faltan.join(' ni ')}. Sin esos campos la importacion `
-              + 'duplicaria todo el catalogo en cada corrida. Creelos en Base44 (Datos > Propiedad) '
-              + 'y vuelve a intentar. Para ver el esquema actual: llama con { diagnostico: true }.',
-          }, 409);
+    const arr = rEsq.ok ? await rEsq.json() : [];
+    const muestra = Array.isArray(arr) ? arr[0] : null;
+
+    if (muestra) {
+      faltan = CLAVES.filter((c) => !(c in muestra));
+    } else {
+      // Catalogo vacio: no hay fila que inspeccionar. Antes se dejaba pasar
+      // razonando que "la primera importacion no tiene nada con que duplicar",
+      // y era exactamente al reves: la primera corrida entra limpia, la SEGUNDA
+      // crea el catalogo entero de nuevo. El error no aparece cuando se comete
+      // sino la proxima vez que se actualice el inventario.
+      //
+      // Base44 descarta en silencio los campos que no existen, asi que la unica
+      // prueba concluyente es escribir una sonda y releerla: si los campos no
+      // vuelven, la tabla no los tiene.
+      const sonda = {
+        titulo: '__sonda de esquema__', tipo: 'Otro', operacion: 'Venta',
+        estado: 'No_disponible', codigo_externo: '__sonda__', proveedor: '__sonda__',
+      };
+      const rPost = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
+      });
+      if (rPost.ok) {
+        const creada = await rPost.json();
+        faltan = CLAVES.filter((c) => !creada?.[c]);
+        // Se borra siempre, incluso si la comprobacion fallo: dejar la sonda en
+        // el catalogo seria peor que no haberla escrito.
+        if (creada?.id) {
+          await fetch(`${BASE_URL}/api/entities/Propiedad/${creada.id}`, { method: 'DELETE', headers: hdrs })
+            .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
         }
       }
+    }
+
+    if (faltan.length) {
+      return json({
+        error: 'esquema_incompleto',
+        faltan,
+        mensaje: `Propiedad no tiene ${faltan.join(' ni ')}. Sin esos campos la importacion `
+          + 'duplicaria todo el catalogo en cada corrida. Creelos en Base44 (Datos > Propiedad) '
+          + 'y vuelve a intentar. Para ver el esquema actual: llama con { diagnostico: true }.',
+      }, 409);
     }
   }
 
   const lote = filas.slice(desde, desde + LOTE_MAX);
   const res = {
     creados: 0, actualizados: 0, omitidos: 0,
+    // Se cuenta aparte de `omitidos` para no confundir "lo dejamos fuera a
+    // proposito" con "la fila venia mal".
+    omitidos_por_fecha: 0,
     errores: [] as string[],
     // Barrios cuyo acento llego truncado: no se adivinan, se reportan para que
     // se corrijan en el origen. Un barrio mal escrito no lo encuentra nadie.
@@ -317,6 +371,12 @@ Deno.serve(async (req) => {
   for (const fila of lote) {
     const p = desdeFilaSimi(fila, proveedor);
     if (!p) { res.omitidos++; continue; }
+
+    if (desdeAnio) {
+      const anio = Number(String(p.fecha_consignado).slice(0, 4));
+      // Sin fecha no se descarta: la duda no puede costar un inmueble vigente.
+      if (anio && anio < desdeAnio) { res.omitidos_por_fecha++; continue; }
+    }
 
     if (acentoRoto(p.barrio) && !res.acentos_truncados.includes(p.barrio)) {
       res.acentos_truncados.push(p.barrio);
