@@ -4,7 +4,7 @@
   "properties": {
     "clave": {
       "type": "string",
-      "description": "Clave \u00fanica (usar 'general')"
+      "description": "Clave única (usar 'general')"
     },
     "nombre_agente": {
       "type": "string",
@@ -33,21 +33,21 @@
     },
     "horario_inicio": {
       "type": "string",
-      "description": "Hora inicio de atenci\u00f3n (HH:MM)",
+      "description": "Hora inicio de atención (HH:MM)",
       "default": "08:00"
     },
     "horario_fin": {
       "type": "string",
-      "description": "Hora fin de atenci\u00f3n (HH:MM)",
+      "description": "Hora fin de atención (HH:MM)",
       "default": "20:00"
     },
     "fuera_de_horario_mensaje": {
       "type": "string",
-      "description": "Mensaje autom\u00e1tico fuera del horario de atenci\u00f3n"
+      "description": "Mensaje automático fuera del horario de atención"
     },
     "escalar_triggers": {
       "type": "array",
-      "description": "Palabras clave que disparan escalaci\u00f3n a un humano",
+      "description": "Palabras clave que disparan escalación a un humano",
       "default": [],
       "items": {
         "type": "string"
@@ -55,12 +55,12 @@
     },
     "activo": {
       "type": "boolean",
-      "description": "Si el agente responde autom\u00e1ticamente",
+      "description": "Si el agente responde automáticamente",
       "default": true
     },
     "demora_respuesta_min": {
       "type": "number",
-      "description": "Minutos que espera el agente antes de responder (0 = al instante, m\u00e1s humano si es 2). Requiere el cron enviarPendientes corriendo.",
+      "description": "Minutos que espera el agente antes de responder (0 = al instante, más humano si es 2). Requiere el cron enviarPendientes corriendo.",
       "default": 0
     },
     "aprendizajes": {
@@ -69,11 +69,11 @@
     },
     "numero_notificaciones": {
       "type": "string",
-      "description": "N\u00famero (WhatsApp, con c\u00f3digo de pa\u00eds, sin +) que recibe la notificaci\u00f3n de lead calificado. Si est\u00e1 vac\u00edo, se usa el tel\u00e9fono del broker asignado. NUNCA se env\u00eda al lead."
+      "description": "Número (WhatsApp, con código de país, sin +) que recibe la notificación de lead calificado. Si está vacío, se usa el teléfono del broker asignado. NUNCA se envía al lead."
     },
     "telegram_notif_chat": {
       "type": "string",
-      "description": "Chat ID de Telegram del equipo que recibe la notificaci\u00f3n de lead calificado. Si est\u00e1 configurado, tiene prioridad sobre WhatsApp (Telegram no tiene ventana de 24h). NUNCA se env\u00eda al chat del lead."
+      "description": "Chat ID de Telegram del equipo que recibe la notificación de lead calificado. Si está configurado, tiene prioridad sobre WhatsApp (Telegram no tiene ventana de 24h). NUNCA se envía al chat del lead."
     },
     "brokers": {
       "type": "array",
@@ -88,11 +88,11 @@
           },
           "telefono": {
             "type": "string",
-            "description": "Tel\u00e9fono con c\u00f3digo de pa\u00eds, sin + (ej: 573105771576)"
+            "description": "Teléfono con código de país, sin + (ej: 573105771576)"
           },
           "genero": {
             "type": "string",
-            "description": "G\u00e9nero del broker, para el vocabulario correcto (nuestra asesora / nuestro asesor)",
+            "description": "Género del broker, para el vocabulario correcto (nuestra asesora / nuestro asesor)",
             "enum": [
               "F",
               "M"
@@ -110,7 +110,7 @@
           },
           "barrios": {
             "type": "array",
-            "description": "Barrios asignados (vac\u00edo = todos los del tipo)",
+            "description": "Barrios asignados (vacío = todos los del tipo)",
             "default": [],
             "items": {
               "type": "string"
@@ -118,6 +118,10 @@
           }
         }
       }
+    },
+    "politica_datos_url": {
+      "type": "string",
+      "description": "URL de la politica de tratamiento de datos. Si esta vacia se usa la de _core/privacidad.ts."
     }
   },
   "required": [

@@ -9,6 +9,9 @@ import {
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
+import {
+  POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
+} from '../base44/functions/_core/privacidad.ts';
 import { estadoVacio } from '../base44/functions/_core/state.ts';
 import * as telegram from '../base44/functions/_core/canales/telegram.ts';
 
@@ -147,5 +150,30 @@ const dbCliente = {
 };
 assert.equal((await decidirAgente(dbCliente, estadoVacio(), entrada('buenas tardes'), optsRouter)).agente, 'cartera');
 assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes'), optsRouter)).agente, 'recepcion');
+
+// ── Aviso de tratamiento de datos (Ley 1581/2012) ────────────────────────────
+// Es la pieza con efecto legal del flujo: si no avisa cuando debe, se guardan
+// datos personales sin aviso y sin forma de saber en que conversaciones.
+{
+  assert.equal(debeAvisar(true, null), true, 'contacto nuevo debe recibir aviso');
+  assert.equal(debeAvisar(true, {}), true, 'contacto sin autorizacion debe recibir aviso');
+  assert.equal(debeAvisar(true, { autoriza_tratamiento: true, politica_version: POLITICA_VERSION }), false,
+    'ya autorizado con la version vigente no debe recibirlo de nuevo');
+  // Una autorizacion dada sobre otro texto no cubre el nuevo.
+  assert.equal(debeAvisar(true, { autoriza_tratamiento: true, politica_version: 'vieja' }), true,
+    'version de politica distinta obliga a re-avisar');
+  assert.equal(debeAvisar(false, {}), false, 'solo se avisa en el primer turno');
+
+  const aviso = textoAviso({});
+  assert.ok(aviso.includes('bit.ly/3imaawE'), 'el aviso lleva la URL de la politica');
+  assert.ok(aviso.length < 300, 'el aviso cabe en un globo');
+  assert.ok(textoAviso({ politica_datos_url: 'https://x.co/p' }).includes('https://x.co/p'),
+    'ConfigAgente.politica_datos_url manda sobre el defecto');
+
+  const marca = marcaAutorizacion();
+  assert.equal(marca.autoriza_tratamiento, true);
+  assert.equal(marca.politica_version, POLITICA_VERSION);
+  assert.ok(!Number.isNaN(Date.parse(marca.fecha_autorizacion)), 'fecha_autorizacion es ISO valida');
+}
 
 console.log('agent-core: OK');

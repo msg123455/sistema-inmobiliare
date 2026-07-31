@@ -8,15 +8,15 @@
     },
     "email": {
       "type": "string",
-      "description": "Correo electr\u00f3nico"
+      "description": "Correo electrónico"
     },
     "telefono": {
       "type": "string",
-      "description": "N\u00famero de tel\u00e9fono / WhatsApp"
+      "description": "Número de teléfono / WhatsApp"
     },
     "tipo_interes": {
       "type": "string",
-      "description": "Tipo de operaci\u00f3n que busca",
+      "description": "Tipo de operación que busca",
       "enum": [
         "Compra",
         "Arriendo",
@@ -64,15 +64,15 @@
     },
     "presupuesto_max": {
       "type": "number",
-      "description": "Presupuesto m\u00e1ximo en COP"
+      "description": "Presupuesto máximo en COP"
     },
     "ciudad_interes": {
       "type": "string",
-      "description": "Ciudad de inter\u00e9s"
+      "description": "Ciudad de interés"
     },
     "habitaciones_min": {
       "type": "number",
-      "description": "M\u00ednimo de habitaciones requeridas"
+      "description": "Mínimo de habitaciones requeridas"
     },
     "asignado_a": {
       "type": "string",
@@ -80,7 +80,7 @@
     },
     "canal_adquisicion": {
       "type": "string",
-      "description": "Canal por el que lleg\u00f3 el contacto"
+      "description": "Canal por el que llegó el contacto"
     },
     "fecha_primer_contacto": {
       "type": "string",
@@ -89,12 +89,12 @@
     },
     "ultima_actividad": {
       "type": "string",
-      "description": "\u00daltima actividad registrada",
+      "description": "Última actividad registrada",
       "format": "date-time"
     },
     "en_conversacion": {
       "type": "boolean",
-      "description": "Est\u00e1 actualmente en conversaci\u00f3n con Valentina",
+      "description": "Está actualmente en conversación con Valentina",
       "default": false
     },
     "ia_calificado": {
@@ -112,21 +112,21 @@
     },
     "broker_telefono": {
       "type": "string",
-      "description": "Tel\u00e9fono del broker asignado"
+      "description": "Teléfono del broker asignado"
     },
     "fecha_asignacion": {
       "type": "string",
-      "description": "Cu\u00e1ndo se entreg\u00f3 el lead al broker",
+      "description": "Cuándo se entregó el lead al broker",
       "format": "date-time"
     },
     "fecha_ultimo_avance": {
       "type": "string",
-      "description": "\u00daltimo cambio de estado de seguimiento (para detectar enfriamiento)",
+      "description": "Último cambio de estado de seguimiento (para detectar enfriamiento)",
       "format": "date-time"
     },
     "recordatorios_broker": {
       "type": "number",
-      "description": "Cu\u00e1ntos recordatorios se han enviado al broker por este lead",
+      "description": "Cuántos recordatorios se han enviado al broker por este lead",
       "default": 0
     },
     "descalificado": {
@@ -140,7 +140,7 @@
     },
     "motivo_perdida": {
       "type": "string",
-      "description": "Motivo por el que se perdi\u00f3 el negocio (distinto de descalificaci\u00f3n)"
+      "description": "Motivo por el que se perdió el negocio (distinto de descalificación)"
     },
     "arrendatario_id": {
       "type": "string",
@@ -163,6 +163,20 @@
     "wasi_lead_id": {
       "type": "string",
       "description": "ID del lead en WASI.co"
+    },
+    "autoriza_tratamiento": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si se le entrego el aviso de tratamiento de datos (Ley 1581/2012). Lo escribe el codigo al enviar el aviso, no el modelo."
+    },
+    "fecha_autorizacion": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se entrego el aviso. Es la evidencia de la autorizacion."
+    },
+    "politica_version": {
+      "type": "string",
+      "description": "Version de la politica vigente al momento del aviso. Si cambia, se vuelve a avisar."
     }
   },
   "required": [

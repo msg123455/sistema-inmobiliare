@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (24 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (25 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -922,6 +922,68 @@ function paramsModelo(modelo: string, effort?: string) {
   // Se agoto el presupuesto sin `responder`. El turno se aparca con el historial
   // exacto que llevaba; continuarTurno lo retoma donde quedo.
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: { mensajes }, llamadas };
+}
+
+// ─── _core/privacidad.ts ─────────────────────────────────────────
+// Aviso de tratamiento de datos (Ley 1581/2012).
+//
+// POR QUE VIVE EN CODIGO Y NO EN EL PROMPT: el sistema crea el registro de
+// Contacto con datos personales en el primer mensaje entrante, antes de que el
+// modelo genere una palabra. Si el aviso dependiera de que el modelo se acuerde
+// de darlo, habria conversaciones donde se guardan datos sin haberlo dado — y
+// no habria forma de saber cuales. Aqui es determinista: primer turno sin
+// autorizacion registrada, el aviso se antepone a la respuesta.
+//
+// El modelo NO puede omitirlo ni reformularlo, que es justo lo que se necesita
+// de un texto con efecto legal.
+
+/** Versión del texto y de la política. Subirla fuerza a re-avisar a todos. */
+const POLITICA_VERSION = '2026-01';
+
+/** URL por defecto. Se puede sobreescribir con ConfigAgente.politica_datos_url. */
+const POLITICA_URL_DEFECTO = 'https://bit.ly/3imaawE';
+function urlPolitica(config: Record<string, any>): string {
+  return String(config?.politica_datos_url || '').trim() || POLITICA_URL_DEFECTO;
+}
+
+/**
+ * El texto del aviso. Un solo globo, corto: va antes de la respuesta real y no
+ * debe tapar la conversación.
+ *
+ * Es el modelo de aviso que ya usa su chatbot actual —consentimiento por
+ * continuación— y es la práctica común en atención por WhatsApp en Colombia.
+ * No es consentimiento expreso: si el negocio decide que lo necesita, este es
+ * el punto donde se cambia a bloqueante.
+ */
+function textoAviso(config: Record<string, any>): string {
+  const empresa = String(config?.nombre_inmobiliaria || '').trim() || 'INMOBILIARE Julio Corredor';
+  return (
+    `Antes de seguir: en ${empresa} tratamos tus datos conforme a nuestra política. ` +
+    `Si continúas, entenderemos que la aceptas. Puedes consultarla en ${urlPolitica(config)}`
+  );
+}
+
+/**
+ * ¿Hay que avisar? Solo en el primer turno de una conversación y solo si el
+ * contacto no tiene registrada una autorización de esta misma versión.
+ *
+ * Se re-avisa cuando cambia POLITICA_VERSION: una autorización dada sobre otro
+ * texto no cubre el nuevo.
+ */
+function debeAvisar(esPrimerTurno: boolean, contacto: Record<string, any> | null): boolean {
+  if (!esPrimerTurno) return false;
+  if (!contacto) return true;
+  if (!contacto.autoriza_tratamiento) return true;
+  return String(contacto.politica_version || '') !== POLITICA_VERSION;
+}
+
+/** Campos a escribir en Contacto cuando se entrega el aviso. */
+function marcaAutorizacion() {
+  return {
+    autoriza_tratamiento: true,
+    fecha_autorizacion: new Date().toISOString(),
+    politica_version: POLITICA_VERSION,
+  };
 }
 
 // ─── _core/router.ts ─────────────────────────────────────────────
@@ -2684,6 +2746,16 @@ function secretoIgual(recibido: string | null, esperado: string): boolean {
 
 
 
+
+
+
+
+
+
+
+
+
+
 const MODELO_PRIMARIO = 'claude-sonnet-5';
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
 const MODELO_ROUTER   = 'claude-haiku-4-5-20251001';
@@ -2816,6 +2888,10 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   }
   if (entrada.msgId) estado.msg_ids.push(entrada.msgId);
 
+  // Se captura ANTES de tocar el historial: despues del push de abajo ya nunca
+  // esta vacio. Decide si toca dar el aviso de tratamiento de datos.
+  const esPrimerTurno = estado.historial.length === 0;
+
   estado.historial.push({ role: 'user', content: entrada.texto, ts: new Date().toISOString() });
 
   // Si habia un turno aparcado y el cliente vuelve a escribir, el turno viejo
@@ -2918,6 +2994,22 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
 
   // ── 7. Park: encolar + guardar estado + retornar ─────────────────────────
   const globos = res.globos.filter(Boolean);
+
+  // Aviso de tratamiento de datos (Ley 1581/2012). Va PRIMERO y lo antepone el
+  // codigo, no el modelo: el Contacto con datos personales ya se creo arriba,
+  // en asegurarContacto, antes de que el modelo dijera nada. Si dependiera de
+  // que el modelo se acuerde, habria conversaciones con datos guardados sin
+  // aviso y sin forma de saber cuales.
+  if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
+    globos.unshift(textoAviso(base.config));
+    if (contacto?.id) {
+      // No se bloquea la respuesta por esto: si la escritura falla, el aviso ya
+      // salio y el error queda en el log. Peor seria no responderle al cliente.
+      db.actualizar('Contacto', contacto.id, marcaAutorizacion())
+        .catch((e: Error) => console.error('No se pudo marcar la autorizacion:', e.message));
+    }
+  }
+
   if (globos.length) {
     estado.historial.push({
       role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString(),

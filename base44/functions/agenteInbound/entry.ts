@@ -14,6 +14,7 @@ import { crearDb } from './_core/db.ts';
 import { encolar, entregarYa, notificarEquipo } from './_core/cola.ts';
 import { agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { correrAgente } from './_core/llm.ts';
+import { debeAvisar, marcaAutorizacion, textoAviso } from './_core/privacidad.ts';
 import { decidirAgente } from './_core/router.ts';
 import { cargarEstado, ctxDe, estadoVacio, guardarEstado } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
@@ -155,6 +156,10 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   }
   if (entrada.msgId) estado.msg_ids.push(entrada.msgId);
 
+  // Se captura ANTES de tocar el historial: despues del push de abajo ya nunca
+  // esta vacio. Decide si toca dar el aviso de tratamiento de datos.
+  const esPrimerTurno = estado.historial.length === 0;
+
   estado.historial.push({ role: 'user', content: entrada.texto, ts: new Date().toISOString() });
 
   // Si habia un turno aparcado y el cliente vuelve a escribir, el turno viejo
@@ -257,6 +262,22 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
 
   // ── 7. Park: encolar + guardar estado + retornar ─────────────────────────
   const globos = res.globos.filter(Boolean);
+
+  // Aviso de tratamiento de datos (Ley 1581/2012). Va PRIMERO y lo antepone el
+  // codigo, no el modelo: el Contacto con datos personales ya se creo arriba,
+  // en asegurarContacto, antes de que el modelo dijera nada. Si dependiera de
+  // que el modelo se acuerde, habria conversaciones con datos guardados sin
+  // aviso y sin forma de saber cuales.
+  if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
+    globos.unshift(textoAviso(base.config));
+    if (contacto?.id) {
+      // No se bloquea la respuesta por esto: si la escritura falla, el aviso ya
+      // salio y el error queda en el log. Peor seria no responderle al cliente.
+      db.actualizar('Contacto', contacto.id, marcaAutorizacion())
+        .catch((e: Error) => console.error('No se pudo marcar la autorizacion:', e.message));
+    }
+  }
+
   if (globos.length) {
     estado.historial.push({
       role: 'assistant', content: globos.join(' '), globos, ts: new Date().toISOString(),
