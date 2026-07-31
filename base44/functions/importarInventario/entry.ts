@@ -39,7 +39,51 @@ const LOTE_MAX = 40;
 
 // ── Normalizadores ───────────────────────────────────────────────────────────
 
-const txt = (v: unknown) => String(v ?? '').trim();
+/**
+ * Repara acentos rotos por doble codificacion (mojibake).
+ *
+ * El export de SIMI sale en UTF-8 y en algun paso se lee como Latin-1, asi que
+ * "FincaRaiz" llega como "FincaRaÃ­z" y "Pinzon" como "PinzÃ³n". Guardar eso
+ * tal cual rompe la busqueda: un cliente que pregunta por Nariño nunca matchea
+ * contra "NariÃo".
+ *
+ * Se usa una tabla y no la conversion byte a byte a proposito: parte del
+ * archivo esta MAL de forma irreparable —cuando el segundo byte cae en el rango
+ * de control de Latin-1 se pierde, y "Nariño" ya llego como "NariÃo" sin la
+ * "±"—. Una conversion global fallaria entera por esos casos; la tabla arregla
+ * lo que se puede y deja intacto lo demas.
+ */
+// Solo secuencias COMPLETAS: los dos bytes presentes. El segundo caracter de
+// las mayusculas se escribe con \u porque cae en el rango de control de
+// Latin-1 y seria invisible en el editor.
+const MOJIBAKE: Array<[RegExp, string]> = [
+  [/\u00C3\u00A1/g, 'á'], [/\u00C3\u00A9/g, 'é'], [/\u00C3\u00AD/g, 'í'],
+  [/\u00C3\u00B3/g, 'ó'], [/\u00C3\u00BA/g, 'ú'], [/\u00C3\u00B1/g, 'ñ'],
+  [/\u00C3\u00BC/g, 'ü'],
+  [/\u00C3\u0081/g, 'Á'], [/\u00C3\u0089/g, 'É'], [/\u00C3\u008D/g, 'Í'],
+  [/\u00C3\u0093/g, 'Ó'], [/\u00C3\u009A/g, 'Ú'], [/\u00C3\u0091/g, 'Ñ'],
+  [/\u00C2\u00B0/g, '°'], [/\u00C2\u00A0/g, ' '],
+];
+
+/**
+ * Una "Ã" que sobrevive a la tabla es una secuencia TRUNCADA: el segundo byte
+ * cayo en el rango de control de Latin-1 y se perdio por el camino. "Nariño"
+ * llega como "NariÃo", ya sin el byte que lo identificaba como eñe.
+ *
+ * Esos NO se adivinan. "VocÃn" pudo ser "Vocón" o "Vocán" y desde aqui no hay
+ * forma de saberlo: escribir cualquiera de los dos seria inventar el dato. Se
+ * dejan como estan y la funcion los reporta para que se corrijan en el origen.
+ */
+export const acentoRoto = (s: string) => /[\u00C2\u00C3]/.test(s);
+
+function repararAcentos(s: string): string {
+  if (!s.includes('\u00C3') && !s.includes('\u00C2')) return s;
+  let r = s;
+  for (const [re, rep] of MOJIBAKE) r = r.replace(re, rep);
+  return r;
+}
+
+const txt = (v: unknown) => repararAcentos(String(v ?? '')).trim();
 
 /**
  * Convierte los numeros como vienen de una hoja colombiana.
@@ -147,11 +191,22 @@ function desdeFilaSimi(fila: Record<string, unknown>, proveedor: string) {
     zona: txt(campo(fila, 'Zona')),
     ciudad,
     procedencia: txt(campo(fila, 'Procedencia')),
-    // Propiedad.portales es un objeto anidado, no tres campos planos.
+    // Quien capto el inmueble. Es la unica fuente que conecta el inventario con
+    // la lista de asesores: de aqui salen las zonas que cada uno maneja de
+    // verdad, que la hoja de agentes no trae.
+    asesor: txt(campo(fila, 'Asesores', 'Asesor')),
+    fecha_consignado: txt(campo(fila, 'Fecha Consignado', 'FechaConsignado')),
+    // Propiedad.portales es un objeto anidado, no campos planos. La hoja trae
+    // ocho portales, no tres: los que no existan quedan en cadena vacia.
     portales: {
-      metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado')),
-      fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz')),
+      metrocuadrado: txt(campo(fila, 'METROCUADRADO', 'Metrocuadrado', 'Metro Cuadrado')),
+      fincaraiz: txt(campo(fila, 'FINCARAIZ', 'Fincaraiz', 'Fincaraíz', 'FincaRaiz')),
       mercadolibre: txt(campo(fila, 'MERCADOLIBRE', 'Mercadolibre', 'MercadoLibre')),
+      lahaus: txt(campo(fila, 'La Haus', 'LaHaus')),
+      zonahabitat: txt(campo(fila, 'Zona Habitat', 'ZonaHabitat')),
+      ciencuadras: txt(campo(fila, 'Ciencuadras')),
+      idonde: txt(campo(fila, 'Idonde')),
+      properati: txt(campo(fila, 'Properati')),
     },
   };
 }
@@ -247,11 +302,29 @@ Deno.serve(async (req) => {
   }
 
   const lote = filas.slice(desde, desde + LOTE_MAX);
-  const res = { creados: 0, actualizados: 0, omitidos: 0, errores: [] as string[] };
+  const res = {
+    creados: 0, actualizados: 0, omitidos: 0,
+    errores: [] as string[],
+    // Barrios cuyo acento llego truncado: no se adivinan, se reportan para que
+    // se corrijan en el origen. Un barrio mal escrito no lo encuentra nadie.
+    acentos_truncados: [] as string[],
+    // Zonas por asesor, derivadas del propio inventario. Es el dato que la hoja
+    // de agentes no traia y que permite repartir leads por zona en vez de solo
+    // por carga.
+    zonas_por_asesor: {} as Record<string, string[]>,
+  };
 
   for (const fila of lote) {
     const p = desdeFilaSimi(fila, proveedor);
     if (!p) { res.omitidos++; continue; }
+
+    if (acentoRoto(p.barrio) && !res.acentos_truncados.includes(p.barrio)) {
+      res.acentos_truncados.push(p.barrio);
+    }
+    if (p.asesor && p.zona) {
+      const z = res.zonas_por_asesor[p.asesor] || (res.zonas_por_asesor[p.asesor] = []);
+      if (!z.includes(p.zona)) z.push(p.zona);
+    }
 
     if (simular) { res.creados++; continue; }
 

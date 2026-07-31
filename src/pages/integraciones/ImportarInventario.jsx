@@ -15,18 +15,25 @@ const COLUMNAS_ESPERADAS = [
   { nombre: 'Cod', requerida: true, nota: 'clave para no duplicar' },
   { nombre: 'Direccion', requerida: false },
   { nombre: 'Gestion', requerida: false, nota: 'Venta / Arriendo' },
-  { nombre: 'ValorVenta', requerida: false },
-  { nombre: 'ValorCanon', requerida: false },
+  { nombre: 'Valor Venta', requerida: false },
+  { nombre: 'Valor Canon', requerida: false },
   { nombre: 'Administracion', requerida: false },
-  { nombre: 'Tipoinmueble', requerida: false },
+  { nombre: 'Tipo Inmueble', requerida: false },
   { nombre: 'Estado', requerida: false },
   { nombre: 'Barrio', requerida: false },
   { nombre: 'Zona', requerida: false },
   { nombre: 'Ciudad', requerida: false },
   { nombre: 'Procedencia', requerida: false },
-  { nombre: 'METROCUADRADO', requerida: false },
-  { nombre: 'FINCARAIZ', requerida: false },
-  { nombre: 'MERCADOLIBRE', requerida: false },
+  { nombre: 'Asesores', requerida: false, nota: 'de aqui salen las zonas por asesor' },
+  { nombre: 'Fecha Consignado', requerida: false },
+  { nombre: 'Metro Cuadrado', requerida: false },
+  { nombre: 'FincaRaiz', requerida: false },
+  { nombre: 'MercadoLibre', requerida: false },
+  { nombre: 'La Haus', requerida: false },
+  { nombre: 'Zona Habitat', requerida: false },
+  { nombre: 'Ciencuadras', requerida: false },
+  { nombre: 'Idonde', requerida: false },
+  { nombre: 'Properati', requerida: false },
 ];
 
 const normalizar = (s) =>
@@ -93,7 +100,7 @@ export default function ImportarInventario() {
     if (!filas.length) return;
     setCorriendo(true);
     setResultado(null);
-    const acum = { creados: 0, actualizados: 0, omitidos: 0, errores: [] };
+    const acum = { creados: 0, actualizados: 0, omitidos: 0, errores: [], acentos: [], zonas: {} };
     let desde = 0;
 
     try {
@@ -108,6 +115,10 @@ export default function ImportarInventario() {
         acum.actualizados += r.actualizados || 0;
         acum.omitidos += r.omitidos || 0;
         if (r.errores?.length) acum.errores.push(...r.errores);
+        for (const a of r.acentos_truncados || []) if (!acum.acentos.includes(a)) acum.acentos.push(a);
+        for (const [asesor, zs] of Object.entries(r.zonas_por_asesor || {})) {
+          acum.zonas[asesor] = [...new Set([...(acum.zonas[asesor] || []), ...zs])];
+        }
         desde = r.siguiente;
       }
       setProgreso({ hechas: filas.length, total: filas.length });
