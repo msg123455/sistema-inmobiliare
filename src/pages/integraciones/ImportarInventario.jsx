@@ -36,11 +36,18 @@ const COLUMNAS_ESPERADAS = [
   { nombre: 'Properati', requerida: false },
 ];
 
-// Corte de consignacion. Los 2703 inmuebles del export vienen marcados
-// 'Disponible', incluido uno de 2010: SIMI nunca cerro los vendidos. Importar
-// eso hace que el agente ofrezca inmuebles que ya no existen. Se sube el corte
-// cuando el inventario viejo este depurado en SIMI.
-const DESDE_ANIO = 2024;
+// Sin corte por fecha de consignacion: entra el inventario completo.
+//
+// Se puso en 2024 asumiendo que un inmueble marcado 'Disponible' desde 2015 era
+// residuo de SIMI, de los que se vendieron y nadie cerro. La oficina lo reviso
+// y no es asi: el inventario esta al dia y esos inmuebles siguen en el mercado.
+// Son inmuebles comerciales, lotes y fincas, que rotan en anios y no en meses.
+//
+// El backend conserva el parametro `desde_anio` por si algun dia hace falta,
+// pero mientras el estado de SIMI sea confiable el filtro sobra: dejar 1250
+// inmuebles fuera del catalogo es perder casi la mitad de lo que se puede
+// ofrecer.
+const DESDE_ANIO = 0;
 
 const normalizar = (s) =>
   String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s_]/g, '');
@@ -306,13 +313,13 @@ export default function ImportarInventario() {
               </div>
             )}
 
-            <div className="grid grid-cols-4 gap-3">
+            <div className={`grid gap-3 ${DESDE_ANIO ? 'grid-cols-4' : 'grid-cols-3'}`}>
               {[
                 { n: resultado.creados, l: resultado.simulado ? 'se crearían' : 'creados' },
                 { n: resultado.actualizados, l: 'actualizados' },
-                // Se separa de "sin código" a proposito: dejarlos fuera es una
-                // decision, no un dato malo.
-                { n: resultado.omitidosFecha, l: `anteriores a ${DESDE_ANIO}` },
+                // El contador de descartados por fecha solo tiene sentido si hay
+                // corte; sin el diria "anteriores a 0".
+                ...(DESDE_ANIO ? [{ n: resultado.omitidosFecha, l: `anteriores a ${DESDE_ANIO}` }] : []),
                 { n: resultado.omitidos, l: 'omitidos (sin código)' },
               ].map((x) => (
                 <div key={x.l} className="bg-muted/40 rounded-xl p-3 text-center">
