@@ -307,6 +307,68 @@ Deno.serve(async (req) => {
     });
   }
 
+  // ── Barrido: marcar lo que ya no viene en el archivo ───────────────────────
+  //
+  // La importacion sola nunca da de baja nada: crea y actualiza lo que ESTA en
+  // el archivo, y lo que desaparece se queda marcado Disponible para siempre.
+  // Con una descarga semanal eso acumula fantasmas —inmuebles vendidos que el
+  // agente sigue ofreciendo— y el problema crece sin que nadie lo note.
+  //
+  // Va en una llamada aparte y no al final de la importacion porque necesita
+  // recorrer el catalogo entero, y mezclarlo con la escritura no cabe en los
+  // ~15s que da Base44.
+  if (body?.barrer === true) {
+    const codigos = new Set((Array.isArray(body?.codigos) ? body.codigos : []).map((c: unknown) => txt(c)));
+    const prov = txt(body?.proveedor) || 'simi';
+    if (!codigos.size) return json({ error: 'El barrido necesita la lista de codigos del archivo.' }, 400);
+
+    const LIMITE = 5000;
+    const r = await fetch(
+      `${BASE_URL}/api/entities/Propiedad?proveedor=${encodeURIComponent(prov)}&limit=${LIMITE}`,
+      { headers: hdrs },
+    );
+    if (!r.ok) return json({ error: `No se pudo leer el catalogo: ${r.status}` }, 500);
+    const enBase: any[] = await r.json();
+
+    // Si volvieron exactamente los del limite, la lista puede estar cortada y
+    // los que falten se marcarian de baja sin haberlos mirado. No se adivina.
+    if (enBase.length >= LIMITE) {
+      return json({
+        error: `El catalogo tiene ${LIMITE} inmuebles o mas y la consulta no los trae todos. `
+          + 'El barrido se detiene para no dar de baja algo que no alcanzo a revisar.',
+      }, 409);
+    }
+
+    const sobran = enBase.filter((p) => p.estado === 'Disponible' && !codigos.has(txt(p.codigo_externo)));
+
+    // Freno: un export a medias o una descarga cortada vaciaria el catalogo.
+    // Por debajo del 70% se para y se avisa, en vez de dar de baja en masa.
+    const vivos = enBase.filter((p) => p.estado === 'Disponible').length;
+    if (vivos && codigos.size < vivos * 0.7) {
+      return json({
+        error: `El archivo trae ${codigos.size} inmuebles y en la base hay ${vivos} disponibles. `
+          + 'Es una caida muy grande para una semana: parece un export incompleto. '
+          + 'El barrido se detiene. Si el archivo si es correcto, avisa para revisarlo.',
+        en_archivo: codigos.size,
+        disponibles_en_base: vivos,
+      }, 409);
+    }
+
+    const res = { dados_de_baja: 0, revisados: enBase.length, errores: [] as string[] };
+    for (const p of sobran.slice(0, LOTE_MAX)) {
+      const rp = await fetch(`${BASE_URL}/api/entities/Propiedad/${p.id}`, {
+        method: 'PUT', headers: hdrs,
+        body: JSON.stringify({ ...p, estado: 'No_disponible' }),
+      });
+      if (rp.ok) res.dados_de_baja++;
+      else res.errores.push(`${p.codigo_externo}: ${rp.status}`);
+    }
+    return json({
+      ok: true, modo: 'barrido', ...res,
+      pendientes: Math.max(0, sobran.length - LOTE_MAX),
+    });
+  }
+
   const filas: Record<string, unknown>[] = Array.isArray(body?.filas) ? body.filas : [];
   const proveedor: string = txt(body?.proveedor) || 'simi';
   const desde = Number(body?.desde) || 0;

@@ -113,7 +113,7 @@ export default function ImportarInventario() {
     if (!filas.length) return;
     setCorriendo(true);
     setResultado(null);
-    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, errores: [], acentos: [], zonas: {} };
+    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, dadosDeBaja: 0, errores: [], acentos: [], zonas: {} };
     let desde = 0;
 
     try {
@@ -136,6 +136,24 @@ export default function ImportarInventario() {
         desde = r.siguiente;
       }
       setProgreso({ hechas: filas.length, total: filas.length });
+
+      // Barrido: dar de baja lo que ya no viene en el archivo. Sin esto la
+      // descarga semanal solo suma —lo que se vendió se queda marcado
+      // Disponible— y el agente termina ofreciendo inmuebles que ya no existen.
+      //
+      // Va después de escribir y solo en importación real: en una simulación no
+      // se toca nada, y dar de baja es tocar.
+      if (!simular) {
+        const codigos = filas.map((f) => f.Cod || f.cod || f.Codigo).filter(Boolean);
+        let restantes = 1;
+        while (restantes > 0) {
+          const b = await callFunction('importarInventario', { barrer: true, proveedor: 'simi', codigos });
+          acum.dadosDeBaja += b.dados_de_baja || 0;
+          if (b.errores?.length) acum.errores.push(...b.errores);
+          restantes = b.pendientes || 0;
+        }
+      }
+
       setResultado({ ...acum, simulado: simular });
       if (!simular) {
         qc.invalidateQueries({ queryKey: ['propiedades'] });
@@ -313,7 +331,7 @@ export default function ImportarInventario() {
               </div>
             )}
 
-            <div className={`grid gap-3 ${DESDE_ANIO ? 'grid-cols-4' : 'grid-cols-3'}`}>
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
               {[
                 { n: resultado.creados, l: resultado.simulado ? 'se crearían' : 'creados' },
                 { n: resultado.actualizados, l: 'actualizados' },
@@ -321,6 +339,9 @@ export default function ImportarInventario() {
                 // corte; sin el diria "anteriores a 0".
                 ...(DESDE_ANIO ? [{ n: resultado.omitidosFecha, l: `anteriores a ${DESDE_ANIO}` }] : []),
                 { n: resultado.omitidos, l: 'omitidos (sin código)' },
+                // Solo tiene sentido en importacion real: en simulacion no se
+                // da de baja nada.
+                ...(resultado.simulado ? [] : [{ n: resultado.dadosDeBaja, l: 'dados de baja' }]),
               ].map((x) => (
                 <div key={x.l} className="bg-muted/40 rounded-xl p-3 text-center">
                   <p className="text-[22px] font-bold tracking-tight text-foreground">{x.n}</p>
