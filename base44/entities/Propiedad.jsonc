@@ -178,6 +178,10 @@
       "description": "Publicado en Facebook",
       "default": false
     },
+    "link_web": {
+      "type": "string",
+      "description": "URL de la ficha de ESTE inmueble en la pagina web de Inmobiliare. Es el link que el agente manda al cliente: tiene prioridad sobre los portales externos, porque manda el trafico a nuestro sitio y no al de un tercero."
+    },
     "link_instagram": {
       "type": "string",
       "description": "URL del post/reel de Instagram del inmueble (video). Valentina lo envia cuando piden ver el inmueble en video."

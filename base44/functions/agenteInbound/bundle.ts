@@ -2051,13 +2051,21 @@ const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
   style: 'currency', currency: 'COP', maximumFractionDigits: 0,
 }).format(Math.round(n)).replace(/\s+/g, '');
 
-// La ficha que se le manda al cliente. Se prefiere el portal donde el inmueble
-// esta publicado de verdad; `link_wasi` salio de aqui porque INMOBILIARE no usa
-// Wasi —era residuo de la app de la que se clono esto— y estaba de PRIMERO, asi
-// que bastaba que alguien llenara ese campo para mandarle al cliente el link de
-// otra plataforma.
+// La ficha que se le manda al cliente.
+//
+// `link_web` va de PRIMERO: es la pagina del inmueble en el sitio de
+// INMOBILIARE. Mandar al cliente a nuestra web y no a la de un portal es la
+// diferencia entre que el lead siga siendo nuestro o que quede navegando el
+// inventario de la competencia, que es lo que hay al lado en Metrocuadrado.
+// Los portales quedan de respaldo para los inmuebles que aun no tienen ficha
+// propia publicada.
+//
+// (`link_wasi` salio de aqui porque INMOBILIARE no usa Wasi —era residuo de la
+// app de la que se clono esto— y estaba de primero, asi que bastaba que alguien
+// llenara ese campo para mandar al cliente a otra plataforma.)
 const linkFicha = (p: any): string => String(
-  p?.portales?.metrocuadrado
+  p?.link_web
+  || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
   || p?.portales?.lahaus

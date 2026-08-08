@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Home, MapPin, Bed, Bath, Car, Globe, Edit2 } from 'lucide-react';
+import { Plus, Search, Home, MapPin, Bed, Bath, Car, Edit2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Propiedad = base44.entities.Propiedad;
@@ -35,7 +34,7 @@ function PropiedadForm({ initial = {}, onSave, onCancel }) {
     titulo: '', tipo: 'Apartamento', operacion: 'Venta', estado: 'Disponible',
     precio_venta: '', canon_arriendo: '', area_m2: '', habitaciones: '',
     banos: '', parqueaderos: '', estrato: '', ciudad: '', barrio: '', direccion: '',
-    descripcion: '', comision_pct: '3', link_instagram: '',
+    descripcion: '', comision_pct: '3', link_web: '', link_instagram: '',
     ...initial,
   });
   const [loading, setLoading] = useState(false);
@@ -110,7 +109,29 @@ function PropiedadForm({ initial = {}, onSave, onCancel }) {
       </div>
       <div><Label>Dirección</Label><Input value={form.direccion} onChange={e => set('direccion', e.target.value)} /></div>
       <div><Label>Descripción</Label><Textarea value={form.descripcion} onChange={e => set('descripcion', e.target.value)} rows={3} /></div>
-      <div><Label>Link de Instagram (video)</Label><Input value={form.link_instagram || ''} onChange={e => set('link_instagram', e.target.value)} placeholder="https://instagram.com/... (Valentina lo manda cuando el lead pide video)" /></div>
+      <div>
+        <Label>Link en la página web</Label>
+        <Input
+          value={form.link_web || ''}
+          onChange={e => set('link_web', e.target.value)}
+          placeholder="https://www.inmobiliarelatam.com/inmueble/..."
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          La ficha de este inmueble en nuestra web. Es el enlace que el agente le manda al
+          cliente; si está vacío cae a los portales externos, que llevan el tráfico afuera.
+        </p>
+      </div>
+      <div>
+        <Label>Link de Instagram (video)</Label>
+        <Input
+          value={form.link_instagram || ''}
+          onChange={e => set('link_instagram', e.target.value)}
+          placeholder="https://instagram.com/..."
+        />
+        <p className="text-[11px] text-muted-foreground mt-1">
+          El agente lo manda cuando el cliente pide ver el inmueble en video.
+        </p>
+      </div>
       <div className="flex gap-2 pt-2">
         <Button className="flex-1" onClick={handleSave} disabled={loading}>{loading ? 'Guardando...' : 'Guardar'}</Button>
         {onCancel && <Button variant="outline" onClick={onCancel}>Cancelar</Button>}
