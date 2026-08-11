@@ -37,7 +37,7 @@ export const ETIQUETAS_AGENTE: Record<Agente, string> = {
   cartera:      'pagos, canon, saldo, estado de cuenta, mora, recibo, codigo de barras, certificado',
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
-  pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
+  pqr:          'inquietud o consulta sobre el servicio, y tambien peticion, queja, reclamo, sugerencia o felicitacion',
   matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 

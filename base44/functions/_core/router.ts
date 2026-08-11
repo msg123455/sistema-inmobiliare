@@ -34,7 +34,11 @@ const FRASES: Array<[Agente, RegExp]> = [
   ['mantenimiento', /\b(se dano|se me dano|esta danado|fuga|se inunda|no hay agua|no sirve el|arreglar|reparacion|gotera|humedad|se rompio)\b/],
   ['consignacion',  /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
   ['avaluos',       /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
-  ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia)\b/],
+  // Inquietud y PQR van al MISMO agente a proposito. Son cosas distintas —una
+  // consulta no dispara termino legal y un reclamo si— pero decidir cual es
+  // requiere leer lo que el cliente cuenta, y esa frontera se razona mejor en
+  // una sola cabeza que repartida en dos agentes que se transfieren el caso.
+  ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia|inquietud|tengo una duda|una consulta|quiero preguntar)\b/],
   // "matricula" a secas es ambiguo y en inmobiliaria pesa mas el otro
   // significado: la MATRICULA INMOBILIARIA es el folio de la ORIP, el numero del
   // certificado de tradicion y libertad. Un propietario que pregunta por su

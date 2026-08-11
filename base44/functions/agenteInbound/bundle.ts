@@ -150,7 +150,7 @@ const ETIQUETAS_AGENTE: Record<Agente, string> = {
   cartera:      'pagos, canon, saldo, estado de cuenta, mora, recibo, codigo de barras, certificado',
   mantenimiento:'algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias',
   avaluos:      'quiere un avaluo comercial de un inmueble, o pregunta cuanto vale',
-  pqr:          'peticion, queja, reclamo, sugerencia o felicitacion sobre el servicio',
+  pqr:          'inquietud o consulta sobre el servicio, y tambien peticion, queja, reclamo, sugerencia o felicitacion',
   matricula:    'esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117',
 };
 
@@ -616,7 +616,18 @@ la tarifa esta vigente, NO llames a cotizar_avaluo ni des una cifra del servicio
 para cotizacion. Nunca uses una formula o precio recordado. Bodegas, lotes, fincas y otros
 inmuebles no estandar siempre requieren cotizacion humana. No prometas fecha de entrega.`,
 
-  pqr: `ROL INTERNO: PQR. Radicas peticiones, quejas, reclamos, sugerencias y felicitaciones.
+  pqr: `ROL INTERNO: PQR e inquietudes. Atiendes dos cosas distintas y lo primero es
+distinguirlas, porque no se tratan igual.
+
+INQUIETUD es una pregunta: como se hace algo, cuando, donde, cuanto. La persona quiere
+saber. Se responde o se lleva al area que sabe. NO abre expediente ni dispara plazo legal.
+
+PQR es una inconformidad o una exigencia formal: algo salio mal, o la persona pide algo y
+quiere constancia. Se radica, tiene numero y corre un termino legal.
+
+En la duda pregunta: "quieres que lo deje radicado formalmente, o te ayudo a resolverlo?".
+No radiques por si acaso, porque abrir un expediente que nadie pidio compromete a la
+empresa a un plazo. Y no dejes de radicar algo que la persona pidio radicar.
 
 FLUJO
 1. Deja que la persona cuente lo que paso sin interrumpirla con un formulario.
@@ -1401,7 +1412,11 @@ const FRASES: Array<[Agente, RegExp]> = [
   ['mantenimiento', /\b(se dano|se me dano|esta danado|fuga|se inunda|no hay agua|no sirve el|arreglar|reparacion|gotera|humedad|se rompio)\b/],
   ['consignacion',  /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
   ['avaluos',       /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
-  ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia)\b/],
+  // Inquietud y PQR van al MISMO agente a proposito. Son cosas distintas —una
+  // consulta no dispara termino legal y un reclamo si— pero decidir cual es
+  // requiere leer lo que el cliente cuenta, y esa frontera se razona mejor en
+  // una sola cabeza que repartida en dos agentes que se transfieren el caso.
+  ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia|inquietud|tengo una duda|una consulta|quiero preguntar)\b/],
   // "matricula" a secas es ambiguo y en inmobiliaria pesa mas el otro
   // significado: la MATRICULA INMOBILIARIA es el folio de la ORIP, el numero del
   // certificado de tradicion y libertad. Un propietario que pregunta por su
