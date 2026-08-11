@@ -649,7 +649,13 @@ Los documentos exactos del F117 siguen pendientes mientras no aparezcan en el co
 aprobado. No enumeres requisitos de memoria ni confirmes que una lista esta completa; el
 area de estudio debe validarla. Nunca recibas fotos o archivos por chat.
 
-No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.`,
+No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.
+
+NO CONFUNDIR CON LA MATRICULA INMOBILIARIA
+La matricula inmobiliaria es el folio de la ORIP, el numero del certificado de tradicion
+y libertad. No tiene nada que ver con esto. Si te preguntan por el folio, por el
+certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni abras una
+solicitud: transfiere a recepcion.`,
 };
 
 // ─── _core/habiles.ts ────────────────────────────────────────────
@@ -1396,7 +1402,16 @@ const FRASES: Array<[Agente, RegExp]> = [
   ['consignacion',  /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
   ['avaluos',       /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
   ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia)\b/],
-  ['matricula',     /\b(matricula|formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato)\b/],
+  // "matricula" a secas es ambiguo y en inmobiliaria pesa mas el otro
+  // significado: la MATRICULA INMOBILIARIA es el folio de la ORIP, el numero del
+  // certificado de tradicion y libertad. Un propietario que pregunta por su
+  // folio caia en el tramite de arriendo y terminaba dictando su cedula para
+  // algo que nunca pidio.
+  //
+  // Se exige que la palabra venga acompanada de algo del tramite. La palabra
+  // sola cae al nivel 2, que pregunta en vez de adivinar, que es justo lo que
+  // hay que hacer con un termino de doble sentido.
+  ['matricula',     /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/],
 ];
 
 function porFrase(texto: string): Agente | null {
@@ -3511,6 +3526,29 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
     return { ...base, texto };
   }
 
+  // Documento (PDF, Word). Sin esta rama la funcion devolvia null y
+  // agenteInbound cortaba con 200 sin responder: el cliente que manda el PDF de
+  // su cedula recibia SILENCIO TOTAL, y eso pasa justo en matricula, que es el
+  // tramite donde mas gente manda archivos.
+  //
+  // No se descarga ni se lee: se convierte en un aviso de texto para que el
+  // agente pueda decir que por chat no se reciben documentos. Descargar la
+  // cedula de alguien para "verla" es exactamente lo que no debe pasar.
+  if (m.type === 'document') {
+    const nombre = String(m.document?.filename || '').slice(0, 120);
+    const caption = String(m.document?.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  // Cualquier otro tipo (video, sticker, ubicacion, contacto). Mismo motivo: es
+  // preferible que el agente diga que no puede con eso a que el cliente hable
+  // solo.
+  if (m.type) {
+    return { ...base, texto: `[El cliente envio un ${m.type} que no puedes procesar.]` };
+  }
+
   return null;
 }
 
@@ -3598,6 +3636,22 @@ async function normalizar(
         ? (caption ? `${caption}\n[El cliente envio una foto: ${desc}]` : `[El cliente envio una foto: ${desc}]`)
         : (caption || '[El cliente envio una foto que no pude ver bien]'),
     };
+  }
+
+  // Igual que en WhatsApp: un documento sin rama devolvia null y el cliente se
+  // quedaba sin respuesta. No se descarga; solo se avisa para que el agente
+  // pueda contestar.
+  if (m.document) {
+    const nombre = String(m.document.file_name || '').slice(0, 120);
+    const caption = String(m.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  if (m.video || m.sticker || m.location || m.contact) {
+    const que = m.video ? 'video' : m.sticker ? 'sticker' : m.location ? 'ubicacion' : 'contacto';
+    return { ...base, texto: `[El cliente envio un ${que} que no puedes procesar.]` };
   }
 
   return null;

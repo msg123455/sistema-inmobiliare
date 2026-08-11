@@ -35,7 +35,16 @@ const FRASES: Array<[Agente, RegExp]> = [
   ['consignacion',  /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
   ['avaluos',       /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
   ['pqr',           /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia)\b/],
-  ['matricula',     /\b(matricula|formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato)\b/],
+  // "matricula" a secas es ambiguo y en inmobiliaria pesa mas el otro
+  // significado: la MATRICULA INMOBILIARIA es el folio de la ORIP, el numero del
+  // certificado de tradicion y libertad. Un propietario que pregunta por su
+  // folio caia en el tramite de arriendo y terminaba dictando su cedula para
+  // algo que nunca pidio.
+  //
+  // Se exige que la palabra venga acompanada de algo del tramite. La palabra
+  // sola cae al nivel 2, que pregunta en vez de adivinar, que es justo lo que
+  // hay que hacer con un termino de doble sentido.
+  ['matricula',     /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/],
 ];
 
 function porFrase(texto: string): Agente | null {

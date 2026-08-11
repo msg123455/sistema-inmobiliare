@@ -71,6 +71,29 @@ export async function normalizar(body: any, env: { waToken: string; openaiKey: s
     return { ...base, texto };
   }
 
+  // Documento (PDF, Word). Sin esta rama la funcion devolvia null y
+  // agenteInbound cortaba con 200 sin responder: el cliente que manda el PDF de
+  // su cedula recibia SILENCIO TOTAL, y eso pasa justo en matricula, que es el
+  // tramite donde mas gente manda archivos.
+  //
+  // No se descarga ni se lee: se convierte en un aviso de texto para que el
+  // agente pueda decir que por chat no se reciben documentos. Descargar la
+  // cedula de alguien para "verla" es exactamente lo que no debe pasar.
+  if (m.type === 'document') {
+    const nombre = String(m.document?.filename || '').slice(0, 120);
+    const caption = String(m.document?.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  // Cualquier otro tipo (video, sticker, ubicacion, contacto). Mismo motivo: es
+  // preferible que el agente diga que no puede con eso a que el cliente hable
+  // solo.
+  if (m.type) {
+    return { ...base, texto: `[El cliente envio un ${m.type} que no puedes procesar.]` };
+  }
+
   return null;
 }
 

@@ -538,7 +538,13 @@ Los documentos exactos del F117 siguen pendientes mientras no aparezcan en el co
 aprobado. No enumeres requisitos de memoria ni confirmes que una lista esta completa; el
 area de estudio debe validarla. Nunca recibas fotos o archivos por chat.
 
-No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.`,
+No prometas aprobacion, perfil requerido, tiempo del estudio ni reserva del inmueble.
+
+NO CONFUNDIR CON LA MATRICULA INMOBILIARIA
+La matricula inmobiliaria es el folio de la ORIP, el numero del certificado de tradicion
+y libertad. No tiene nada que ver con esto. Si te preguntan por el folio, por el
+certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni abras una
+solicitud: transfiere a recepcion.`,
 };
 
 // ─── _core/habiles.ts ────────────────────────────────────────────
@@ -1114,6 +1120,29 @@ async function normalizar(body: any, env: { waToken: string; openaiKey: string }
     return { ...base, texto };
   }
 
+  // Documento (PDF, Word). Sin esta rama la funcion devolvia null y
+  // agenteInbound cortaba con 200 sin responder: el cliente que manda el PDF de
+  // su cedula recibia SILENCIO TOTAL, y eso pasa justo en matricula, que es el
+  // tramite donde mas gente manda archivos.
+  //
+  // No se descarga ni se lee: se convierte en un aviso de texto para que el
+  // agente pueda decir que por chat no se reciben documentos. Descargar la
+  // cedula de alguien para "verla" es exactamente lo que no debe pasar.
+  if (m.type === 'document') {
+    const nombre = String(m.document?.filename || '').slice(0, 120);
+    const caption = String(m.document?.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  // Cualquier otro tipo (video, sticker, ubicacion, contacto). Mismo motivo: es
+  // preferible que el agente diga que no puede con eso a que el cliente hable
+  // solo.
+  if (m.type) {
+    return { ...base, texto: `[El cliente envio un ${m.type} que no puedes procesar.]` };
+  }
+
   return null;
 }
 
@@ -1201,6 +1230,22 @@ async function normalizar(
         ? (caption ? `${caption}\n[El cliente envio una foto: ${desc}]` : `[El cliente envio una foto: ${desc}]`)
         : (caption || '[El cliente envio una foto que no pude ver bien]'),
     };
+  }
+
+  // Igual que en WhatsApp: un documento sin rama devolvia null y el cliente se
+  // quedaba sin respuesta. No se descarga; solo se avisa para que el agente
+  // pueda contestar.
+  if (m.document) {
+    const nombre = String(m.document.file_name || '').slice(0, 120);
+    const caption = String(m.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  if (m.video || m.sticker || m.location || m.contact) {
+    const que = m.video ? 'video' : m.sticker ? 'sticker' : m.location ? 'ubicacion' : 'contacto';
+    return { ...base, texto: `[El cliente envio un ${que} que no puedes procesar.]` };
   }
 
   return null;

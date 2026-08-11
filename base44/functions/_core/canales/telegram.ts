@@ -63,6 +63,22 @@ export async function normalizar(
     };
   }
 
+  // Igual que en WhatsApp: un documento sin rama devolvia null y el cliente se
+  // quedaba sin respuesta. No se descarga; solo se avisa para que el agente
+  // pueda contestar.
+  if (m.document) {
+    const nombre = String(m.document.file_name || '').slice(0, 120);
+    const caption = String(m.caption || '').trim();
+    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ''}. NO lo has abierto ni puedes leerlo.]`;
+    return { ...base, texto: caption ? `${caption}
+${aviso}` : aviso };
+  }
+
+  if (m.video || m.sticker || m.location || m.contact) {
+    const que = m.video ? 'video' : m.sticker ? 'sticker' : m.location ? 'ubicacion' : 'contacto';
+    return { ...base, texto: `[El cliente envio un ${que} que no puedes procesar.]` };
+  }
+
   return null;
 }
 
