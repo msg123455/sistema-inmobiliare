@@ -25,6 +25,7 @@
     "base44/functions/enviarPendientes/entry.ts",
     "base44/functions/continuarTurno/entry.ts",
     "base44/functions/seedAgentes/entry.ts",
-    "base44/functions/configurarDemoVentas/entry.ts"
+    "base44/functions/configurarDemoVentas/entry.ts",
+    "base44/functions/seedConocimientoModulos/entry.ts"
   ]
 }

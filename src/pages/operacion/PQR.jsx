@@ -22,7 +22,16 @@ const PRIORIDADES = ['Baja', 'Media', 'Alta', 'Urgente'];
 
 // Dias habiles de ley para responder, por tipo. En Colombia la PQR tiene plazos
 // legales: pasarse no es un retraso operativo, es un incumplimiento.
-const DIAS_LEY = { Peticion: 15, Queja: 15, Reclamo: 15, Sugerencia: 30, Felicitacion: 30 };
+//
+// PENDIENTE DE CONFIRMAR CON LA OFICINA. Estos 15 dias son el valor por defecto
+// de la herramienta del agente (_core/tools/pqr.ts), no una politica aprobada.
+//
+// Esta pantalla usaba 30 para Sugerencia y Felicitacion mientras el agente usaba
+// 15: la MISMA PQR quedaba con un vencimiento distinto segun la radicara una
+// persona o el bot. Se unifican en 15, el mas corto, porque un plazo corto
+// escala antes: si el real resulta mayor se pierde tiempo, y si es menor se
+// incumple la ley. El error barato es el primero.
+const DIAS_LEY = { Peticion: 15, Queja: 15, Reclamo: 15, Sugerencia: 15, Felicitacion: 15 };
 
 // Palabras que convierten una PQR en asunto legal. Si aparecen, entra en
 // prioridad Urgente y hay que escalar de una.

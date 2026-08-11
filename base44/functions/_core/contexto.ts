@@ -9,7 +9,44 @@ import { type Agente, type Entrada, type Estado } from './protocol.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from './prompts.ts';
 import { instruccionHorario } from './horario.ts';
 
-export const MAX_RAG_CHARS = 6000;
+/**
+ * Tope de conocimiento inyectado por agente.
+ *
+ * Estaba en 6000 y YA se excedia sin que nadie lo notara: la capa comun suma
+ * 5174 chars y el chunk de captacion o el de servicio empujan a ~6080. El
+ * recorte es silencioso —se corta por prioridad y no avisa— asi que cartera se
+ * quedaba sin "Frases prohibidas" y ventas sin "Banco de frases".
+ *
+ * Con el conocimiento de dominio por modulo (unos 4000 chars mas) el problema
+ * se multiplicaba: lo primero en caerse habria sido justo lo que impide que el
+ * agente suene a bot.
+ *
+ * Medido con el conocimiento real ya escrito, comun mas dominio por agente:
+ *   ventas 10264 · matricula 10464 · mantenimiento 11353 · avaluos 11358
+ *   cartera 11575 · consignacion 12809 · pqr 15656
+ *
+ * pqr es el mas grande porque cubre dos flujos: la inquietud (una consulta) y
+ * el PQR formal (con termino legal). Separarlos en dos agentes seria peor: la
+ * frontera entre ambos es justo lo que hay que razonar en una sola cabeza.
+ *
+ * Simulado con la seleccion real (comun + dominio, ordenada por prioridad):
+ *   recepcion 6249 · matricula 10830 · ventas 10594 · avaluos 11710
+ *   mantenimiento 11809 · cartera 11944 · consignacion 13228 · pqr 16127
+ *
+ * pqr es el mayor porque cubre dos flujos: la inquietud (una consulta) y el PQR
+ * formal (con termino legal). Separarlos en dos agentes seria peor: la frontera
+ * entre ambos es justo lo que hay que razonar en una sola cabeza.
+ *
+ * Con 16000 el unico que se pasaba era pqr, y lo que perdia era "Frases
+ * prohibidas" —comportamiento, no dominio—, que es el peor intercambio posible:
+ * un agente que sabe el tramite y suena a robot. 18000 deja a todos completos
+ * con margen.
+ *
+ * Son unos 4500 tokens de system prompt en el peor caso. Con cache de prompt, a
+ * partir del segundo mensaje de la conversacion no cuesta casi nada, y el
+ * presupuesto de 15s lo domina la llamada al modelo, no el tamano del prompt.
+ */
+export const MAX_RAG_CHARS = 18000;
 
 type ChunkRag = Record<string, any>;
 
