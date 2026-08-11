@@ -2394,11 +2394,15 @@ const calificarLead: Tool = {
         ciudad_interes: 'Bogota',
         notas: [input.zona ? `Zona: ${input.zona}` : '', input.observaciones || ''].filter(Boolean).join(' | '),
       });
+      // `tipo` es obligatorio en el esquema y su enum ya traia el valor exacto
+      // para esto. Antes se mandaba evento/detalle, campos que no existen, sin
+      // `tipo`: la calificacion no quedaba en el historial del lead.
       await c.db.crear('HistorialLead', {
         contacto_id: contactoId,
-        evento: 'Calificado',
-        detalle: `Asignado a ${asesor?.nombre || 'sin asesor'} por el agente de ventas`,
+        tipo: 'Calificacion_IA',
+        descripcion: `Asignado a ${asesor?.nombre || 'sin asesor'} por el agente de ventas`,
         fecha: new Date().toISOString(),
+        es_automatico: true,
       });
     }
 
@@ -2442,6 +2446,8 @@ const agendarVisita: Tool = {
     await c.db.crear('Visita', {
       contacto_id: String(c.estado.compartido.contacto_id || ''),
       propiedad_id: String(input.inmueble_id || ''),
+      // Solicitada, no Programada: el agente recogio una preferencia, no acordo
+      // una hora. Quien confirma es el equipo.
       estado: 'Solicitada',
       preferencia_horario: String(input.preferencia || '').slice(0, 200),
       origen: `agente:${c.entrada.canal}`,

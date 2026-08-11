@@ -41,6 +41,7 @@
     "estado": {
       "type": "string",
       "enum": [
+        "Solicitada",
         "Programada",
         "Realizada",
         "Cancelada",
@@ -49,6 +50,19 @@
       "default": "Programada",
       "description": "Estado de la visita"
     },
+    "preferencia_horario": {
+      "type": "string",
+      "description": "Cuando le queda bien al cliente, en sus palabras ('el martes por la manana'). El agente NO puede fijar una hora: solo recoge la preferencia y el equipo confirma. Por eso fecha_hora no es obligatoria."
+    },
+    "origen": {
+      "type": "string",
+      "description": "Quien creo la visita: 'agente:whatsapp', 'agente:telegram' o 'manual'"
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando el cliente la pidio. Distinto de fecha_hora, que es cuando quedo agendada."
+    },
     "notas_resultado": {
       "type": "string",
       "description": "Resultado y observaciones tras la visita"
@@ -56,7 +70,6 @@
   },
   "required": [
     "propiedad_id",
-    "contacto_id",
-    "fecha_hora"
+    "contacto_id"
   ]
 }
