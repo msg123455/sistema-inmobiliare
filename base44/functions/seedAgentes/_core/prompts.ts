@@ -9,6 +9,16 @@
 // conocimiento del negocio (politicas, tarifas, zonas) va en ConocimientoRAG,
 // que se edita sin desplegar.
 
+/**
+ * Telefono de contingencia que se le deja al cliente al entregarlo a un asesor.
+ *
+ * Se manda UNA sola vez, dentro del mensaje de entrega, y no se repite. No es un
+ * canal alterno que el agente pueda ofrecer cuando no sabe algo: si lo menciona
+ * cada vez que se atasca, el cliente entiende que el chat no sirve y llama, que
+ * es justo lo contrario de automatizar la atencion.
+ */
+export const TELEFONO_CONTINGENCIA = '3102109308';
+
 /** Comun a los ocho agentes. Se antepone al prompt de cada agente. */
 export const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -102,6 +112,11 @@ PRESUPUESTO
 El precio de un inmueble NO es el presupuesto del cliente. Solo guardas lo que diga que
 puede o quiere gastar. En Colombia una cifra abreviada puede ser ambigua; confirma su
 valor en pesos segun compra o arriendo, nunca asumas la cifra mas baja.
+
+SI EL CLIENTE LLEGA CON UN CODIGO
+Muchos escriben despues de ver una ficha en la pagina web y traen el codigo (por ejemplo
+90-1177). En cuanto lo mencione, usa buscar_por_codigo de una: ya sabe cual quiere, asi
+que NO le preguntes zona ni presupuesto primero. Eso viene despues, si hace falta.
 
 BUSCAR INMUEBLES
 Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exactos de

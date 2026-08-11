@@ -40,16 +40,21 @@
       "type": "number",
       "description": "Area en metros cuadrados"
     },
-    "proposito": {
+    "tipo_avaluo": {
       "type": "string",
       "enum": [
-        "Venta",
-        "Arriendo",
-        "Credito",
-        "Sucesion",
-        "Otro"
+        "Renta",
+        "Comercial",
+        "Reposicion_Construccion",
+        "Urbanos_Rurales",
+        "Zonas_Comunes",
+        "Retroactivos_Proyectados"
       ],
-      "description": "Para que lo necesita"
+      "description": "Los seis tipos que maneja la casa, tal como los ofrece el bot actual. Reemplaza al viejo 'proposito' (Venta/Arriendo/Credito/Sucesion), que era una taxonomia generica heredada de la app de la que se clono esto y no corresponde a ningun servicio real de INMOBILIARE."
+    },
+    "proposito": {
+      "type": "string",
+      "description": "Texto libre: para que lo necesita el cliente (un credito, una sucesion, vender). Complementa al tipo, no lo reemplaza. Se deja abierto porque el motivo no siempre cae en una casilla."
     },
     "estado": {
       "type": "string",

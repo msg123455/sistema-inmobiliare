@@ -1,0 +1,110 @@
+{
+  // La "motherboard" de la atencion al cliente.
+  //
+  // POR QUE EXISTE: hoy los modulos de soporte (reparaciones, inquietudes,
+  // pagos, avaluos) no pueden saber quien les escribe. No es que falten
+  // esquemas —Propietario.cedula_nit, Arrendatario.numero_documento y
+  // ContratoArriendo.propietario_id/contacto_id ya existen— sino que las tres
+  // entidades estan VACIAS. Los 2703 inmuebles importados son el catalogo
+  // comercial; del lado de administracion no hay un solo dato.
+  //
+  // Y llenar esas tres con sus referencias cruzadas a partir de una hoja de
+  // calculo es un trabajo de migracion, no de captura: hay que crear el
+  // propietario, crear el arrendatario, crear el contrato y enlazarlos por id
+  // sin equivocarse. Esta entidad es DELIBERADAMENTE PLANA para que la
+  // operacion pueda cargarla desde un export igual que cargo el inventario:
+  // una fila por inmueble, la llave es el documento, cero referencias que
+  // resolver a mano.
+  //
+  // Con eso el agente deja de preguntar lo que la casa ya sabe y pasa a
+  // CONFIRMAR ("el inmueble de la Calle 81, cierto?"), que es exactamente lo
+  // que pidio la operacion.
+  //
+  // UNA FILA POR INMUEBLE, no por titular. Un titular con tres inmuebles son
+  // tres filas con el mismo numero_documento. Se modela asi porque cada
+  // inmueble tiene su propia direccion, su propio contacto y su propio
+  // historial de reparaciones; meterlos en un arreglo dentro de una fila de
+  // titular obliga a reescribir la fila entera para tocar uno solo, y en
+  // Base44 eso significa releer y reenviar todo el bloque.
+  //
+  // Es un INDICE de atencion, no la fuente de verdad del contrato. La verdad
+  // contractual vive en ContratoArriendo. Aqui vive lo minimo para identificar
+  // a quien escribe y saber de que inmueble habla.
+  "name": "TitularInmueble",
+  "type": "object",
+  "properties": {
+    "numero_documento": {
+      "type": "string",
+      "description": "NIT o cedula del titular, solo digitos y sin puntos ni guiones. Es la llave de entrada: el cliente lo dicta por chat y con eso se le identifica. Guardar sin formato para que '1.020.304' y '1020304' no sean dos personas distintas."
+    },
+    "tipo_documento": {
+      "type": "string",
+      "enum": ["CC", "NIT", "CE", "Pasaporte"],
+      "default": "CC",
+      "description": "Tipo de documento del titular"
+    },
+    "nombre_titular": {
+      "type": "string",
+      "description": "Nombre como figura en el contrato. El agente lo usa para CONFIRMAR ('confirmo a nombre de X?'), no para pedirlo."
+    },
+    "rol": {
+      "type": "string",
+      "enum": ["Arrendatario", "Propietario", "Ambos"],
+      "default": "Arrendatario",
+      "description": "Que es esta persona respecto de ESTE inmueble. La misma persona puede ser propietaria de uno y arrendataria de otro: por eso el rol va en la fila del inmueble y no en la del titular."
+    },
+    "telefono": {
+      "type": "string",
+      "description": "Telefono de contacto registrado, solo digitos con indicativo. Sirve para dos cosas: proponerlo al cliente en vez de pedirlo, y permitir que el router reconozca a un cliente conocido por su numero de WhatsApp."
+    },
+    "email": {
+      "type": "string",
+      "description": "Correo registrado. Se propone, no se pide."
+    },
+    "propiedad_id": {
+      "type": "string",
+      "description": "Id de la Propiedad, cuando el inmueble ya esta en el catalogo. Puede venir vacio: muchos inmuebles administrados no estan publicados."
+    },
+    "codigo_inmueble": {
+      "type": "string",
+      "description": "Codigo del inmueble como lo maneja la operacion (el mismo que aparece en la URL de la ficha en la pagina web). Es por donde se cruza con Propiedad.codigo_externo."
+    },
+    "direccion": {
+      "type": "string",
+      "description": "Direccion del inmueble. Es lo que el agente le lee al cliente para que confirme de cual habla cuando tiene varios."
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad del inmueble"
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Id del ContratoArriendo vigente, si lo hay. Es el puente hacia el estado de cuenta: cartera lo resuelve desde aqui, nunca desde un id que mande el cliente."
+    },
+    "estado": {
+      "type": "string",
+      "enum": ["Activo", "Terminado"],
+      "default": "Activo",
+      "description": "Si la relacion con este inmueble sigue vigente. Los terminados NO se borran: el historial de reparaciones y PQR de ese periodo sigue colgando de aqui."
+    },
+    "fecha_inicio": {
+      "type": "string",
+      "format": "date",
+      "description": "Desde cuando el titular esta asociado a este inmueble"
+    },
+    "fecha_fin": {
+      "type": "string",
+      "format": "date",
+      "description": "Hasta cuando. Vacio si sigue vigente."
+    },
+    "origen": {
+      "type": "string",
+      "description": "De donde salio la fila: importacion, manual, o el nombre del archivo que la cargo. Sirve para rastrear un dato malo hasta su fuente."
+    },
+    "notas": {
+      "type": "string",
+      "description": "Notas internas de la operacion sobre este titular o inmueble. NUNCA se le leen al cliente."
+    }
+  },
+  "required": ["numero_documento", "nombre_titular"]
+}

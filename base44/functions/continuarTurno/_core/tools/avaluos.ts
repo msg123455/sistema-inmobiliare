@@ -1,4 +1,4 @@
-import { definirTool, str, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, strOpc, numOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 
 export const registrarSolicitudAvaluo: Tool = {
   ...definirTool(
@@ -9,7 +9,8 @@ export const registrarSolicitudAvaluo: Tool = {
       direccion: str('Direccion del inmueble a avaluar'),
       tipo_inmueble: enumStr('Tipo', ['Apartamento', 'Casa', 'Local', 'Oficina', 'Bodega', 'Lote', 'Finca', 'Otro']),
       area_m2: numOpc('Area en metros cuadrados. null si no la sabe.'),
-      proposito: enumStr('Para que lo necesita', ['Venta', 'Arriendo', 'Credito', 'Sucesion', 'Otro']),
+      tipo_avaluo: enumStr('Cual de los seis tipos que maneja la casa', ['Renta', 'Comercial', 'Reposicion_Construccion', 'Urbanos_Rurales', 'Zonas_Comunes', 'Retroactivos_Proyectados']),
+      proposito: strOpc('Para que lo necesita, en las palabras del cliente. null si no lo dijo.'),
     },
     { retorna: true, cierra: true },
   ),
@@ -21,7 +22,8 @@ export const registrarSolicitudAvaluo: Tool = {
       direccion: String(input.direccion || '').slice(0, 300),
       tipo_inmueble: String(input.tipo_inmueble),
       area_m2: Number(input.area_m2) || 0,
-      proposito: String(input.proposito),
+      tipo_avaluo: String(input.tipo_avaluo),
+      proposito: String(input.proposito || ''),
       estado: 'Solicitado',
       origen: `agente:${c.entrada.canal}`,
       fecha_solicitud: new Date().toISOString(),
@@ -32,7 +34,7 @@ export const registrarSolicitudAvaluo: Tool = {
     c.efectos.notificar.push(
       `SOLICITUD DE AVALUO\n${String(input.nombre)}\nwa.me/${c.entrada.tel}\n` +
       `${String(input.tipo_inmueble)} en ${String(input.direccion)}\n` +
-      `Proposito: ${String(input.proposito)}${input.area_m2 ? ` | ${input.area_m2} m2` : ''}`,
+      `Tipo: ${String(input.tipo_avaluo).replace(/_/g, '/')}${input.proposito ? ` | ${input.proposito}` : ''}${input.area_m2 ? ` | ${input.area_m2} m2` : ''}`,
     );
 
     const noEstandar = ['Bodega', 'Lote', 'Finca', 'Otro'].includes(String(input.tipo_inmueble));

@@ -405,6 +405,16 @@ async function notificarEquipo(config: Record<string, any>, telCliente: string, 
 // conocimiento del negocio (politicas, tarifas, zonas) va en ConocimientoRAG,
 // que se edita sin desplegar.
 
+/**
+ * Telefono de contingencia que se le deja al cliente al entregarlo a un asesor.
+ *
+ * Se manda UNA sola vez, dentro del mensaje de entrega, y no se repite. No es un
+ * canal alterno que el agente pueda ofrecer cuando no sabe algo: si lo menciona
+ * cada vez que se atasca, el cliente entiende que el chat no sirve y llama, que
+ * es justo lo contrario de automatizar la atencion.
+ */
+const TELEFONO_CONTINGENCIA = '3102109308';
+
 /** Comun a los ocho agentes. Se antepone al prompt de cada agente. */
 const IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -498,6 +508,11 @@ PRESUPUESTO
 El precio de un inmueble NO es el presupuesto del cliente. Solo guardas lo que diga que
 puede o quiere gastar. En Colombia una cifra abreviada puede ser ambigua; confirma su
 valor en pesos segun compra o arriendo, nunca asumas la cifra mas baja.
+
+SI EL CLIENTE LLEGA CON UN CODIGO
+Muchos escriben despues de ver una ficha en la pagina web y traen el codigo (por ejemplo
+90-1177). En cuanto lo mencione, usa buscar_por_codigo de una: ya sabe cual quiere, asi
+que NO le preguntes zona ni presupuesto primero. Eso viene despues, si hace falta.
 
 BUSCAR INMUEBLES
 Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exactos de
@@ -2063,6 +2078,31 @@ const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
 // (`link_wasi` salio de aqui porque INMOBILIARE no usa Wasi —era residuo de la
 // app de la que se clono esto— y estaba de primero, asi que bastaba que alguien
 // llenara ese campo para mandar al cliente a otra plataforma.)
+// Como se le describe un inmueble al modelo. Compartida entre buscar_inmuebles
+// y buscar_por_codigo: si cada una arma su propio objeto, terminan afirmando
+// campos distintos del mismo inmueble segun por donde llego el cliente.
+// Los null son deliberados y el prompt se apoya en ellos: null significa "este
+// dato NO lo tienes", que es lo que impide que el modelo lo complete.
+function resumirProp(p: any, esArriendo: boolean) {
+  return {
+    id: p.id,
+    codigo: p.codigo_externo || null,
+    titulo: p.titulo,
+    tipo: p.tipo,
+    barrio: p.barrio || p.ciudad,
+    area_m2: p.area_m2 ?? null,
+    habitaciones: p.habitaciones ?? null,
+    banos: p.banos ?? null,
+    parqueaderos: p.parqueaderos ?? null,
+    precio: esArriendo
+      ? (p.canon_arriendo ? fmtCOP(p.canon_arriendo) + ' al mes' : null)
+      : (p.precio_venta ? fmtCOP(p.precio_venta) : null),
+    administracion: p.valor_administracion ?? p.administracion ?? null,
+    ficha: linkFicha(p) || null,
+    video: p.link_instagram || null,
+  };
+}
+
 const linkFicha = (p: any): string => String(
   p?.link_web
   || p?.portales?.metrocuadrado
@@ -2164,21 +2204,7 @@ const buscarInmuebles: Tool = {
 
     return {
       encontrados: puntuados.length,
-      inmuebles: puntuados.map(({ p }) => ({
-        id: p.id,
-        titulo: p.titulo,
-        tipo: p.tipo,
-        barrio: p.barrio || p.ciudad,
-        area_m2: p.area_m2 ?? null,
-        habitaciones: p.habitaciones ?? null,
-        banos: p.banos ?? null,
-        precio: esArr
-          ? (p.canon_arriendo ? fmtCOP(p.canon_arriendo) + ' al mes' : null)
-          : (p.precio_venta ? fmtCOP(p.precio_venta) : null),
-        administracion: p.valor_administracion ?? p.administracion ?? null,
-        ficha: linkFicha(p) || null,
-        video: p.link_instagram || null,
-      })),
+      inmuebles: puntuados.map(({ p }) => resumirProp(p, esArr)),
       nota: 'Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor.',
     };
   },
@@ -2245,6 +2271,57 @@ const registrarInteres: Tool = {
       ok: true,
       instruccion: 'Confirmale que quedo registrado y que le escribimos apenas entre algo '
         + 'que encaje. NO prometas cuando: no lo sabes.',
+    };
+  },
+};
+
+// El cliente que llega con un codigo (lo saco de la URL de la ficha en la web)
+// ya sabe que inmueble quiere: preguntarle zona y presupuesto para "descubrir"
+// lo que vino a pedir es exactamente el interrogatorio que la operacion quiere
+// quitar. Por eso esta herramienta NO pasa por el gate de descubrimiento.
+const buscarPorCodigo: Tool = {
+  ...definirTool(
+    'buscar_por_codigo',
+    'Busca UN inmueble por su codigo. Usala apenas el cliente mencione un codigo (por ejemplo 90-1177), que es el que aparece en la URL de la ficha en la pagina web. No le pidas zona ni presupuesto: ya sabe cual quiere.',
+    { codigo: str('El codigo tal como lo escribio el cliente') },
+    { retorna: true },
+  ),
+  ejecutar: async (input, c: CtxTool) => {
+    // Se normaliza porque el cliente lo dicta como lo ve: "90-1177", "90 1177",
+    // "cod 90-1177". Comparar el texto crudo falla en la mayoria de esos casos.
+    const norm = (v: unknown) => String(v ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const buscado = norm(input.codigo);
+    if (!buscado) return { ok: false, error: 'sin_codigo' };
+
+    const props: any[] = c.ctxAgente.catalogo || [];
+    let p = props.find((x) => norm(x.codigo_externo) === buscado);
+
+    // El catalogo en contexto son los Disponible. Si no esta ahi, puede existir
+    // pero ya no estar en el mercado: hay que decirlo, no callarlo.
+    if (!p) {
+      const fuera = await c.db.list('Propiedad', { codigo_externo: String(input.codigo).trim(), limit: 1 });
+      if (fuera?.[0]) {
+        return {
+          ok: false,
+          error: 'no_disponible',
+          instruccion: 'Ese inmueble existe pero ya no esta disponible. Dilo sin rodeos y ofrecele '
+            + 'buscar algo parecido. No des sus datos ni su precio.',
+        };
+      }
+      return {
+        ok: false,
+        error: 'no_encontrado',
+        instruccion: 'No hay ningun inmueble con ese codigo. Pidele que lo confirme (puede estar '
+          + 'incompleto) o que te cuente que busca y lo ubicas por zona. No inventes un inmueble.',
+      };
+    }
+
+    return {
+      ok: true,
+      inmueble: resumirProp(p, !p.precio_venta && !!p.canon_arriendo),
+      instruccion: 'Confirmale que si lo tienes, dile lo esencial en una frase y manda la ficha '
+        + 'con enviar_ficha en este mismo turno. Despues sigue la conversacion: pregunta si quiere '
+        + 'verlo o si busca algo asi.',
     };
   },
 };
@@ -2341,9 +2418,12 @@ const calificarLead: Tool = {
     return {
       ok: true,
       asesor: asesor?.nombre || null,
+      // El telefono de contingencia va AQUI y en ningun otro lado: es el unico
+      // momento en que el cliente pasa a manos de una persona, asi que es el
+      // unico en que tiene sentido darle por donde insistir.
       instruccion: rol
-        ? `Llama a responder con: confirmacion breve a ${primer}, que lo acompana ${rol}, y que se pondra en contacto por este medio. No prometas fecha ni hora.`
-        : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. No prometas fecha ni hora.`,
+        ? `Llama a responder con: confirmacion breve a ${primer}, que lo acompana ${rol}, y que se pondra en contacto por este medio. Cierra con el ${TELEFONO_CONTINGENCIA} por si necesita algo entre tanto. No prometas fecha ni hora.`
+        : `Llama a responder con: confirmacion breve a ${primer} y que un asesor se pondra en contacto por este medio. Cierra con el ${TELEFONO_CONTINGENCIA} por si necesita algo entre tanto. No prometas fecha ni hora.`,
     };
   },
 };
@@ -2373,6 +2453,7 @@ const agendarVisita: Tool = {
 
 const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
+  buscar_por_codigo: buscarPorCodigo,
   enviar_ficha: enviarFicha,
   registrar_interes: registrarInteres,
   calificar_lead: calificarLead,
@@ -2889,7 +2970,8 @@ const registrarSolicitudAvaluo: Tool = {
       direccion: str('Direccion del inmueble a avaluar'),
       tipo_inmueble: enumStr('Tipo', ['Apartamento', 'Casa', 'Local', 'Oficina', 'Bodega', 'Lote', 'Finca', 'Otro']),
       area_m2: numOpc('Area en metros cuadrados. null si no la sabe.'),
-      proposito: enumStr('Para que lo necesita', ['Venta', 'Arriendo', 'Credito', 'Sucesion', 'Otro']),
+      tipo_avaluo: enumStr('Cual de los seis tipos que maneja la casa', ['Renta', 'Comercial', 'Reposicion_Construccion', 'Urbanos_Rurales', 'Zonas_Comunes', 'Retroactivos_Proyectados']),
+      proposito: strOpc('Para que lo necesita, en las palabras del cliente. null si no lo dijo.'),
     },
     { retorna: true, cierra: true },
   ),
@@ -2901,7 +2983,8 @@ const registrarSolicitudAvaluo: Tool = {
       direccion: String(input.direccion || '').slice(0, 300),
       tipo_inmueble: String(input.tipo_inmueble),
       area_m2: Number(input.area_m2) || 0,
-      proposito: String(input.proposito),
+      tipo_avaluo: String(input.tipo_avaluo),
+      proposito: String(input.proposito || ''),
       estado: 'Solicitado',
       origen: `agente:${c.entrada.canal}`,
       fecha_solicitud: new Date().toISOString(),
@@ -2912,7 +2995,7 @@ const registrarSolicitudAvaluo: Tool = {
     c.efectos.notificar.push(
       `SOLICITUD DE AVALUO\n${String(input.nombre)}\nwa.me/${c.entrada.tel}\n` +
       `${String(input.tipo_inmueble)} en ${String(input.direccion)}\n` +
-      `Proposito: ${String(input.proposito)}${input.area_m2 ? ` | ${input.area_m2} m2` : ''}`,
+      `Tipo: ${String(input.tipo_avaluo).replace(/_/g, '/')}${input.proposito ? ` | ${input.proposito}` : ''}${input.area_m2 ? ` | ${input.area_m2} m2` : ''}`,
     );
 
     const noEstandar = ['Bodega', 'Lote', 'Finca', 'Otro'].includes(String(input.tipo_inmueble));

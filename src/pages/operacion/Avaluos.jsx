@@ -18,7 +18,17 @@ const Asesor = base44.entities.Asesor;
 
 const ESTADOS = ['Solicitado', 'Cotizado', 'Aceptado', 'Agendado', 'En_proceso', 'Entregado', 'Cancelado'];
 const TIPOS = ['Apartamento', 'Casa', 'Local', 'Oficina', 'Bodega', 'Lote', 'Finca', 'Otro'];
-const PROPOSITOS = ['Venta', 'Arriendo', 'Credito', 'Sucesion', 'Otro'];
+// Los seis tipos que ofrece la casa, iguales a los del bot actual y a los que
+// ofrece el agente. El viejo 'proposito' (Venta/Arriendo/Credito/Sucesion) era
+// una taxonomia generica heredada, no un servicio real de INMOBILIARE.
+const TIPOS_AVALUO = [
+  ['Renta', 'Renta'],
+  ['Comercial', 'Comercial'],
+  ['Reposicion_Construccion', 'Reposición / Construcción'],
+  ['Urbanos_Rurales', 'Urbanos / Rurales'],
+  ['Zonas_Comunes', 'Zonas comunes'],
+  ['Retroactivos_Proyectados', 'Retroactivos / Proyectados'],
+];
 
 // Tarifa base + valor por m2. Vive aqui como valor por defecto de la cotizacion;
 // el numero final siempre es editable porque el perito ajusta por complejidad.
@@ -34,7 +44,7 @@ function cotizar(areaM2) {
 function Formulario({ onSave, onCancel }) {
   const [f, setF] = useState({
     solicitante_nombre: '', solicitante_telefono: '', solicitante_email: '',
-    direccion: '', tipo_inmueble: 'Apartamento', area_m2: '', proposito: 'Venta',
+    direccion: '', tipo_inmueble: 'Apartamento', area_m2: '', tipo_avaluo: 'Renta', proposito: '',
     perito_id: '', valor_servicio: '',
   });
   const [guardando, setGuardando] = useState(false);
@@ -74,10 +84,10 @@ function Formulario({ onSave, onCancel }) {
           </Select>
         </div>
         <div><Label>Area m2</Label><Input type="number" value={f.area_m2} onChange={(e) => set('area_m2', e.target.value)} /></div>
-        <div><Label>Proposito</Label>
-          <Select value={f.proposito} onValueChange={(v) => set('proposito', v)}>
+        <div><Label>Tipo de avalúo</Label>
+          <Select value={f.tipo_avaluo} onValueChange={(v) => set('tipo_avaluo', v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{PROPOSITOS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+            <SelectContent>{TIPOS_AVALUO.map(([v, etq]) => <SelectItem key={v} value={v}>{etq}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
@@ -158,7 +168,7 @@ export default function Avaluos() {
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="font-semibold text-sm">{a.direccion || 'Sin direccion'}</span>
                       <EstadoBadge valor={a.estado} />
-                      <span className="text-[11px] text-muted-foreground">{a.proposito}</span>
+                      <span className="text-[11px] text-muted-foreground">{String(a.tipo_avaluo || a.proposito || '').replace(/_/g, ' / ')}</span>
                     </div>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
                       <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{a.tipo_inmueble}</span>
