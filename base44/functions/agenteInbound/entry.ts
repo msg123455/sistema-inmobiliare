@@ -75,7 +75,17 @@ Deno.serve(async (req) => {
       console.error('TELEGRAM_WEBHOOK_SECRET no configurado; webhook de Telegram rechazado');
       return new Response('Service Unavailable', { status: 503 });
     }
-    if (!secretoIgual(req.headers.get('x-telegram-bot-api-secret-token'), secret)) {
+    // El header es la via correcta y la que Telegram usa por defecto. El
+    // parametro `s` existe solo como respaldo para pasarelas que no reenvian
+    // headers personalizados a la funcion.
+    //
+    // Es un respaldo con costo: un secreto en la URL queda guardado en
+    // Telegram, en los logs de cualquier proxy y en los del propio backend, que
+    // es peor que un header. Se acepta porque sin el no hay canal, pero si se
+    // usa esta via el secreto hay que tratarlo como expuesto y rotarlo seguido.
+    const enHeader = req.headers.get('x-telegram-bot-api-secret-token');
+    const enUrl = url.searchParams.get('s');
+    if (!secretoIgual(enHeader, secret) && !secretoIgual(enUrl, secret)) {
       return new Response('Unauthorized', { status: 401 });
     }
   }
