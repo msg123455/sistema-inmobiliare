@@ -151,14 +151,43 @@ export function olvidarTransitorios(
 }
 
 /**
- * Tope de seguridad del estado serializado.
+ * Escalones de reduccion del estado, del mas completo al mas pobre.
  *
- * No es el limite de Base44, es un limite nuestro: si el estado crece mas de
- * esto, algo se esta guardando que no deberia. Vale mas perder el scratch de un
- * agente que perder la conversacion entera, que es lo que pasaba cuando la
- * escritura se rechazaba en silencio.
+ * POR QUE ESCALONES Y NO UN TOPE. Antes habia un solo tope de 60.000 chars, un
+ * numero inventado por nosotros: si el estado no llegaba ahi, se mandaba tal
+ * cual. Pero el limite de Base44 es MAS BAJO y no esta documentado, asi que un
+ * estado de 20k pasaba nuestro control y Base44 lo rechazaba igual:
+ *
+ *   db.crear MemoriaChat 400 Field 'estado_json' exceeds the maximum allowed size
+ *
+ * Y como el rechazo no rompia nada visible, el turno siguiente cargaba una
+ * conversacion vacia: el agente no recordaba, se re-fijaba en su agente de
+ * entrada y nada aparecia en la Bandeja. Dos sintomas, una causa.
+ *
+ * En vez de adivinar el limite, se intenta y se degrada. Cada escalon conserva
+ * lo mas caro de perder y suelta lo mas barato de recuperar. El ultimo guarda
+ * solo la identidad y los dos ultimos mensajes: feo, pero la conversacion
+ * sobrevive y la Bandeja la muestra.
  */
-const MAX_ESTADO_CHARS = 60_000;
+const ESCALONES: Array<{ nombre: string; reducir: (e: Estado) => Estado }> = [
+  { nombre: 'completo', reducir: (e) => e },
+  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
+  { nombre: 'sin ctx', reducir: (e) => ({ ...e, ctx: {} }) },
+  { nombre: 'sin ctx, 8 mensajes', reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
+  {
+    nombre: 'minimo',
+    reducir: (e) => ({
+      ...estadoVacio(),
+      agente_activo: e.agente_activo,
+      agente_historial: e.agente_historial.slice(-3),
+      identidad: e.identidad,
+      compartido: e.compartido,
+      historial: e.historial.slice(-2),
+      msg_ids: e.msg_ids.slice(-5),
+      pausada: e.pausada,
+    }),
+  },
+];
 
 export async function guardarEstado(
   db: Db,
@@ -171,18 +200,7 @@ export async function guardarEstado(
   estado.historial = estado.historial.slice(-24);
   estado.msg_ids = estado.msg_ids.slice(-20);
 
-  let json = JSON.stringify(estado);
-  if (json.length > MAX_ESTADO_CHARS) {
-    // Se sacrifica el scratch de los agentes, que es recuperable, para salvar
-    // el historial y la identidad, que no lo son. Y se grita: un estado de este
-    // tamano siempre es un bug, no un caso de uso.
-    console.error(
-      `estado_json de ${json.length} chars supera ${MAX_ESTADO_CHARS}: se descarta ctx para no perder la conversacion`,
-    );
-    json = JSON.stringify({ ...estado, ctx: {} });
-  }
-
-  return await db.guardar('MemoriaChat', memoriaId, {
+  const fila = (json: string) => ({
     clave: claveDe(canal, tel),
     telefono: String(tel).replace(/\D/g, ''),
     canal: canal === 'telegram' ? 'Telegram' : 'WhatsApp',
@@ -197,4 +215,27 @@ export async function guardarEstado(
     ultima_respuesta: (extra.ultima_respuesta || '').slice(0, 1000),
     fecha_ultimo_mensaje: new Date().toISOString(),
   });
+
+  for (const [i, escalon] of ESCALONES.entries()) {
+    const json = JSON.stringify(escalon.reducir(estado));
+    const id = await db.guardar('MemoriaChat', memoriaId, fila(json));
+    if (id) {
+      // Solo se avisa cuando hubo que degradar. Que el primer intento pase es lo
+      // normal y no merece una linea de log por mensaje.
+      if (i > 0) {
+        console.error(
+          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): ` +
+          `Base44 rechazo los ${i} intento(s) anteriores por tamano`,
+        );
+      }
+      return id;
+    }
+    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
+  }
+
+  // Los cuatro escalones fallaron. Ya no es tamano: es otra cosa (permisos, la
+  // entidad, Base44 caido). Se grita fuerte porque a partir de aqui el agente
+  // responde sin memoria y sin dejar rastro, que es el peor modo de fallo.
+  console.error('NO SE PUDO GUARDAR MemoriaChat en ningun escalon — la conversacion se pierde');
+  return null;
 }

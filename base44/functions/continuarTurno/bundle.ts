@@ -79,6 +79,7 @@ function crearDb(apiKey, baseUrl) {
   }
   async function guardar(entidad, id, datos) {
     const res = id ? await actualizar(entidad, id, datos) : await crear(entidad, datos);
+    if (!res) return null;
     return res?.id ?? id ?? null;
   }
   return { base, list, uno, crear, actualizar, guardar, fallos };
@@ -952,18 +953,29 @@ function olvidarTransitorios(estado, agente, claves) {
   if (!scratch) return;
   for (const k of claves) delete scratch[k];
 }
-var MAX_ESTADO_CHARS = 6e4;
+var ESCALONES = [
+  { nombre: "completo", reducir: (e) => e },
+  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
+  { nombre: "sin ctx", reducir: (e) => ({ ...e, ctx: {} }) },
+  { nombre: "sin ctx, 8 mensajes", reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
+  {
+    nombre: "minimo",
+    reducir: (e) => ({
+      ...estadoVacio(),
+      agente_activo: e.agente_activo,
+      agente_historial: e.agente_historial.slice(-3),
+      identidad: e.identidad,
+      compartido: e.compartido,
+      historial: e.historial.slice(-2),
+      msg_ids: e.msg_ids.slice(-5),
+      pausada: e.pausada
+    })
+  }
+];
 async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   estado.historial = estado.historial.slice(-24);
   estado.msg_ids = estado.msg_ids.slice(-20);
-  let json = JSON.stringify(estado);
-  if (json.length > MAX_ESTADO_CHARS) {
-    console.error(
-      `estado_json de ${json.length} chars supera ${MAX_ESTADO_CHARS}: se descarta ctx para no perder la conversacion`
-    );
-    json = JSON.stringify({ ...estado, ctx: {} });
-  }
-  return await db.guardar("MemoriaChat", memoriaId, {
+  const fila = (json) => ({
     clave: claveDe(canal, tel),
     telefono: String(tel).replace(/\D/g, ""),
     canal: canal === "telegram" ? "Telegram" : "WhatsApp",
@@ -978,6 +990,21 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
     ultima_respuesta: (extra.ultima_respuesta || "").slice(0, 1e3),
     fecha_ultimo_mensaje: (/* @__PURE__ */ new Date()).toISOString()
   });
+  for (const [i, escalon] of ESCALONES.entries()) {
+    const json = JSON.stringify(escalon.reducir(estado));
+    const id = await db.guardar("MemoriaChat", memoriaId, fila(json));
+    if (id) {
+      if (i > 0) {
+        console.error(
+          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): Base44 rechazo los ${i} intento(s) anteriores por tamano`
+        );
+      }
+      return id;
+    }
+    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
+  }
+  console.error("NO SE PUDO GUARDAR MemoriaChat en ningun escalon — la conversacion se pierde");
+  return null;
 }
 
 // base44/functions/continuarTurno/_core/tools/asistidos.ts

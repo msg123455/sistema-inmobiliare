@@ -79,6 +79,7 @@ function crearDb(apiKey, baseUrl) {
   }
   async function guardar(entidad, id, datos) {
     const res = id ? await actualizar(entidad, id, datos) : await crear(entidad, datos);
+    if (!res) return null;
     return res?.id ?? id ?? null;
   }
   return { base, list, uno, crear, actualizar, guardar, fallos };

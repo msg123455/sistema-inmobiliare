@@ -102,9 +102,21 @@ export function crearDb(apiKey: string, baseUrl?: string) {
     return await r.json();
   }
 
-  // Crea o actualiza segun venga id. Devuelve el id resultante.
+  /**
+   * Crea o actualiza segun venga id. Devuelve el id, o null SI LA ESCRITURA
+   * FALLO.
+   *
+   * Antes terminaba en `?? id`, asi que al actualizar una fila existente
+   * devolvia el id aunque Base44 hubiera rechazado el PUT. Quien llamaba veia un
+   * id y daba por hecho que habia guardado: agenteInbound escribia
+   * "[t+7284ms] guardado" en la linea siguiente a un `db.actualizar 400`, y
+   * ?diag=1 reportaba guardado: true con el estado perdido.
+   *
+   * Costo dias de diagnostico. Un guardado que miente es peor que uno que falla.
+   */
   async function guardar(entidad: string, id: string | null, datos: Record<string, unknown>): Promise<string | null> {
     const res = id ? await actualizar(entidad, id, datos) : await crear(entidad, datos);
+    if (!res) return null;
     return (res as any)?.id ?? id ?? null;
   }
 

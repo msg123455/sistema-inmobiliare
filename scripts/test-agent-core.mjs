@@ -604,8 +604,17 @@ const LIMITE_BACKEND = 80_000;
   );
 
   assert.ok(id, 'se escribio igual: perder el scratch es aceptable, perder la conversacion no');
-  assert.deepEqual(db.fallos, [], 'la escritura no fue rechazada por tamano');
-  assert.match(lineas.join('\n'), /supera 60000/, 'un estado de este tamano siempre es un bug y hay que gritarlo');
+  // El backend SI rechaza el primer intento, y esta bien que quede registrado:
+  // el tope viejo era un numero nuestro (60k) mas alto que el limite real de
+  // Base44, asi que un estado de 20k pasaba nuestro control y lo rechazaban
+  // igual. Ahora no se adivina el limite: se intenta y se degrada.
+  assert.equal(db.fallos.length, 1, 'el primer intento lo rechaza el backend, y queda anotado');
+  assert.match(
+    lineas.join('\n'),
+    /escalon "completo" rechazado/,
+    'hay que decir que se degrado, no degradar en silencio',
+  );
+  assert.match(lineas.join('\n'), /escalon "sin ctx"/, 'y en que escalon quedo');
 
   const escrito = db.ultima();
   assert.ok(escrito.estadoChars < 60_000, `estado_json quedo en ${escrito.estadoChars} chars`);
@@ -774,15 +783,29 @@ const LIMITE_BACKEND = 80_000;
   assert.equal(d2.agente, 'mantenimiento', 'la transferencia sobrevive al turno siguiente');
   assert.equal(d2.motivo, 'pegajosidad', 'y no cuesta una llamada al modelo');
 
-  // El gate vive en entry.ts, que importa Deno.serve y no se puede cargar aqui:
-  // se ancla contra la fuente para que quitarlo rompa el banco de pruebas.
-  // Se afirma con includes y no con assert.match para que el fallo diga el
-  // mensaje y no escupa el archivo entero.
+  // El ruteo vive en entry.ts, que importa Deno.serve y no se puede cargar aqui:
+  // se ancla contra la fuente.
+  //
+  // Ya no se comprueba que el gate del bot dedicado este bien acotado: se
+  // comprueba que NO EXISTA. Acotarlo a "solo el primer mensaje del hilo"
+  // dependia de que el estado se hubiera guardado, y eso era justo lo que
+  // fallaba: con la escritura rechazada, cada mensaje parecia el primero y el
+  // hilo se re-fijaba para siempre. Un mecanismo que se cae solo cuando algo mas
+  // falla no es un mecanismo.
   const fuente = readFileSync(new URL('../base44/functions/agenteInbound/entry.ts', import.meta.url), 'utf8');
-  assert.ok(fuente.includes('const hiloNuevo = !estado.agente_historial.length;'),
-    'entry.ts dejo de calcular hiloNuevo');
-  assert.ok(fuente.includes('(agenteBot && hiloNuevo)'),
-    'el bot dedicado volvio a fijar el agente en todos los turnos');
+  const cuerpo = fuente.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+  assert.ok(
+    cuerpo.includes('const decision = await decidirAgente('),
+    'el router debe decidir SIEMPRE, sin condicional delante',
+  );
+  assert.ok(
+    !/agenteBot\s*&&/.test(cuerpo),
+    'agenteBot volvio a condicionar el ruteo: ?agente= solo elige el bot de salida',
+  );
+  assert.ok(
+    cuerpo.includes('tgToken:     tokenDeAgente(agenteBot)'),
+    'agenteBot sigue haciendo falta para saber por que bot se contesta',
+  );
 
   // Mutante: el gate viejo, sin hiloNuevo.
   const gateViejo = (agenteBot) => (agenteBot ? { agente: agenteBot, motivo: 'bot dedicado' } : null);

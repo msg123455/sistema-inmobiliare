@@ -65,6 +65,34 @@ export interface TurnoPendiente {
   agente: Agente;
 }
 
+/**
+ * Radiografia del ultimo turno, para el comando /chunks.
+ *
+ * Existe porque desde fuera un agente es una caja negra: contesta raro y no hay
+ * forma de saber si le falto conocimiento, si el prompt que uso no era el que
+ * creias, o si el ruteo lo mando a otra especialidad. Se diagnosticaba por
+ * eliminacion, y eso costo dias.
+ *
+ * `prompt_origen` es el campo mas importante: los prompts de AgentePrompt pisan
+ * a los del codigo, asi que un agente sin fila cae al del binario desplegado,
+ * que puede tener meses. Verlo escrito ahorra toda esa averiguacion.
+ */
+export interface DiagTurno {
+  ts: string;
+  agente: Agente;
+  ruteo: string;
+  prompt_origen: string;
+  prompt_version: number | null;
+  marca_origen: string;
+  rag_chars: number;
+  rag_max: number;
+  rag_activos: number;
+  rag: Array<{ t: string; c: number; esp: boolean }>;
+  fuera: Array<{ t: string; c: number; m: string }>;
+  tools: string[];
+  guardado_chars: number;
+}
+
 export interface Estado {
   v: 2;
   agente_activo: Agente;
@@ -76,6 +104,7 @@ export interface Estado {
   turno_pendiente: TurnoPendiente | null;
   msg_ids: string[];
   pausada: boolean;
+  diag?: DiagTurno | null;
 }
 
 // ─── Entrada normalizada (ambos canales) ────────────────────────────────────
