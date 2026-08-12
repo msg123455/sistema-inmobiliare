@@ -125,7 +125,15 @@ Deno.serve(async (req) => {
 
   // Siempre 200: si Meta no lo recibe rapido, reintenta y duplica el turno.
   try {
-    await procesar(entrada, env, agenteBot);
+    const diag = await procesar(entrada, env, agenteBot);
+    // ?diag=1 devuelve que paso en el turno. Va detras del mismo secreto que el
+    // resto del webhook, asi que no lo puede pedir cualquiera. Telegram nunca lo
+    // manda, asi que el trafico real no cambia.
+    if (url.searchParams.get('diag') === '1') {
+      return new Response(JSON.stringify(diag, null, 2), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
   } catch (e) {
     console.error('agenteInbound error:', (e as Error).message, (e as Error).stack);
   }
@@ -320,7 +328,7 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
 
   olvidarTransitorios(estado, estado.agente_activo, transitorias);
 
-  await Promise.all([
+  const [guardadoId] = await Promise.all([
     guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, {
       ultimo_mensaje: entrada.texto,
       ultima_respuesta: globos.join(' | '),
@@ -328,7 +336,17 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     }),
     notificarEquipo(base.config, entrada.tel, ctx.efectos.notificar),
   ]);
-  marca('guardado');
+  marca(guardadoId ? 'guardado' : 'GUARDADO FALLIDO');
+
+  return {
+    agente: estado.agente_activo,
+    memoria_id: guardadoId,
+    guardado: !!guardadoId,
+    estado_chars: JSON.stringify(estado).length,
+    globos: globos.length,
+    ctx_claves: Object.keys(estado.ctx[estado.agente_activo] || {}),
+    fallos_db: db.fallos,
+  };
 }
 
 // El historial es COMPARTIDO: todo agente ve el hilo completo, incluidos los

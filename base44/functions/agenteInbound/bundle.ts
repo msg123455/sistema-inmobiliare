@@ -18,6 +18,12 @@ function crearDb(apiKey: string, baseUrl?: string) {
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
 
+  // Ultimo fallo de escritura. Existe porque los errores de db se registraban en
+  // console.error y los logs de Base44 no son accesibles desde fuera: una
+  // escritura rechazada era indistinguible de una exitosa. agenteInbound lo
+  // expone con ?diag=1 para poder ver la causa real sin adivinar.
+  const fallos: string[] = [];
+
   const qs = (f?: Filtro) => {
     if (!f) return '';
     const p = new URLSearchParams();
@@ -48,7 +54,9 @@ function crearDb(apiKey: string, baseUrl?: string) {
       method: 'POST', headers: hdrs, body: JSON.stringify(datos),
     });
     if (!r.ok) {
-      console.error(`db.crear ${entidad} ${r.status}`, (await r.text()).slice(0, 200));
+      const detalle = (await r.text()).slice(0, 300);
+      console.error(`db.crear ${entidad} ${r.status}`, detalle);
+      fallos.push(`crear ${entidad} ${r.status}: ${detalle}`);
       return null;
     }
     return await r.json();
@@ -93,7 +101,9 @@ function crearDb(apiKey: string, baseUrl?: string) {
       method: 'PUT', headers: hdrs, body: JSON.stringify(cuerpo),
     });
     if (!r.ok) {
-      console.error(`db.actualizar ${entidad}/${id} ${r.status}`, (await r.text()).slice(0, 200));
+      const detalle = (await r.text()).slice(0, 300);
+      console.error(`db.actualizar ${entidad}/${id} ${r.status}`, detalle);
+      fallos.push(`actualizar ${entidad}/${id} ${r.status}: ${detalle} (cuerpo ${JSON.stringify(cuerpo).length} chars)`);
       return null;
     }
     return await r.json();
@@ -105,7 +115,7 @@ function crearDb(apiKey: string, baseUrl?: string) {
     return (res as any)?.id ?? id ?? null;
   }
 
-  return { base, list, uno, crear, actualizar, guardar };
+  return { base, list, uno, crear, actualizar, guardar, fallos };
 }
 
 type Db = ReturnType<typeof crearDb>;
@@ -3961,7 +3971,15 @@ Deno.serve(async (req) => {
 
   // Siempre 200: si Meta no lo recibe rapido, reintenta y duplica el turno.
   try {
-    await procesar(entrada, env, agenteBot);
+    const diag = await procesar(entrada, env, agenteBot);
+    // ?diag=1 devuelve que paso en el turno. Va detras del mismo secreto que el
+    // resto del webhook, asi que no lo puede pedir cualquiera. Telegram nunca lo
+    // manda, asi que el trafico real no cambia.
+    if (url.searchParams.get('diag') === '1') {
+      return new Response(JSON.stringify(diag, null, 2), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
   } catch (e) {
     console.error('agenteInbound error:', (e as Error).message, (e as Error).stack);
   }
@@ -4156,7 +4174,7 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
 
   olvidarTransitorios(estado, estado.agente_activo, transitorias);
 
-  await Promise.all([
+  const [guardadoId] = await Promise.all([
     guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, {
       ultimo_mensaje: entrada.texto,
       ultima_respuesta: globos.join(' | '),
@@ -4164,7 +4182,17 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     }),
     notificarEquipo(base.config, entrada.tel, ctx.efectos.notificar),
   ]);
-  marca('guardado');
+  marca(guardadoId ? 'guardado' : 'GUARDADO FALLIDO');
+
+  return {
+    agente: estado.agente_activo,
+    memoria_id: guardadoId,
+    guardado: !!guardadoId,
+    estado_chars: JSON.stringify(estado).length,
+    globos: globos.length,
+    ctx_claves: Object.keys(estado.ctx[estado.agente_activo] || {}),
+    fallos_db: db.fallos,
+  };
 }
 
 // El historial es COMPARTIDO: todo agente ve el hilo completo, incluidos los

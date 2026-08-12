@@ -11,6 +11,12 @@ export function crearDb(apiKey: string, baseUrl?: string) {
   if (!base) throw new Error('BASE44_APP_URL no configurada');
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
 
+  // Ultimo fallo de escritura. Existe porque los errores de db se registraban en
+  // console.error y los logs de Base44 no son accesibles desde fuera: una
+  // escritura rechazada era indistinguible de una exitosa. agenteInbound lo
+  // expone con ?diag=1 para poder ver la causa real sin adivinar.
+  const fallos: string[] = [];
+
   const qs = (f?: Filtro) => {
     if (!f) return '';
     const p = new URLSearchParams();
@@ -41,7 +47,9 @@ export function crearDb(apiKey: string, baseUrl?: string) {
       method: 'POST', headers: hdrs, body: JSON.stringify(datos),
     });
     if (!r.ok) {
-      console.error(`db.crear ${entidad} ${r.status}`, (await r.text()).slice(0, 200));
+      const detalle = (await r.text()).slice(0, 300);
+      console.error(`db.crear ${entidad} ${r.status}`, detalle);
+      fallos.push(`crear ${entidad} ${r.status}: ${detalle}`);
       return null;
     }
     return await r.json();
@@ -86,7 +94,9 @@ export function crearDb(apiKey: string, baseUrl?: string) {
       method: 'PUT', headers: hdrs, body: JSON.stringify(cuerpo),
     });
     if (!r.ok) {
-      console.error(`db.actualizar ${entidad}/${id} ${r.status}`, (await r.text()).slice(0, 200));
+      const detalle = (await r.text()).slice(0, 300);
+      console.error(`db.actualizar ${entidad}/${id} ${r.status}`, detalle);
+      fallos.push(`actualizar ${entidad}/${id} ${r.status}: ${detalle} (cuerpo ${JSON.stringify(cuerpo).length} chars)`);
       return null;
     }
     return await r.json();
@@ -98,7 +108,7 @@ export function crearDb(apiKey: string, baseUrl?: string) {
     return (res as any)?.id ?? id ?? null;
   }
 
-  return { base, list, uno, crear, actualizar, guardar };
+  return { base, list, uno, crear, actualizar, guardar, fallos };
 }
 
 export type Db = ReturnType<typeof crearDb>;
