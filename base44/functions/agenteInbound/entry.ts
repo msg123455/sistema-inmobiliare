@@ -15,7 +15,10 @@ import { encolar, entregarYa, notificarEquipo } from './_core/cola.ts';
 import { MAX_RAG_CHARS, agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { informeChunks } from './_core/diagnostico.ts';
 import { correrAgente } from './_core/llm.ts';
-import { debeAvisar, marcaAutorizacion, textoAviso } from './_core/privacidad.ts';
+// El aviso de tratamiento de datos esta desactivado (ver mas abajo). El import
+// se queda comentado junto al bloque para que devolverlo sea un solo cambio, y
+// _core/privacidad.ts sigue intacto.
+// import { debeAvisar, marcaAutorizacion, textoAviso } from './_core/privacidad.ts';
 import { decidirAgente } from './_core/router.ts';
 import { cargarEstado, ctxDe, estadoVacio, guardarEstado, olvidarTransitorios } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
@@ -24,6 +27,15 @@ import * as wa from './_core/canales/whatsapp.ts';
 import * as tg from './_core/canales/telegram.ts';
 import { agenteDeUrl, tokenDeAgente } from './_core/canales/bots.ts';
 import { firmaMetaValida, secretoIgual } from './_core/webhook.ts';
+
+/**
+ * La presentacion, literal y en el primer mensaje de toda conversacion.
+ *
+ * Va aqui y no en el prompt porque es identidad de marca, no conversacion: tiene
+ * que salir siempre y salir igual. Pedirsela al modelo la deja a merced de que
+ * la reformule o se la salte cuando el cliente arranca directo con su problema.
+ */
+const SALUDO = 'Hola, soy Diana de INMOBILIARE Julio Corredor.';
 
 const MODELO_PRIMARIO = 'claude-sonnet-5';
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
@@ -350,19 +362,43 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   // ── 7. Park: encolar + guardar estado + retornar ─────────────────────────
   const globos = res.globos.filter(Boolean);
 
-  // Aviso de tratamiento de datos (Ley 1581/2012). Va PRIMERO y lo antepone el
-  // codigo, no el modelo: el Contacto con datos personales ya se creo arriba,
-  // en asegurarContacto, antes de que el modelo dijera nada. Si dependiera de
-  // que el modelo se acuerde, habria conversaciones con datos guardados sin
-  // aviso y sin forma de saber cuales.
-  if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
-    globos.unshift(textoAviso(base.config));
-    if (contacto?.id) {
-      // No se bloquea la respuesta por esto: si la escritura falla, el aviso ya
-      // salio y el error queda en el log. Peor seria no responderle al cliente.
-      db.actualizar('Contacto', contacto.id, marcaAutorizacion())
-        .catch((e: Error) => console.error('No se pudo marcar la autorizacion:', e.message));
-    }
+  // AVISO DE TRATAMIENTO DE DATOS: DESACTIVADO por decision de la casa.
+  //
+  // Se anteponia al primer mensaje: "Antes de seguir: en INMOBILIARE Julio
+  // Corredor tratamos tus datos conforme a nuestra politica...". La operacion
+  // pidio quitarlo porque interrumpe la entrada de la conversacion.
+  //
+  // QUE SE PIERDE, para que quede escrito: la Ley 1581 de 2012 pide informar el
+  // tratamiento y obtener autorizacion, y ese mensaje era la constancia de que
+  // se informo. El Contacto con datos personales se sigue creando en
+  // asegurarContacto, antes de que el modelo diga nada, asi que ahora se guardan
+  // datos sin haber avisado. Tambien deja de escribirse marcaAutorizacion(), a
+  // proposito: registrar una autorizacion que nunca se dio seria peor que no
+  // registrar ninguna.
+  //
+  // COMO SE DEVUELVE: descomentar este bloque. La maquinaria sigue entera en
+  // _core/privacidad.ts —debeAvisar, textoAviso, marcaAutorizacion y la version
+  // de politica— y no se toco nada mas.
+  //
+  // if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
+  //   globos.unshift(textoAviso(base.config));
+  //   if (contacto?.id) {
+  //     db.actualizar('Contacto', contacto.id, marcaAutorizacion())
+  //       .catch((e: Error) => console.error('No se pudo marcar la autorizacion:', e.message));
+  //   }
+  // }
+
+  // La presentacion va SIEMPRE en el primer mensaje, y la pone el servidor.
+  //
+  // Podria pedirsele al prompt, pero entonces sale casi siempre y no siempre: el
+  // modelo la varia, la acorta, o si el cliente arranca con "se me daño la ducha"
+  // se salta el saludo y entra directo al tramite. Es lo primero que ve un
+  // cliente de la marca, asi que no puede depender de que el modelo se acuerde.
+  //
+  // Cuando el aviso de datos estaba activo, iba justo despues de esta linea:
+  // primero quien te habla, despues la letra pequena.
+  if (globos.length && esPrimerTurno) {
+    globos.unshift(SALUDO);
   }
 
   if (globos.length) {

@@ -24,7 +24,6 @@ const FUENTE = join(RAIZ, '_core');
 // dejo pegado un artefacto viejo que ejecuta codigo que no esta en el repo.
 // continuarTurno se elimino: retomaba turnos aparcados y ya no se aparca ninguno.
 const CONSUMIDORAS = [
-  { nombre: 'asistente' },
   { nombre: 'agenteInbound' },
   { nombre: 'enviarPendientes' },
   { nombre: 'seedAgentes', archivos: ['prompts.ts'] },

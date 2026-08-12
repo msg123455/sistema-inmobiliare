@@ -1167,7 +1167,10 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     ].join("\n"));
   }
   partes.push(
-    "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo."
+    "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo." + // El saludo lo antepone el servidor en el primer mensaje (ver SALUDO en
+    // entry.ts). Sin esta linea el modelo se presenta tambien y el cliente
+    // recibe la presentacion dos veces seguidas.
+    (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
   );
   return partes.join("\n\n");
 }
@@ -1340,30 +1343,6 @@ async function correrAgente(opts) {
     }
   }
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
-}
-
-// base44/functions/agenteInbound/_core/privacidad.ts
-var POLITICA_VERSION = "2026-01";
-var POLITICA_URL_DEFECTO = "https://bit.ly/3imaawE";
-function urlPolitica(config) {
-  return String(config?.politica_datos_url || "").trim() || POLITICA_URL_DEFECTO;
-}
-function textoAviso(config) {
-  const empresa = String(config?.nombre_inmobiliaria || "").trim() || "INMOBILIARE Julio Corredor";
-  return `Antes de seguir: en ${empresa} tratamos tus datos conforme a nuestra política. Si continúas, entenderemos que la aceptas. Puedes consultarla en ${urlPolitica(config)}`;
-}
-function debeAvisar(esPrimerTurno, contacto) {
-  if (!esPrimerTurno) return false;
-  if (!contacto) return true;
-  if (!contacto.autoriza_tratamiento) return true;
-  return String(contacto.politica_version || "") !== POLITICA_VERSION;
-}
-function marcaAutorizacion() {
-  return {
-    autoriza_tratamiento: true,
-    fecha_autorizacion: (/* @__PURE__ */ new Date()).toISOString(),
-    politica_version: POLITICA_VERSION
-  };
 }
 
 // base44/functions/agenteInbound/_core/router.ts
@@ -3228,6 +3207,7 @@ function secretoIgual(recibido, esperado) {
 }
 
 // base44/functions/agenteInbound/entry.ts
+var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
 var MODELO_PRIMARIO = "claude-sonnet-5";
 var MODELO_FALLBACK = "claude-haiku-4-5-20251001";
 var MODELO_ROUTER = "claude-haiku-4-5-20251001";
@@ -3431,11 +3411,8 @@ async function procesar(entrada, env, agenteBot = null) {
   marca(`agente corrio (${res.llamadas} llamada${res.llamadas === 1 ? "" : "s"} al modelo)`);
   estado.turno_pendiente = null;
   const globos = res.globos.filter(Boolean);
-  if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
-    globos.unshift(textoAviso(base.config));
-    if (contacto?.id) {
-      db.actualizar("Contacto", contacto.id, marcaAutorizacion()).catch((e) => console.error("No se pudo marcar la autorizacion:", e.message));
-    }
+  if (globos.length && esPrimerTurno) {
+    globos.unshift(SALUDO);
   }
   if (globos.length) {
     estado.historial.push({

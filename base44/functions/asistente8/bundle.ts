@@ -15,7 +15,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// base44/functions/asistente/_core/db.ts
+// base44/functions/asistente8/_core/db.ts
 function crearDb(apiKey, baseUrl) {
   const base = (baseUrl || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
   if (!base) throw new Error("BASE44_APP_URL no configurada");
@@ -91,7 +91,7 @@ function crearDb(apiKey, baseUrl) {
   return { base, list, uno, crear, actualizar, guardar, fallos };
 }
 
-// base44/functions/asistente/_core/cola.ts
+// base44/functions/asistente8/_core/cola.ts
 async function entregarYa(db, item, env, canales, tokenTelegram) {
   if (!item?.id) return false;
   const globos = Array.isArray(item.globos) ? item.globos : [];
@@ -180,7 +180,7 @@ async function notificarEquipo(config, telCliente, mensajes) {
   }
 }
 
-// base44/functions/asistente/_core/prompts.ts
+// base44/functions/asistente8/_core/prompts.ts
 var TELEFONO_CONTINGENCIA = "3102109308";
 var IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -457,7 +457,7 @@ certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni ab
 solicitud: transfiere a recepcion.`
 };
 
-// base44/functions/asistente/_core/habiles.ts
+// base44/functions/asistente8/_core/habiles.ts
 function pascua(anio) {
   const a = anio % 19;
   const b = Math.floor(anio / 100);
@@ -551,7 +551,7 @@ function sumarHabiles(desde, dias) {
   return new Date(f.getTime() + dia - 1e3);
 }
 
-// base44/functions/asistente/_core/horario.ts
+// base44/functions/asistente8/_core/horario.ts
 var OFFSET_BOGOTA_H = -5;
 var HORARIO_DEFECTO = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
 function horarioDe(config) {
@@ -588,7 +588,7 @@ function instruccionHorario(ahora, config = {}) {
   return `FUERA DE HORARIO. El equipo atiende de lunes a viernes, de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. Agenda la visita o la llamada con la herramienta que corresponda, registra lo que haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo contacta el siguiente dia habil. Nunca uses eso como primera salida.`;
 }
 
-// base44/functions/asistente/_core/protocol.ts
+// base44/functions/asistente8/_core/protocol.ts
 var AGENTES = [
   "recepcion",
   "ventas",
@@ -635,7 +635,7 @@ var bool = (description) => ({ type: "boolean", description });
 var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
-// base44/functions/asistente/_core/state.ts
+// base44/functions/asistente8/_core/state.ts
 var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
 function identidadVacia() {
   return {
@@ -803,7 +803,7 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   return null;
 }
 
-// base44/functions/asistente/_core/identidad.ts
+// base44/functions/asistente8/_core/identidad.ts
 var HORAS_VIGENCIA = 24;
 var MAX_INTENTOS = 3;
 var BLOQUEO_MIN = 60;
@@ -979,7 +979,7 @@ async function crearSesionPortal(db, entrada, estado, tipo) {
   return `${app}/portal/entrar?t=${token}`;
 }
 
-// base44/functions/asistente/_core/contexto.ts
+// base44/functions/asistente8/_core/contexto.ts
 var MAX_RAG_CHARS = 18e3;
 function destinosDe(ch) {
   return String(ch.agentes || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1167,12 +1167,15 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     ].join("\n"));
   }
   partes.push(
-    "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo."
+    "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo." + // El saludo lo antepone el servidor en el primer mensaje (ver SALUDO en
+    // entry.ts). Sin esta linea el modelo se presenta tambien y el cliente
+    // recibe la presentacion dos veces seguidas.
+    (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
   );
   return partes.join("\n\n");
 }
 
-// base44/functions/asistente/_core/diagnostico.ts
+// base44/functions/asistente8/_core/diagnostico.ts
 var miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function informeChunks(d) {
   if (!d) {
@@ -1209,7 +1212,7 @@ function informeChunks(d) {
   return l.join("\n");
 }
 
-// base44/functions/asistente/_core/llm.ts
+// base44/functions/asistente8/_core/llm.ts
 var API = "https://api.anthropic.com/v1/messages";
 function paramsModelo(modelo, effort) {
   if (/haiku/.test(modelo)) return {};
@@ -1342,31 +1345,7 @@ async function correrAgente(opts) {
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
 }
 
-// base44/functions/asistente/_core/privacidad.ts
-var POLITICA_VERSION = "2026-01";
-var POLITICA_URL_DEFECTO = "https://bit.ly/3imaawE";
-function urlPolitica(config) {
-  return String(config?.politica_datos_url || "").trim() || POLITICA_URL_DEFECTO;
-}
-function textoAviso(config) {
-  const empresa = String(config?.nombre_inmobiliaria || "").trim() || "INMOBILIARE Julio Corredor";
-  return `Antes de seguir: en ${empresa} tratamos tus datos conforme a nuestra política. Si continúas, entenderemos que la aceptas. Puedes consultarla en ${urlPolitica(config)}`;
-}
-function debeAvisar(esPrimerTurno, contacto) {
-  if (!esPrimerTurno) return false;
-  if (!contacto) return true;
-  if (!contacto.autoriza_tratamiento) return true;
-  return String(contacto.politica_version || "") !== POLITICA_VERSION;
-}
-function marcaAutorizacion() {
-  return {
-    autoriza_tratamiento: true,
-    fecha_autorizacion: (/* @__PURE__ */ new Date()).toISOString(),
-    politica_version: POLITICA_VERSION
-  };
-}
-
-// base44/functions/asistente/_core/router.ts
+// base44/functions/asistente8/_core/router.ts
 var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 var POR_BOTON = {
   "flujo:consignacion": "consignacion",
@@ -1484,7 +1463,7 @@ ${entrada.texto.slice(0, 600)}`
   };
 }
 
-// base44/functions/asistente/_core/tools/asistidos.ts
+// base44/functions/asistente8/_core/tools/asistidos.ts
 var PRIORIDAD = {
   baja: "Baja",
   media: "Media",
@@ -1561,7 +1540,7 @@ var ASISTIDOS = {
   consultar_historial_solicitudes: consultarHistorialSolicitudes
 };
 
-// base44/functions/asistente/_core/brief.ts
+// base44/functions/asistente8/_core/brief.ts
 var ETIQUETAS = {
   operacion: "Operacion",
   tipo_prop: "Tipo de inmueble",
@@ -1622,7 +1601,7 @@ function briefLead(estado, tel, canal, extra = []) {
   return lineas.join("\n");
 }
 
-// base44/functions/asistente/_core/tools/comunes.ts
+// base44/functions/asistente8/_core/tools/comunes.ts
 var COMPARTIDOS = /* @__PURE__ */ new Set(["nombre", "email", "documento", "direccion_inmueble"]);
 var NUMERICOS = /* @__PURE__ */ new Set(["presupuesto", "canon_esperado", "valor_esperado", "area_m2", "habitaciones", "nps_score"]);
 var responder = {
@@ -1763,7 +1742,7 @@ var enviarMenu = {
   }
 };
 
-// base44/functions/asistente/_core/tools/identificacion.ts
+// base44/functions/asistente8/_core/tools/identificacion.ts
 var identificarTitular = {
   ...definirTool(
     "identificar_titular",
@@ -1811,7 +1790,7 @@ var identificarTitular = {
   }
 };
 
-// base44/functions/asistente/_core/scoring.ts
+// base44/functions/asistente8/_core/scoring.ts
 var ETAPA = {
   Lead: 10,
   Visita_Agendada: 35,
@@ -1864,7 +1843,7 @@ function calificar(s) {
   };
 }
 
-// base44/functions/asistente/_core/tools/ventas.ts
+// base44/functions/asistente8/_core/tools/ventas.ts
 async function asignarAsesor(db, criterios) {
   const activos = await db.list("Asesor", { estado: "Activo", limit: 100 });
   if (!activos.length) return null;
@@ -2201,7 +2180,7 @@ var VENTAS = {
   agendar_visita: agendarVisita
 };
 
-// base44/functions/asistente/_core/tools/cartera.ts
+// base44/functions/asistente8/_core/tools/cartera.ts
 var verificarIdentidad = {
   ...definirTool(
     "verificar_identidad",
@@ -2404,7 +2383,7 @@ var CARTERA = {
   enviar_certificado_propietario: enviarCertificadoPropietario
 };
 
-// base44/functions/asistente/_core/tools/mantenimiento.ts
+// base44/functions/asistente8/_core/tools/mantenimiento.ts
 var registrarReparacion = {
   ...definirTool(
     "registrar_reparacion",
@@ -2516,7 +2495,7 @@ var MANTENIMIENTO = {
   consultar_estado_reparacion: consultarEstadoReparacion
 };
 
-// base44/functions/asistente/_core/tools/consignacion.ts
+// base44/functions/asistente8/_core/tools/consignacion.ts
 var registrarConsignacion = {
   ...definirTool(
     "registrar_consignacion",
@@ -2607,7 +2586,7 @@ var CONSIGNACION = {
   agendar_avaluo_previo: agendarAvaluoPrevio
 };
 
-// base44/functions/asistente/_core/tools/avaluos.ts
+// base44/functions/asistente8/_core/tools/avaluos.ts
 var registrarSolicitudAvaluo = {
   ...definirTool(
     "registrar_solicitud_avaluo",
@@ -2677,7 +2656,7 @@ var AVALUOS = {
   cotizar_avaluo: cotizarAvaluo
 };
 
-// base44/functions/asistente/_core/tools/pqr.ts
+// base44/functions/asistente8/_core/tools/pqr.ts
 var LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
 var DIAS_DEFECTO = {
   Peticion: 15,
@@ -2782,7 +2761,7 @@ var PQR = {
   consultar_estado_pqr: consultarEstadoPqr
 };
 
-// base44/functions/asistente/_core/tools/matricula.ts
+// base44/functions/asistente8/_core/tools/matricula.ts
 var iniciarMatricula = {
   ...definirTool(
     "iniciar_matricula",
@@ -2914,7 +2893,7 @@ var MATRICULA = {
   enviar_link_portal: enviarLinkDocumentos
 };
 
-// base44/functions/asistente/_core/tools/index.ts
+// base44/functions/asistente8/_core/tools/index.ts
 var IDENT = { identificar_titular: identificarTitular };
 var HIST = ASISTIDOS;
 var EXTRA = {
@@ -2934,7 +2913,7 @@ function toolsDe(agente, habilitadas) {
   return Object.fromEntries(Object.entries(todas).filter(([n]) => permitidas.has(n)));
 }
 
-// base44/functions/asistente/_core/canales/whatsapp.ts
+// base44/functions/asistente8/_core/canales/whatsapp.ts
 var whatsapp_exports = {};
 __export(whatsapp_exports, {
   enviar: () => enviar,
@@ -2943,7 +2922,7 @@ __export(whatsapp_exports, {
   normalizar: () => normalizar2
 });
 
-// base44/functions/asistente/_core/canales/media.ts
+// base44/functions/asistente8/_core/canales/media.ts
 async function transcribir(buf, mimeType, openaiKey) {
   const fd = new FormData();
   fd.append("file", new Blob([buf], { type: mimeType }), "audio.ogg");
@@ -2991,7 +2970,7 @@ async function describirImagen(buf, mimeType, openaiKey, caption) {
   return ((await r.json()).choices?.[0]?.message?.content || "").trim() || null;
 }
 
-// base44/functions/asistente/_core/canales/whatsapp.ts
+// base44/functions/asistente8/_core/canales/whatsapp.ts
 var GRAPH = "https://graph.facebook.com/v19.0";
 var esWhatsApp = (body) => !!body?.entry?.[0]?.changes;
 var conIndicativo = (t) => {
@@ -3083,7 +3062,7 @@ async function marcarEscribiendo(msgId, env) {
   }
 }
 
-// base44/functions/asistente/_core/canales/telegram.ts
+// base44/functions/asistente8/_core/canales/telegram.ts
 var telegram_exports = {};
 __export(telegram_exports, {
   enviar: () => enviar2,
@@ -3173,7 +3152,7 @@ async function marcarEscribiendo2(destino, env) {
   }
 }
 
-// base44/functions/asistente/_core/canales/bots.ts
+// base44/functions/asistente8/_core/canales/bots.ts
 var VAR_POR_AGENTE = {
   recepcion: "TELEGRAM_BOT_RECEPCION",
   ventas: "TELEGRAM_BOT_VENTAS",
@@ -3194,7 +3173,7 @@ function agenteDeUrl(url) {
   return v && esAgente(v) ? v : null;
 }
 
-// base44/functions/asistente/_core/webhook.ts
+// base44/functions/asistente8/_core/webhook.ts
 async function firmaMetaValida(rawBody, header, secret) {
   if (!header?.startsWith("sha256=") || !secret) return false;
   const hex = header.slice("sha256=".length);
@@ -3227,7 +3206,8 @@ function secretoIgual(recibido, esperado) {
   return diferencia === 0;
 }
 
-// base44/functions/asistente/entry.ts
+// base44/functions/asistente8/entry.ts
+var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
 var MODELO_PRIMARIO = "claude-sonnet-5";
 var MODELO_FALLBACK = "claude-haiku-4-5-20251001";
 var MODELO_ROUTER = "claude-haiku-4-5-20251001";
@@ -3391,6 +3371,22 @@ async function procesar(entrada, env, agenteBot = null) {
   const scratch = ctxDe(estado, estado.agente_activo);
   const transitorias = Object.keys(ctxAgenteCargado);
   Object.assign(scratch, ctxAgenteCargado);
+  if (ctxAgenteCargado.titular_nombre && !estado.identidad.verificado) {
+    const ahora = /* @__PURE__ */ new Date();
+    const inm = (ctxAgenteCargado.titular_inmuebles || [])[0] || {};
+    estado.identidad = {
+      ...estado.identidad,
+      verificado: true,
+      metodo: "documento_y_telefono",
+      contrato_id: String(inm.contrato_id || "") || null,
+      verificado_en: ahora.toISOString(),
+      expira: new Date(ahora.getTime() + 24 * 36e5).toISOString(),
+      intentos: 0,
+      bloqueado_hasta: null
+    };
+    estado.compartido.nombre = String(ctxAgenteCargado.titular_nombre);
+    marca("identidad verificada por documento + telefono registrado");
+  }
   const tools = toolsDe(estado.agente_activo, base.prompt?.tools_habilitadas);
   const ctx = {
     db,
@@ -3415,11 +3411,8 @@ async function procesar(entrada, env, agenteBot = null) {
   marca(`agente corrio (${res.llamadas} llamada${res.llamadas === 1 ? "" : "s"} al modelo)`);
   estado.turno_pendiente = null;
   const globos = res.globos.filter(Boolean);
-  if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
-    globos.unshift(textoAviso(base.config));
-    if (contacto?.id) {
-      db.actualizar("Contacto", contacto.id, marcaAutorizacion()).catch((e) => console.error("No se pudo marcar la autorizacion:", e.message));
-    }
+  if (globos.length && esPrimerTurno) {
+    globos.unshift(SALUDO);
   }
   if (globos.length) {
     estado.historial.push({

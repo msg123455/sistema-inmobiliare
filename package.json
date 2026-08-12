@@ -20,7 +20,8 @@
     "empaquetar": "node scripts/empaquetar.mjs",
     "check:bundles": "node scripts/check-bundles.mjs",
     "check:entries": "node scripts/check-entries.mjs",
-    "check:bundles-al-dia": "node scripts/empaquetar.mjs --check"
+    "check:bundles-al-dia": "node scripts/empaquetar.mjs --check",
+    "publicar": "node scripts/publicar-asistente.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.41",

@@ -285,7 +285,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   // documento del mensaje se resuelve igual que en mantenimiento.
   avaluos: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
   pqr: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
-  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
 };
 
 export async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
@@ -360,7 +360,17 @@ export function armarSystem(
     'Terminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\n' +
     'Puedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\n' +
     'Escribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\n' +
-    'Jamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo.',
+    'Jamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo.' +
+    // El saludo lo antepone el servidor en el primer mensaje (ver SALUDO en
+    // entry.ts). Sin esta linea el modelo se presenta tambien y el cliente
+    // recibe la presentacion dos veces seguidas.
+    (estado.historial.length <= 1
+      ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, '
+        + '"Hola, soy Diana de INMOBILIARE Julio Corredor."\n'
+        + 'Tu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" '
+        + 'ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas '
+        + 'que mas delatan a un bot. Arranca directo por lo que el cliente necesita.'
+      : ''),
   );
 
   return partes.join('\n\n');
