@@ -112,14 +112,28 @@ async function enOleadas<T, R>(items: T[], fn: (x: T) => Promise<R>): Promise<R[
   return out;
 }
 
+const MESES_ES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+];
+
 /**
- * Nombre de carpeta estable, no el que lee un humano.
+ * Nombre de carpeta siguiendo la convencion que la oficina YA usa.
  *
- * "Agosto" se repite cada anio, y la segunda vez la carpeta ya existe con 600
- * archivos del anio pasado. La pantalla muestra "Agosto 2026"; a la API va la
- * clave.
+ * En la cuenta hay 22 carpetas nombradas "Agosto 2026", "Julio 2026",
+ * "Octubre2025" —el espacio va y viene—. Inventar aqui una clave tipo
+ * "codigos-2026-08" dejaria dos carpetas del mismo mes: la que el equipo abre a
+ * mano y la que llena el robot. Se respeta la de ellos, y el mes y el anio
+ * juntos evitan el choque de "Agosto" contra el agosto del anio pasado.
  */
-const nombreCarpeta = (periodo: string) => `codigos-${periodo}`;
+function nombreCarpeta(periodo: string): string {
+  const [anio, mes] = periodo.split('-');
+  return `${MESES_ES[Number(mes) - 1] || mes} ${anio}`;
+}
+
+/** Compara nombres de carpeta ignorando espacios, acentos y mayusculas. */
+const normNombre = (s: string) =>
+  String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, '');
 
 // ── Handler ──────────────────────────────────────────────────────────────────
 
@@ -245,15 +259,29 @@ Deno.serve(async (req: Request) => {
     // Esa lista es la idempotencia: si el proceso muere en el archivo 400, al
     // reanudar sube 200 y no vuelve a subir los 400 primeros.
     if (modo === 'preparar') {
-      const nombre = nombreCarpeta(periodo);
+      const nombre = String(body?.carpeta || '').trim() || nombreCarpeta(periodo);
       const { folders = [] } = await mcJson('/file-manager/folders?count=1000');
-      let carpeta = folders.find((f: any) => f.name === nombre);
+
+      // Se busca ignorando espacios y acentos: en la cuenta conviven
+      // "Octubre2025" y "Agosto 2026", y un match exacto crearia una duplicada.
+      let carpeta = folders.find((f: any) => normNombre(f.name) === normNombre(nombre));
+      const creada = !carpeta;
       if (!carpeta) {
         carpeta = await mcJson('/file-manager/folders', {
           method: 'POST', body: JSON.stringify({ name: nombre }),
         });
       }
 
+      // La idempotencia sale de CodigoBarras, no de listar la carpeta.
+      //
+      // Comprobado contra la cuenta real: GET /file-manager/files?folder_id=X
+      // IGNORA el filtro —devuelve los 29.690 archivos de la cuenta y todos con
+      // folder_id 0—, asi que no hay forma de preguntarle a Mailchimp que hay
+      // dentro de una carpeta. El file_count de la carpeta si es correcto, y
+      // sirve como control de totales.
+      //
+      // Nuestro libro mayor es CodigoBarras: si el proceso muere en el archivo
+      // 400, al reanudar sube los 200 que faltan y no repite los primeros.
       const rExist = await fetch(
         `${BASE_URL}/api/entities/CodigoBarras?periodo=${encodeURIComponent(periodo)}&limit=1000`,
         { headers: hdrs },
@@ -265,8 +293,11 @@ Deno.serve(async (req: Request) => {
 
       return json({
         folder_id: carpeta.id,
-        carpeta: nombre,
+        carpeta: carpeta.name,
+        creada,
         ya_subidos: yaSubidos,
+        // Total que Mailchimp dice tener en la carpeta. Si al final no cuadra
+        // con lo subido, algo entro por fuera del robot.
         en_carpeta: carpeta.file_count ?? null,
       });
     }
