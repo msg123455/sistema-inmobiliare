@@ -62,7 +62,7 @@ const NAV_SECTIONS = [
     icon: Bot,
     basePath: '/agente',
     items: [
-      { label: 'Bandejas por agente', path: '/inbox' },
+      { label: 'Bandeja', path: '/inbox' },
       { label: 'Agentes', path: '/agente/agentes' },
       { label: 'Conocimiento RAG', path: '/agente/conocimiento' },
       { label: 'Configurar IA', path: '/agente/configuracion' },

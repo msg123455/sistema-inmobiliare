@@ -16,7 +16,7 @@ import { agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } fr
 import { correrAgente } from './_core/llm.ts';
 import { debeAvisar, marcaAutorizacion, textoAviso } from './_core/privacidad.ts';
 import { decidirAgente } from './_core/router.ts';
-import { cargarEstado, ctxDe, estadoVacio, guardarEstado } from './_core/state.ts';
+import { cargarEstado, ctxDe, estadoVacio, guardarEstado, olvidarTransitorios } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
 import type { Agente, CtxTool, Entrada } from './_core/protocol.ts';
 import * as wa from './_core/canales/whatsapp.ts';
@@ -224,6 +224,10 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   if (!base.prompt) console.error(`Sin fila AgentePrompt activa para "${estado.agente_activo}" — usando prompt minimo`);
 
   const scratch = ctxDe(estado, estado.agente_activo);
+  // Las claves que trae cargarContexto son FRESCAS de este turno; se mezclan
+  // para que las tools las lean, pero no pueden persistirse (ver
+  // olvidarTransitorios en state.ts).
+  const transitorias = Object.keys(ctxAgenteCargado);
   Object.assign(scratch, ctxAgenteCargado);
 
   // ── 5. Correr el agente ──────────────────────────────────────────────────
@@ -313,6 +317,8 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
       marca(entregado ? 'entregado inline' : 'encolado (entrega inline fallo)');
     }
   }
+
+  olvidarTransitorios(estado, estado.agente_activo, transitorias);
 
   await Promise.all([
     guardarEstado(db, memoriaId, entrada.canal, entrada.tel, estado, {

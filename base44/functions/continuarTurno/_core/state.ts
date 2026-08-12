@@ -127,6 +127,39 @@ export function transferir(estado: Estado, destino: Agente, motivo: string) {
   });
 }
 
+/**
+ * Quita del scratch persistido las claves que vienen de cargarContexto.
+ *
+ * cargarContexto trae datos FRESCOS en cada turno (el catalogo, el contrato, el
+ * extracto). Mezclarlos en estado.ctx[agente] es correcto para que las tools los
+ * lean, pero esas claves NO deben viajar a estado_json: se recargan solas y
+ * guardarlas hincha el estado sin aportar nada.
+ *
+ * Esto no era visible hasta que el catalogo dejo de estar vacio. Con 2703
+ * inmuebles, ventas metia 100 propiedades completas en cada guardado y la
+ * escritura de MemoriaChat empezo a fallar por tamano: el agente respondia pero
+ * la conversacion no quedaba registrada en ningun lado.
+ */
+export function olvidarTransitorios(
+  estado: Estado,
+  agente: Agente,
+  claves: string[],
+): void {
+  const scratch = estado.ctx[agente];
+  if (!scratch) return;
+  for (const k of claves) delete scratch[k];
+}
+
+/**
+ * Tope de seguridad del estado serializado.
+ *
+ * No es el limite de Base44, es un limite nuestro: si el estado crece mas de
+ * esto, algo se esta guardando que no deberia. Vale mas perder el scratch de un
+ * agente que perder la conversacion entera, que es lo que pasaba cuando la
+ * escritura se rechazaba en silencio.
+ */
+const MAX_ESTADO_CHARS = 60_000;
+
 export async function guardarEstado(
   db: Db,
   memoriaId: string | null,
@@ -137,6 +170,18 @@ export async function guardarEstado(
 ): Promise<string | null> {
   estado.historial = estado.historial.slice(-24);
   estado.msg_ids = estado.msg_ids.slice(-20);
+
+  let json = JSON.stringify(estado);
+  if (json.length > MAX_ESTADO_CHARS) {
+    // Se sacrifica el scratch de los agentes, que es recuperable, para salvar
+    // el historial y la identidad, que no lo son. Y se grita: un estado de este
+    // tamano siempre es un bug, no un caso de uso.
+    console.error(
+      `estado_json de ${json.length} chars supera ${MAX_ESTADO_CHARS}: se descarta ctx para no perder la conversacion`,
+    );
+    json = JSON.stringify({ ...estado, ctx: {} });
+  }
+
   return await db.guardar('MemoriaChat', memoriaId, {
     clave: claveDe(canal, tel),
     telefono: String(tel).replace(/\D/g, ''),
@@ -147,7 +192,7 @@ export async function guardarEstado(
     pausada: estado.pausada,
     // Campo indexado: continuarTurno lo consulta en vez de escanear la tabla.
     tiene_turno_pendiente: !!estado.turno_pendiente,
-    estado_json: JSON.stringify(estado),
+    estado_json: json,
     ultimo_mensaje: (extra.ultimo_mensaje || '').slice(0, 1000),
     ultima_respuesta: (extra.ultima_respuesta || '').slice(0, 1000),
     fecha_ultimo_mensaje: new Date().toISOString(),

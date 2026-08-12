@@ -63,7 +63,6 @@ import {
 
 // IA Agente + Lead management
 import Inbox from '@/pages/inbox/Inbox.jsx';
-import BandejaAgentes from '@/pages/inbox/BandejaAgentes.jsx';
 import ContactoDetalle from '@/pages/crm/ContactoDetalle.jsx';
 import AnalyticsLeads from '@/pages/analytics/AnalyticsLeads.jsx';
 import ConfigAgenteIA from '@/pages/agente/ConfigAgente.jsx';
@@ -103,8 +102,11 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Dashboard />} />
 
         {/* Bandeja IA */}
-        <Route path="/inbox" element={<BandejaAgentes />} />
-        <Route path="/inbox/:agente" element={<Inbox />} />
+        {/* Una sola bandeja: para el cliente es UN asistente, y el especialista
+            que atiende es un detalle interno que se muestra como etiqueta. La
+            ruta por agente se conserva redirigiendo, por enlaces guardados. */}
+        <Route path="/inbox" element={<Inbox />} />
+        <Route path="/inbox/:agente" element={<Navigate to="/inbox" replace />} />
 
         {/* CRM */}
         <Route path="/crm" element={<Navigate to="/crm/pipeline" replace />} />

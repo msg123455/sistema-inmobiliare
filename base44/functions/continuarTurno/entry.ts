@@ -10,7 +10,7 @@ import { crearDb } from './_core/db.ts';
 import { encolar, notificarEquipo } from './_core/cola.ts';
 import { agentesAutomaticosActivos, armarSystem, cargarBase, cargarContexto } from './_core/contexto.ts';
 import { correrAgente } from './_core/llm.ts';
-import { cargarEstado, ctxDe, guardarEstado } from './_core/state.ts';
+import { cargarEstado, ctxDe, guardarEstado, olvidarTransitorios } from './_core/state.ts';
 import { toolsDe } from './_core/tools/index.ts';
 import type { CtxTool, Entrada } from './_core/protocol.ts';
 
@@ -82,6 +82,10 @@ async function reanudar(db: ReturnType<typeof crearDb>, anthropicKey: string, fi
   console.log(`RAG[${agente}] ${base.ragChars} chars: ${base.ragTitulos.join(' | ') || '(vacio)'}`);
 
   const scratch = ctxDe(estado, agente);
+  // Las claves que trae cargarContexto son FRESCAS de este turno; se mezclan
+  // para que las tools las lean, pero no pueden persistirse (ver
+  // olvidarTransitorios en state.ts).
+  const transitorias = Object.keys(ctxCargado);
   Object.assign(scratch, ctxCargado);
 
   const ctx: CtxTool = {
@@ -127,6 +131,8 @@ async function reanudar(db: ReturnType<typeof crearDb>, anthropicKey: string, fi
     }
     estado.turno_pendiente = null;
   }
+
+  olvidarTransitorios(estado, estado.agente_activo, transitorias);
 
   await Promise.all([
     guardarEstado(db, memoriaId, canal, tel, estado, { ultima_respuesta: globos.join(' | ') }),

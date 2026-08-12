@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MemoriaChat } from '@/api/base44Client';
 import { callFunction } from '@/lib/backend';
@@ -8,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Bot, MessageCircle, Search, CheckCheck, Phone, Home, Building2, MapPin, DollarSign, CheckCircle2, XCircle, ChevronLeft, Hand, Play, Send, User } from 'lucide-react';
 import { toast } from 'sonner';
-import { NOMBRE_AGENTE, agentePorClave } from '@/lib/agentes';
+import { NOMBRE_AGENTE } from '@/lib/agentes';
 
 function timeAgo(iso) {
   if (!iso) return '';
@@ -81,10 +80,6 @@ function estadoBadge(conv) {
 
 export default function Inbox() {
   const qc = useQueryClient();
-  // La bandeja siempre pertenece a un agente. Sin :agente en la ruta se cae a
-  // recepcion, que es el que recibe lo que todavia no esta ruteado.
-  const { agente: agenteRuta } = useParams();
-  const agente = agentePorClave(agenteRuta);
   const [selectedTel, setSelectedTel] = useState(null);
   const [busqueda, setBusqueda] = useState('');
   const [mensaje, setMensaje] = useState('');
@@ -163,7 +158,6 @@ export default function Inbox() {
         lastRole:     lastMsg?.role    || '',
       };
     })
-    .filter(c => c.agente === agente.clave)
     .filter(c =>
       !busqueda ||
       c.nombre?.toLowerCase().includes(busqueda.toLowerCase()) ||
@@ -179,15 +173,12 @@ export default function Inbox() {
       <div className={`w-full md:w-80 border-r border-border bg-card flex flex-col flex-shrink-0 ${selectedTel ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 md:p-4 border-b border-border space-y-3">
           <div className="flex items-center gap-2">
-            <Link to="/inbox" className="presionable p-1 -ml-1 rounded-lg hover:bg-muted text-muted-foreground" aria-label="Todos los agentes">
-              <ChevronLeft className="w-5 h-5" />
-            </Link>
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-              <agente.icono className="w-4 h-4 text-primary" />
+              <MessageCircle className="w-4 h-4 text-primary" />
             </div>
             <div className="min-w-0">
-              <h2 className="font-semibold text-foreground text-[15px] leading-tight truncate">{agente.nombre}</h2>
-              <p className="text-[11px] text-muted-foreground">{conversaciones.length} en esta bandeja</p>
+              <h2 className="font-semibold text-foreground text-[15px] leading-tight truncate">Bandeja</h2>
+              <p className="text-[11px] text-muted-foreground">{conversaciones.length} conversaciones</p>
             </div>
           </div>
           <div className="relative">
@@ -216,8 +207,8 @@ export default function Inbox() {
           {!isLoading && conversaciones.length === 0 && (
             <div className="p-8 text-center text-muted-foreground text-sm">
               <MessageCircle className="w-8 h-8 mx-auto mb-2 opacity-20" />
-              <p>Sin conversaciones en {agente.nombre}.</p>
-              <p className="mt-1 text-xs">Las conversaciones llegan aquí cuando el router las asigna a este agente.</p>
+              <p>Sin conversaciones todavía.</p>
+              <p className="mt-1 text-xs">Aparecen aquí en cuanto alguien le escriba al asistente.</p>
             </div>
           )}
           {conversaciones.map(conv => (
