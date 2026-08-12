@@ -32,3 +32,6 @@ dist-ssr
 .vite
 .vercel
 base44/.app.jsonc
+
+# Bundle generado por scripts/run-agent-tests.mjs al correr el banco de tests
+scripts/.test-agent-core.bundle.mjs
