@@ -20,10 +20,13 @@ const FUENTE = join(RAIZ, '_core');
 
 // Funciones que importan _core. Las conversacionales necesitan el arbol entero;
 // el seed solo importa prompts.ts.
+// `asistente` es la que atiende de verdad; agenteInbound queda porque Base44 le
+// dejo pegado un artefacto viejo que ejecuta codigo que no esta en el repo.
+// continuarTurno se elimino: retomaba turnos aparcados y ya no se aparca ninguno.
 const CONSUMIDORAS = [
+  { nombre: 'asistente' },
   { nombre: 'agenteInbound' },
   { nombre: 'enviarPendientes' },
-  { nombre: 'continuarTurno' },
   { nombre: 'seedAgentes', archivos: ['prompts.ts'] },
   { nombre: 'configurarDemoVentas', archivos: ['prompts.ts'] },
 ];

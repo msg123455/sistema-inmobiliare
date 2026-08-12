@@ -34,11 +34,23 @@ export const identificarTitular: Tool = {
     });
 
     if (!r.existe) {
+      // Se le dice claro que no aparecio, por decision de la operacion. Antes se
+      // daba un rodeo ("puede que este a nombre de otra persona") para no
+      // confirmar quien esta o no en la base; el rodeo dejaba al cliente sin
+      // entender que tenia que hacer.
+      //
+      // El intercambio es aceptable porque solo revela lo NEGATIVO: que un
+      // documento no es cliente. Nunca al reves, y de ahi no sale ningun dato
+      // de nadie.
+      //
+      // Lo que no cambia: no se le bloquea. Un dato que no cuadra en el sistema
+      // no puede dejar a alguien sin poder reportar que se le inundo la cocina.
       return {
         encontrado: false,
-        instruccion: 'No aparece con ese numero. NO le digas que no existe en la base: pudo escribirlo mal o '
-          + 'estar a nombre de otra persona. Pidele que lo confirme una vez, y si vuelve a no aparecer sigue '
-          + 'con el tramite pidiendole los datos, sin bloquearlo.',
+        instruccion: 'No encontraste ese documento en la base. Dilo claro y pidele que lo confirme: '
+          + '"No encontre ese numero en el sistema, me confirmas el documento del titular?". '
+          + 'Si te lo repite y sigue sin aparecer, NO insistas una tercera vez ni lo trates como culpa suya: '
+          + 'sigue con el tramite pidiendole los datos a mano y deja constancia de que no se pudo identificar.',
       };
     }
 

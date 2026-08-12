@@ -692,7 +692,7 @@ var identificarTitular = {
     if (!r.existe) {
       return {
         encontrado: false,
-        instruccion: "No aparece con ese numero. NO le digas que no existe en la base: pudo escribirlo mal o estar a nombre de otra persona. Pidele que lo confirme una vez, y si vuelve a no aparecer sigue con el tramite pidiendole los datos, sin bloquearlo."
+        instruccion: 'No encontraste ese documento en la base. Dilo claro y pidele que lo confirme: "No encontre ese numero en el sistema, me confirmas el documento del titular?". Si te lo repite y sigue sin aparecer, NO insistas una tercera vez ni lo trates como culpa suya: sigue con el tramite pidiendole los datos a mano y deja constancia de que no se pudo identificar.'
       };
     }
     if (!r.coincide_telefono) {

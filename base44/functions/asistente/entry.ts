@@ -203,11 +203,11 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
 
   estado.historial.push({ role: 'user', content: entrada.texto, ts: new Date().toISOString() });
 
-  // Si habia un turno aparcado y el cliente vuelve a escribir, el turno viejo
-  // queda obsoleto: se descarta y se arranca con el historial actualizado. Sin
-  // esto, continuarTurno respondia a un mensaje que el cliente ya reemplazo.
+  // Los turnos ya no se aparcan (ver llm.ts): el agente siempre termina
+  // hablando. Esto limpia lo que quedo aparcado antes de ese cambio, para que
+  // una conversacion vieja no arrastre un turno a medias que nadie va a retomar.
   if (estado.turno_pendiente) {
-    console.log('turno pendiente descartado: llego mensaje nuevo del cliente');
+    console.log('turno aparcado de la version anterior: se descarta');
     estado.turno_pendiente = null;
   }
 
@@ -288,7 +288,7 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     efectos: { transferir: null, escalado: null, notificar: [] },
   };
 
-  const mensajes = estado.turno_pendiente?.mensajes ?? historialParaModelo(estado);
+  const mensajes = historialParaModelo(estado);
   const res = await correrAgente({
     apiKey: env.anthropicKey,
     modelos: [String(base.prompt?.modelo || MODELO_PRIMARIO), MODELO_FALLBACK],
@@ -301,26 +301,18 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   });
   marca(`agente corrio (${res.llamadas} llamada${res.llamadas === 1 ? '' : 's'} al modelo)`);
 
-  // ── 6. Turno pendiente: lo reanuda el cron continuarTurno ────────────────
-  const continuaciones = estado.turno_pendiente?.continuaciones ?? 0;
-  if (res.pendiente && continuaciones < 2) {
-    estado.turno_pendiente = {
-      mensajes: res.pendiente.mensajes,
-      continuaciones: continuaciones + 1,
-      agente: estado.agente_activo,
-    };
-  } else {
-    if (res.pendiente) {
-      // Se agotaron las continuaciones: escalar en vez de dejar al cliente colgado.
-      console.error('Presupuesto de continuaciones agotado — escalando');
-      estado.pausada = true;
-      ctx.efectos.notificar.push(
-        `El agente ${estado.agente_activo} no logro cerrar el turno tras 2 continuaciones.\n` +
-        `Cliente: wa.me/${entrada.tel}\nRevisar desde la Bandeja.`,
-      );
-    }
-    estado.turno_pendiente = null;
-  }
+  // Ya no hay paso de "aparcar el turno".
+  //
+  // El turno se guardaba en estado.turno_pendiente y lo retomaba el cron
+  // continuarTurno. Ese cron no existe: Base44 deshabilito las automatizaciones
+  // legacy en esta app, y eran justamente las que hacian fallar TODOS los
+  // despliegues, incluido el de esta funcion.
+  //
+  // Sin cron, aparcar era quedarse mudo para siempre. Le paso a un cliente real:
+  // dio su documento, dio su nombre, y no volvio a recibir nada. Ahora correrAgente
+  // garantiza que el turno siempre termina con algo que decir (ver llm.ts), asi
+  // que no hay nada que aparcar.
+  estado.turno_pendiente = null;
 
   // ── 7. Park: encolar + guardar estado + retornar ─────────────────────────
   const globos = res.globos.filter(Boolean);

@@ -1730,7 +1730,7 @@ var identificarTitular = {
     if (!r.existe) {
       return {
         encontrado: false,
-        instruccion: "No aparece con ese numero. NO le digas que no existe en la base: pudo escribirlo mal o estar a nombre de otra persona. Pidele que lo confirme una vez, y si vuelve a no aparecer sigue con el tramite pidiendole los datos, sin bloquearlo."
+        instruccion: 'No encontraste ese documento en la base. Dilo claro y pidele que lo confirme: "No encontre ese numero en el sistema, me confirmas el documento del titular?". Si te lo repite y sigue sin aparecer, NO insistas una tercera vez ni lo trates como culpa suya: sigue con el tramite pidiendole los datos a mano y deja constancia de que no se pudo identificar.'
       };
     }
     if (!r.coincide_telefono) {
@@ -3293,7 +3293,7 @@ async function procesar(entrada, env, agenteBot = null) {
   const esPrimerTurno = estado.historial.length === 0;
   estado.historial.push({ role: "user", content: entrada.texto, ts: (/* @__PURE__ */ new Date()).toISOString() });
   if (estado.turno_pendiente) {
-    console.log("turno pendiente descartado: llego mensaje nuevo del cliente");
+    console.log("turno aparcado de la version anterior: se descarta");
     estado.turno_pendiente = null;
   }
   if (estado.pausada) {
@@ -3344,7 +3344,7 @@ async function procesar(entrada, env, agenteBot = null) {
     salida: { globos: [], finTurno: false },
     efectos: { transferir: null, escalado: null, notificar: [] }
   };
-  const mensajes = estado.turno_pendiente?.mensajes ?? historialParaModelo(estado);
+  const mensajes = historialParaModelo(estado);
   const res = await correrAgente({
     apiKey: env.anthropicKey,
     modelos: [String(base.prompt?.modelo || MODELO_PRIMARIO), MODELO_FALLBACK],
@@ -3356,25 +3356,7 @@ async function procesar(entrada, env, agenteBot = null) {
     effort: base.prompt?.effort || "low"
   });
   marca(`agente corrio (${res.llamadas} llamada${res.llamadas === 1 ? "" : "s"} al modelo)`);
-  const continuaciones = estado.turno_pendiente?.continuaciones ?? 0;
-  if (res.pendiente && continuaciones < 2) {
-    estado.turno_pendiente = {
-      mensajes: res.pendiente.mensajes,
-      continuaciones: continuaciones + 1,
-      agente: estado.agente_activo
-    };
-  } else {
-    if (res.pendiente) {
-      console.error("Presupuesto de continuaciones agotado — escalando");
-      estado.pausada = true;
-      ctx.efectos.notificar.push(
-        `El agente ${estado.agente_activo} no logro cerrar el turno tras 2 continuaciones.
-Cliente: wa.me/${entrada.tel}
-Revisar desde la Bandeja.`
-      );
-    }
-    estado.turno_pendiente = null;
-  }
+  estado.turno_pendiente = null;
   const globos = res.globos.filter(Boolean);
   if (globos.length && debeAvisar(esPrimerTurno, contacto)) {
     globos.unshift(textoAviso(base.config));

@@ -50,7 +50,8 @@ const RAIZ = 'base44/functions';
 
 // Funciones cuyo grafo pasa del limite y hay que entregar empaquetadas.
 // Las livianas no lo necesitan: un bundle innecesario solo estorba al depurar.
-const EMPAQUETAR = ['agenteInbound', 'continuarTurno', 'enviarPendientes'];
+// continuarTurno se elimino: retomaba turnos aparcados y ya no se aparca ninguno.
+const EMPAQUETAR = ['agenteInbound', 'asistente', 'enviarPendientes'];
 
 const args = process.argv.slice(2);
 const soloCheck = args.includes('--check');
