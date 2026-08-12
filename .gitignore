@@ -35,3 +35,12 @@ base44/.app.jsonc
 
 # Bundle generado por scripts/run-agent-tests.mjs al correr el banco de tests
 scripts/.test-agent-core.bundle.mjs
+
+# Datos de clientes.
+# Los listados de codigos de barras traen nombre, correo y documento de cada
+# inquilino: el envio de agosto son 596 personas reales. Eso no entra al
+# repositorio ni aunque sirva de ejemplo. Las pruebas usan datos sinteticos.
+*.csv
+*.xlsx
+*.xls
+directorio-*.json
