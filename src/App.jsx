@@ -29,6 +29,7 @@ import Reparaciones from '@/pages/operacion/Reparaciones.jsx';
 import Avaluos from '@/pages/operacion/Avaluos.jsx';
 import PQR from '@/pages/operacion/PQR.jsx';
 import Matriculas from '@/pages/operacion/Matriculas.jsx';
+import Asistidos from '@/pages/operacion/Asistidos.jsx';
 
 // Cartera
 import Recaudo from '@/pages/cartera/Recaudo.jsx';
@@ -124,6 +125,7 @@ const AuthenticatedApp = () => {
         <Route path="/operacion/avaluos" element={<Avaluos />} />
         <Route path="/operacion/pqr" element={<PQR />} />
         <Route path="/operacion/matriculas" element={<Matriculas />} />
+        <Route path="/operacion/asistidos" element={<Asistidos />} />
 
         {/* Cartera */}
         <Route path="/cartera/recaudo" element={<Recaudo />} />

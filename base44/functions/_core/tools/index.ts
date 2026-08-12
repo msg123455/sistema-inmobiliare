@@ -6,6 +6,7 @@
 // llamarla.
 
 import type { Agente, Tool } from '../protocol.ts';
+import { ASISTIDOS } from './asistidos.ts';
 import { COMUNES, enviarMenu } from './comunes.ts';
 import { identificarTitular } from './identificacion.ts';
 import { VENTAS } from './ventas.ts';
@@ -24,16 +25,23 @@ import { MATRICULA } from './matricula.ts';
 // teclear cedulas ajenas.
 const IDENT = { identificar_titular: identificarTitular };
 
+// El historial de solicitudes va con los mismos tramites que IDENT, mas
+// recepcion: es la puerta donde mas llega el "es sobre lo de la otra vez", y sin
+// esto tiene que volver a preguntarlo todo. Busca por el telefono de la entrada,
+// que solo escribe el servidor, asi que no divulga nada de otra persona.
+// Ventas y consignacion quedan fuera: hablan con gente que aun no ha pedido nada.
+const HIST = ASISTIDOS;
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
-  recepcion:     { enviar_menu: enviarMenu },
+  recepcion:     { enviar_menu: enviarMenu, ...HIST },
   ventas:        VENTAS,
   consignacion:  CONSIGNACION,
   cartera:       CARTERA,
-  mantenimiento: { ...MANTENIMIENTO, ...IDENT },
-  avaluos:       { ...AVALUOS, ...IDENT },
-  pqr:           { ...PQR, ...IDENT },
-  matricula:     { ...MATRICULA, ...IDENT },
+  mantenimiento: { ...MANTENIMIENTO, ...IDENT, ...HIST },
+  avaluos:       { ...AVALUOS, ...IDENT, ...HIST },
+  pqr:           { ...PQR, ...IDENT, ...HIST },
+  matricula:     { ...MATRICULA, ...IDENT, ...HIST },
 };
 
 export function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {

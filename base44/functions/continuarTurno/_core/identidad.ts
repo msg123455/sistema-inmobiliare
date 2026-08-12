@@ -147,13 +147,25 @@ export async function verificar(
   const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
   let ok = false;
   let sujeto: string | undefined;
+  // QUE rol quedo verificado, no solo que hubo coincidencia. Sin esto la
+  // identidad se poblaba con los dos ids a la vez (ver mas abajo).
+  let rolArrendatario = false;
+  let rolPropietario = false;
 
   if (tipo === 'cedula_ultimos4') {
     const dado = soloDigitos(valor).slice(-4);
-    for (const p of [arrendatario, propietario]) {
+    for (const [rol, p] of [['arrendatario', arrendatario], ['propietario', propietario]] as const) {
       if (!p) continue;
-      const real = soloDigitos(p.numero_documento).slice(-4);
-      if (dado.length === 4 && real.length === 4 && dado === real) { ok = true; sujeto = p.id; break; }
+      // Las dos entidades nombran el documento distinto: Arrendatario lo guarda
+      // en numero_documento y Propietario en cedula_nit. Leer solo el primero
+      // dejaba a TODO propietario sin poder verificarse: daba bien sus ultimos 4
+      // tres veces y quedaba bloqueado una hora, porque el lado real era ''.
+      const real = soloDigitos(p.numero_documento || p.cedula_nit).slice(-4);
+      if (dado.length === 4 && real.length === 4 && dado === real) {
+        ok = true;
+        sujeto = p.id;
+        if (rol === 'arrendatario') rolArrendatario = true; else rolPropietario = true;
+      }
     }
   } else {
     const dado = String(valor || '').trim().toUpperCase();
@@ -171,9 +183,23 @@ export async function verificar(
       ...identidadVacia(),
       verificado: true,
       metodo: tipo,
-      arrendatario_id: arrendatario?.id ?? null,
-      propietario_id: propietario?.id ?? null,
-      contrato_id: contrato?.id ?? null,
+      // SOLO el rol cuyo documento coincidio. Antes se escribian los dos ids
+      // pasara lo que pasara, y por la rama de numero_solicitud se escribian sin
+      // que coincidiera ninguno.
+      //
+      // Es una fuga, no una imprecision: un telefono de oficina o familiar puede
+      // figurar a la vez en Arrendatario A y en Propietario B, que son personas
+      // distintas. A daba sus ultimos 4, quedaba con propietario_id = B, y podia
+      // pedir el certificado tributario de B y abrir sus liquidaciones —
+      // ingresos brutos, comision y neto a pagar.
+      //
+      // Si la misma persona es las dos cosas, su documento coincide en las dos
+      // filas y el bucle de arriba marca los dos roles. Ese caso sigue andando.
+      arrendatario_id: rolArrendatario ? (arrendatario?.id ?? null) : null,
+      propietario_id: rolPropietario ? (propietario?.id ?? null) : null,
+      // El contrato es del arrendatario. Un propietario verificado no hereda el
+      // contrato de quien le arrienda.
+      contrato_id: rolArrendatario ? (contrato?.id ?? null) : null,
       verificado_en: ahora.toISOString(),
       expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 3600_000).toISOString(),
       intentos: 0,

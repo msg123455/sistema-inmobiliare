@@ -43,6 +43,7 @@ const NAV_SECTIONS = [
       { label: 'Avalúos', path: '/operacion/avaluos' },
       { label: 'PQR', path: '/operacion/pqr' },
       { label: 'Matrículas', path: '/operacion/matriculas' },
+      { label: 'Asistidos', path: '/operacion/asistidos' },
     ],
   },
   {
@@ -117,6 +118,8 @@ const COMERCIAL_PATHS = [
   // y recaudo son plata del negocio y van por AdminOnly.
   '/operacion/consignaciones', '/operacion/reparaciones', '/operacion/avaluos',
   '/operacion/pqr', '/operacion/matriculas',
+  // El broker es justamente quien presiona el boton de 'yo lo atendi'.
+  '/operacion/asistidos',
   '/configuracion',
 ];
 

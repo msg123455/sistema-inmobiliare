@@ -22,7 +22,7 @@ La frase que resume el encargo, textual del documento:
 |---|---|---|
 | 1 | Consignar un inmueble | construido |
 | 2 | Buscar un inmueble | construido |
-| 3 | Pagos / estado de cuenta | construido, falta certificados |
+| 3 | Pagos / estado de cuenta | construido |
 | 4 | Solicitar una reparación | construido |
 | 5 | Solicitar un avalúo | construido, sin tarifario |
 | 6 | Inquietudes | construido |
@@ -132,9 +132,11 @@ mensaje si no encuentra.
 **Estado:** estado de cuenta y código de barras construidos, con verificación por los
 últimos 4 de la cédula. Tres fallos bloquean una hora.
 
-**Pendiente:** **el certificado de propietario no tiene herramienta.** La tabla
-`CertificadoPropietario` existe y la pantalla de Envíos la usa, pero el agente no puede
-entregarlo. Falta también la política de mora, acuerdos y condonaciones.
+**Certificado de propietario: construido.** Va por enlace al portal, nunca por chat, y
+exige identidad verificada. Sin `propietario_id` no consulta: un filtro vacío en Base44 no
+filtra por nadie y habría devuelto los certificados de otros propietarios.
+
+**Pendiente:** la política de mora, acuerdos y condonaciones.
 
 ---
 
@@ -193,8 +195,11 @@ confirmar no filtra, leer sí.
 Campos: id de orden · broker asignado · subestado (abierta, cerrada) · nombre del
 solicitante. Debe sincronizarse con el histórico de inquietudes y reparaciones.
 
-**No construida.** Hoy `escalar_a_humano` crea una `Tarea`, que es la mitad del problema:
-queda registrado que hay algo pendiente, pero no hay botón de "yo lo atendí" ni cierre.
+**Construida** como `OrdenAsistencia`, entidad propia y no un campo en `Tarea`: `Tarea` es
+la agenda personal, y aquí el hecho es *quién atendió a quién, sobre qué solicitud y cómo
+quedó*. Referencia el registro de origen en vez de copiar su estado, porque copiarlo
+obliga a cerrar dos veces y garantiza que algún día las dos bases digan cosas distintas.
+El botón está en Operación → Asistidos, y lo que nadie ha tocado aparece en la campana.
 
 ### HISTORIAL DE REPARACIONES E INQUIETUDES POR DOCUMENTO
 
@@ -227,12 +232,7 @@ correcto pero no es servicio. Faltan: mora y acuerdos de pago · quién paga cad
 y en qué tiempos · tarifario de avalúos · comisiones de administración · documentos que
 exige la matrícula.
 
-**3 · Certificado de propietario.** El flujo 4.3 no tiene herramienta.
-
-**4 · Control de asistidos.** Sin esto no se sabe si alguien atendió lo que el agente
-escaló.
-
-**5 · El patrón de URL de la web.** Una dirección de ejemplo permite derivar el enlace de
+**3 · El patrón de URL de la web.** Una dirección de ejemplo permite derivar el enlace de
 la ficha de los 2.703 inmuebles.
 
 ---

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { toolsDe } from '../base44/functions/_core/tools/index.ts';
 import { agentesAutomaticosActivos, seleccionarRag } from '../base44/functions/_core/contexto.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from '../base44/functions/_core/prompts.ts';
 import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
@@ -879,6 +880,78 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   const vacio = await consultarHistorialSolicitudes.ejecutar({}, { ...c, db: { list: async () => [] } });
   assert.equal(vacio.total, 0);
   assert.match(vacio.instruccion, /otro numero/);
+}
+
+// ── El registro: que las tools LLEGUEN a un agente ───────────────────────────
+//
+// Este bloque existe porque su ausencia dejo pasar el fallo real. Una tool se
+// escribio entera, se probo entera llamando a `.ejecutar` por su export... y no
+// se registro en tools/index.ts. El banco daba OK con la funcionalidad
+// desconectada, porque llamar al export es justo el camino que sigue andando
+// cuando ningun agente la recibe.
+//
+// Probar la tool no es probar que el agente la tenga. Son dos cosas.
+{
+  const conHistorial = ['recepcion', 'mantenimiento', 'avaluos', 'pqr', 'matricula'];
+  for (const a of conHistorial) {
+    assert.ok(
+      'consultar_historial_solicitudes' in toolsDe(a),
+      `${a} no recibe consultar_historial_solicitudes: la tool existe pero no la tiene nadie`,
+    );
+  }
+  // Ventas y consignacion hablan con gente que todavia no ha pedido nada. Que no
+  // la tengan es la decision, no un olvido: se afirma para que quitarla sea un
+  // acto deliberado y no un descuido silencioso.
+  for (const a of ['ventas', 'consignacion']) {
+    assert.ok(!('consultar_historial_solicitudes' in toolsDe(a)), `${a} no deberia tenerla`);
+  }
+
+  assert.ok(
+    'enviar_certificado_propietario' in toolsDe('cartera'),
+    'cartera no recibe enviar_certificado_propietario',
+  );
+  // Es documento de propietarios y vive en pagos: ningun otro agente lo entrega.
+  for (const a of ['ventas', 'mantenimiento', 'pqr']) {
+    assert.ok(!('enviar_certificado_propietario' in toolsDe(a)), `${a} no deberia entregar certificados`);
+  }
+
+  // La frontera estructural que sostiene todo el diseno: cartera es INCAPAZ de
+  // calificar un lead porque no tiene la herramienta, no porque el prompt se lo
+  // pida.
+  assert.ok(!('calificar_lead' in toolsDe('cartera')), 'cartera no puede calificar leads');
+  assert.ok('calificar_lead' in toolsDe('ventas'), 'ventas si califica');
+}
+
+// ── Identidad: solo se puebla el rol que de verdad coincidio ─────────────────
+{
+  const doc = (n) => ({ id: n, numero_documento: `100200${n}` });
+
+  // Un telefono compartido (oficina, familia) figura en Arrendatario A y en
+  // Propietario B, que son personas distintas. A se verifica con SU cedula y no
+  // puede quedar con el propietario_id de B: con eso pedia el certificado
+  // tributario de B y abria sus liquidaciones.
+  assert.notEqual(
+    doc('A').numero_documento.slice(-4),
+    doc('B').numero_documento.slice(-4),
+    'el escenario exige documentos distintos',
+  );
+
+  const fuente = readFileSync('base44/functions/_core/identidad.ts', 'utf8');
+  assert.match(
+    fuente,
+    /arrendatario_id: rolArrendatario \?/,
+    'verificar() debe poblar arrendatario_id solo si coincidio ese rol',
+  );
+  assert.match(
+    fuente,
+    /propietario_id: rolPropietario \?/,
+    'verificar() debe poblar propietario_id solo si coincidio ese rol',
+  );
+  assert.match(
+    fuente,
+    /p\.numero_documento \|\| p\.cedula_nit/,
+    'Propietario guarda el documento en cedula_nit: sin esto ningun propietario puede verificarse',
+  );
 }
 
 console.log('agent-core: OK');

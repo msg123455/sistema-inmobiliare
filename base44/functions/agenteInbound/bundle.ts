@@ -312,8 +312,11 @@ ORDEN OBLIGATORIO
 
 POR CHAT Y POR PORTAL
 - Saldo, proximo vencimiento y si esta al dia: por chat, despues de verificar.
-- Estado detallado, historial o documento: usa enviar_link_portal.
+- Estado detallado o historial: usa enviar_link_portal.
 - Recibo del mes para banco: usa enviar_codigo_barras.
+- Certificado de propietario (el anual, para renta): usa enviar_certificado_propietario.
+  Es solo de propietarios; a un arrendatario no le sirve. Si no dice de que ano lo
+  quiere, pasa null y se entrega el ultimo que exista.
 
 La politica de mora, acuerdos y condonaciones sigue pendiente mientras no aparezca en el
 conocimiento aprobado. Nunca negocies plazos, intereses, descuentos ni fechas de corte.
@@ -351,6 +354,10 @@ FLUJO NORMAL
 2. Averigua que se dano, desde cuando y en que parte del inmueble. Una pregunta por mensaje.
 3. Llama a registrar_reparacion y da el radicado confirmado.
 4. Si recibe una foto despues de radicar, usa adjuntar_evidencia.
+
+Si dice "es sobre lo de la otra vez", pregunta como va algo que ya reporto, o insiste con
+un tema, llama a consultar_historial_solicitudes ANTES de pedirle nada: ya lo conto una
+vez y volver a preguntarselo es exactamente lo que veniamos a quitar.
 
 La politica de quien paga y el monto desde el que se consulta al propietario siguen
 pendientes mientras no aparezcan en el conocimiento aprobado. No asignes responsabilidad,
@@ -1140,67 +1147,6 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   });
 }
 
-// base44/functions/agenteInbound/_core/brief.ts
-var ETIQUETAS = {
-  operacion: "Operacion",
-  tipo_prop: "Tipo de inmueble",
-  tipo_inmueble: "Tipo de inmueble",
-  zona: "Zona",
-  barrio: "Zona",
-  presupuesto: "Presupuesto",
-  habitaciones: "Habitaciones",
-  timing: "Cuando se muda",
-  forma_pago: "Forma de pago",
-  decide_solo: "Decide solo",
-  otra_inmobiliaria: "Ya trabaja con otra inmobiliaria",
-  direccion_inmueble: "Direccion del inmueble",
-  documento: "Documento",
-  email: "Correo"
-};
-var fmt = (v) => {
-  if (typeof v === "boolean") return v ? "si" : "no";
-  if (typeof v === "number") {
-    return v >= 1e3 ? new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(v).replace(/\s+/g, "") : String(v);
-  }
-  return String(v ?? "").trim();
-};
-function briefLead(estado, tel, canal, extra = []) {
-  const lineas = [];
-  const nombre = String(estado.compartido.nombre || "").trim();
-  lineas.push(nombre ? `${nombre} — wa.me/${tel}` : `Sin nombre — wa.me/${tel}`);
-  lineas.push(`Canal: ${canal}`);
-  const ruta = (estado.agente_historial || []).map((s) => s.agente);
-  if (ruta.length > 1) lineas.push(`Paso por: ${ruta.join(" -> ")}`);
-  const i = estado.identidad;
-  if (i?.verificado && i.expira && new Date(i.expira) > /* @__PURE__ */ new Date()) {
-    lineas.push("Identidad verificada: SI");
-  }
-  const datos = {
-    ...estado.compartido || {},
-    ...estado.ctx?.[estado.agente_activo]?.datos || {}
-  };
-  const relevantes = [];
-  for (const [clave2, etiqueta] of Object.entries(ETIQUETAS)) {
-    const v = datos[clave2];
-    if (v === void 0 || v === null || v === "") continue;
-    const texto = fmt(v);
-    if (texto) relevantes.push(`  ${etiqueta}: ${texto}`);
-  }
-  if (relevantes.length) {
-    lineas.push("", "LO QUE YA CONTO:", ...relevantes);
-  }
-  const ctxAg = estado.ctx?.[estado.agente_activo] || {};
-  if (ctxAg.temperatura) {
-    lineas.push("", `Calificacion: ${String(ctxAg.temperatura).toUpperCase()}${ctxAg.score ? ` (${ctxAg.score}/100)` : ""}`);
-  }
-  if (extra.length) lineas.push("", ...extra);
-  const ultimo = [...estado.historial || []].reverse().find((m) => m.role === "user");
-  if (ultimo?.content) {
-    lineas.push("", `Ultimo mensaje: "${String(ultimo.content).slice(0, 200)}"`);
-  }
-  return lineas.join("\n");
-}
-
 // base44/functions/agenteInbound/_core/tools/asistidos.ts
 var PRIORIDAD = {
   baja: "Baja",
@@ -1274,6 +1220,70 @@ var consultarHistorialSolicitudes = {
     };
   }
 };
+var ASISTIDOS = {
+  consultar_historial_solicitudes: consultarHistorialSolicitudes
+};
+
+// base44/functions/agenteInbound/_core/brief.ts
+var ETIQUETAS = {
+  operacion: "Operacion",
+  tipo_prop: "Tipo de inmueble",
+  tipo_inmueble: "Tipo de inmueble",
+  zona: "Zona",
+  barrio: "Zona",
+  presupuesto: "Presupuesto",
+  habitaciones: "Habitaciones",
+  timing: "Cuando se muda",
+  forma_pago: "Forma de pago",
+  decide_solo: "Decide solo",
+  otra_inmobiliaria: "Ya trabaja con otra inmobiliaria",
+  direccion_inmueble: "Direccion del inmueble",
+  documento: "Documento",
+  email: "Correo"
+};
+var fmt = (v) => {
+  if (typeof v === "boolean") return v ? "si" : "no";
+  if (typeof v === "number") {
+    return v >= 1e3 ? new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(v).replace(/\s+/g, "") : String(v);
+  }
+  return String(v ?? "").trim();
+};
+function briefLead(estado, tel, canal, extra = []) {
+  const lineas = [];
+  const nombre = String(estado.compartido.nombre || "").trim();
+  lineas.push(nombre ? `${nombre} — wa.me/${tel}` : `Sin nombre — wa.me/${tel}`);
+  lineas.push(`Canal: ${canal}`);
+  const ruta = (estado.agente_historial || []).map((s) => s.agente);
+  if (ruta.length > 1) lineas.push(`Paso por: ${ruta.join(" -> ")}`);
+  const i = estado.identidad;
+  if (i?.verificado && i.expira && new Date(i.expira) > /* @__PURE__ */ new Date()) {
+    lineas.push("Identidad verificada: SI");
+  }
+  const datos = {
+    ...estado.compartido || {},
+    ...estado.ctx?.[estado.agente_activo]?.datos || {}
+  };
+  const relevantes = [];
+  for (const [clave2, etiqueta] of Object.entries(ETIQUETAS)) {
+    const v = datos[clave2];
+    if (v === void 0 || v === null || v === "") continue;
+    const texto = fmt(v);
+    if (texto) relevantes.push(`  ${etiqueta}: ${texto}`);
+  }
+  if (relevantes.length) {
+    lineas.push("", "LO QUE YA CONTO:", ...relevantes);
+  }
+  const ctxAg = estado.ctx?.[estado.agente_activo] || {};
+  if (ctxAg.temperatura) {
+    lineas.push("", `Calificacion: ${String(ctxAg.temperatura).toUpperCase()}${ctxAg.score ? ` (${ctxAg.score}/100)` : ""}`);
+  }
+  if (extra.length) lineas.push("", ...extra);
+  const ultimo = [...estado.historial || []].reverse().find((m) => m.role === "user");
+  if (ultimo?.content) {
+    lineas.push("", `Ultimo mensaje: "${String(ultimo.content).slice(0, 200)}"`);
+  }
+  return lineas.join("\n");
+}
 
 // base44/functions/agenteInbound/_core/tools/comunes.ts
 var COMPARTIDOS = /* @__PURE__ */ new Set(["nombre", "email", "documento", "direccion_inmueble"]);
@@ -1495,15 +1505,18 @@ async function verificar(db, estado, entrada, tipo, valor) {
   const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
   let ok = false;
   let sujeto;
+  let rolArrendatario = false;
+  let rolPropietario = false;
   if (tipo === "cedula_ultimos4") {
     const dado = soloDigitos(valor).slice(-4);
-    for (const p of [arrendatario, propietario]) {
+    for (const [rol, p] of [["arrendatario", arrendatario], ["propietario", propietario]]) {
       if (!p) continue;
-      const real = soloDigitos(p.numero_documento).slice(-4);
+      const real = soloDigitos(p.numero_documento || p.cedula_nit).slice(-4);
       if (dado.length === 4 && real.length === 4 && dado === real) {
         ok = true;
         sujeto = p.id;
-        break;
+        if (rol === "arrendatario") rolArrendatario = true;
+        else rolPropietario = true;
       }
     }
   } else {
@@ -1523,9 +1536,23 @@ async function verificar(db, estado, entrada, tipo, valor) {
       ...identidadVacia(),
       verificado: true,
       metodo: tipo,
-      arrendatario_id: arrendatario?.id ?? null,
-      propietario_id: propietario?.id ?? null,
-      contrato_id: contrato?.id ?? null,
+      // SOLO el rol cuyo documento coincidio. Antes se escribian los dos ids
+      // pasara lo que pasara, y por la rama de numero_solicitud se escribian sin
+      // que coincidiera ninguno.
+      //
+      // Es una fuga, no una imprecision: un telefono de oficina o familiar puede
+      // figurar a la vez en Arrendatario A y en Propietario B, que son personas
+      // distintas. A daba sus ultimos 4, quedaba con propietario_id = B, y podia
+      // pedir el certificado tributario de B y abrir sus liquidaciones —
+      // ingresos brutos, comision y neto a pagar.
+      //
+      // Si la misma persona es las dos cosas, su documento coincide en las dos
+      // filas y el bucle de arriba marca los dos roles. Ese caso sigue andando.
+      arrendatario_id: rolArrendatario ? arrendatario?.id ?? null : null,
+      propietario_id: rolPropietario ? propietario?.id ?? null : null,
+      // El contrato es del arrendatario. Un propietario verificado no hereda el
+      // contrato de quien le arrienda.
+      contrato_id: rolArrendatario ? contrato?.id ?? null : null,
       verificado_en: ahora.toISOString(),
       expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 36e5).toISOString(),
       intentos: 0,
@@ -2722,15 +2749,16 @@ var MATRICULA = {
 
 // base44/functions/agenteInbound/_core/tools/index.ts
 var IDENT = { identificar_titular: identificarTitular };
+var HIST = ASISTIDOS;
 var EXTRA = {
-  recepcion: { enviar_menu: enviarMenu },
+  recepcion: { enviar_menu: enviarMenu, ...HIST },
   ventas: VENTAS,
   consignacion: CONSIGNACION,
   cartera: CARTERA,
-  mantenimiento: { ...MANTENIMIENTO, ...IDENT },
-  avaluos: { ...AVALUOS, ...IDENT },
-  pqr: { ...PQR, ...IDENT },
-  matricula: { ...MATRICULA, ...IDENT }
+  mantenimiento: { ...MANTENIMIENTO, ...IDENT, ...HIST },
+  avaluos: { ...AVALUOS, ...IDENT, ...HIST },
+  pqr: { ...PQR, ...IDENT, ...HIST },
+  matricula: { ...MATRICULA, ...IDENT, ...HIST }
 };
 function toolsDe(agente, habilitadas) {
   const todas = { ...COMUNES, ...EXTRA[agente] || {} };
