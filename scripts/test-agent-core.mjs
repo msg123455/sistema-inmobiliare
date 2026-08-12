@@ -26,7 +26,9 @@ import {
 import * as telegram from '../base44/functions/_core/canales/telegram.ts';
 
 assert.equal(Object.keys(PROMPTS).length, 8, 'deben existir exactamente ocho agentes');
-assert.match(IDENTIDAD_MARCA, /Asistente Inmobiliare/);
+assert.match(IDENTIDAD_MARCA, /Te llamas DIANA/, 'la identidad publica es Diana');
+// Nombres de asesores reales del equipo y del tenant anterior. Diana es el nombre
+// del asistente y va aparte: lo que no puede hacer es adoptar el de una persona.
 assert.doesNotMatch(`${IDENTIDAD_MARCA}\n${Object.values(PROMPTS).join('\n')}`, /Valentina|Camila|Andres|Daniela|Julian|Mauricio/);
 for (const [agente, prompt] of Object.entries(PROMPTS)) {
   assert.ok(prompt.split('\n').length <= 80, `${agente} supera 80 lineas`);

@@ -285,7 +285,7 @@ const CARGADORES: Record<Agente, Cargador> = {
   // documento del mensaje se resuelve igual que en mantenimiento.
   avaluos: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
   pqr: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
-  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
 };
 
 export async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
@@ -346,6 +346,12 @@ export function armarSystem(
       'Despues preguntale que necesita.',
       'PROHIBIDO pedirle el nombre, la direccion o el telefono: los tienes aqui arriba.',
       'PROHIBIDO decirle que no aparece o pedirle que confirme el documento: SI aparece.',
+      '',
+      'SU IDENTIDAD YA ESTA VERIFICADA: dio el documento correcto y escribe desde el',
+      'telefono registrado, que son dos factores. NO llames a verificar_identidad y NO',
+      'le pidas "los ultimos 4 digitos de la cedula": serian los ultimos 4 del mismo',
+      'numero que acaba de dictar, o sea el mismo factor dos veces. Sigue derecho al',
+      'tramite.',
     ].join('\n'));
   }
 
