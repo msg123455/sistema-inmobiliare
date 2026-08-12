@@ -1,0 +1,137 @@
+{
+  // CONTROL DE ASISTIDOS.
+  //
+  // POR QUE ES UNA ENTIDAD Y NO UN CAMPO EN Tarea: Tarea es la agenda personal
+  // (titulo + fecha_limite obligatoria + completada). Aqui el hecho que se
+  // registra no es "algo que debo hacer para el jueves", sino "quien atendio a
+  // quien, sobre que solicitud, y como quedo". No tiene fecha limite propia (el
+  // plazo vive en la solicitud: Reparacion.fecha_limite, PQR.fecha_limite_legal),
+  // se consulta por persona y no por asignado, y es rastro de auditoria: la
+  // pantalla de Tareas deja borrar filas, y esto no se puede borrar.
+  //
+  // POR QUE NO DUPLICA A Reparacion NI A PQR: Reparacion.estado dice como va el
+  // ARREGLO; este `estado` dice como va la ATENCION a quien lo pidio. Son dos
+  // hechos distintos y hoy solo existia el primero: una reparacion podia estar
+  // En_proceso con el tecnico mientras nadie le habia hablado al cliente.
+  // La sincronizacion que pide la casa se resuelve REFERENCIANDO el registro
+  // vigente (origen_tipo + origen_id), no copiando su estado: copiarlo obliga a
+  // cerrar dos veces y garantiza que algun dia las dos bases digan cosas
+  // distintas.
+  "name": "OrdenAsistencia",
+  "type": "object",
+  "description": "Control de asistidos: una fila por solicitud que necesita que una persona del equipo la atienda, con el boton que deja constancia de quien la asistio. Apunta al registro que la origino (Reparacion, PQR, lead) para que exista el historial por solicitante.",
+  "properties": {
+    "numero_orden": {
+      "type": "string",
+      "description": "ID de orden. Formato ORD-AAAA-NNNNNN-XXXX. Es el numero que se le puede dar al cliente."
+    },
+    "origen_tipo": {
+      "type": "string",
+      "enum": [
+        "Reparacion",
+        "PQR",
+        "Contacto",
+        "Avaluo",
+        "Consignacion",
+        "SolicitudMatricula",
+        "Escalamiento"
+      ],
+      "default": "Escalamiento",
+      "description": "Nombre de la entidad donde vive la solicitud vigente. 'Escalamiento' es el caso sin expediente propio: nacio del chat y no hay otra fila que mirar."
+    },
+    "origen_id": {
+      "type": "string",
+      "description": "id de la fila de origen. Vacio cuando origen_tipo es Escalamiento."
+    },
+    "origen_radicado": {
+      "type": "string",
+      "description": "Radicado o numero visible del registro de origen (REP-..., PQR-...), copiado para poder buscarlo sin abrir la otra entidad."
+    },
+    "origen_agente": {
+      "type": "string",
+      "description": "Especialidad del asistente que abrio la orden: recepcion, ventas, cartera, mantenimiento, pqr..."
+    },
+    "canal": {
+      "type": "string",
+      "description": "Por donde entro: whatsapp, telegram o Manual."
+    },
+    "asunto": {
+      "type": "string",
+      "description": "Que necesita el solicitante, en una linea. Es lo que lee el broker en la bandeja."
+    },
+    "detalle": {
+      "type": "string",
+      "description": "Contexto completo para quien la toma: el brief del escalamiento o la descripcion del reporte. Uso interno, no se le lee al cliente."
+    },
+    "solicitante_nombre": {
+      "type": "string",
+      "description": "Nombre de quien pide. Se guarda aqui a proposito: la orden debe poder leerse sin depender de que exista el Contacto."
+    },
+    "solicitante_telefono": {
+      "type": "string",
+      "description": "Telefono en solo digitos. Es la llave del historial por persona."
+    },
+    "contacto_id": {
+      "type": "string",
+      "description": "Contacto del CRM, cuando ya existe."
+    },
+    "contrato_id": {
+      "type": "string",
+      "description": "Contrato de arriendo asociado, si la identidad estaba verificada."
+    },
+    "direccion_inmueble": {
+      "type": "string",
+      "description": "Inmueble del que se trata, tal como quedo en la conversacion. Es el 'por inmueble' del historial."
+    },
+    "broker_email": {
+      "type": "string",
+      "description": "Email del broker que la asistio. Se llena al presionar el boton."
+    },
+    "broker_nombre": {
+      "type": "string",
+      "description": "Nombre del broker en el momento de asistirla. Se copia porque el rastro debe seguir siendo legible aunque la persona salga del equipo."
+    },
+    "estado": {
+      "type": "string",
+      "enum": [
+        "Abierta",
+        "Cerrada"
+      ],
+      "default": "Abierta",
+      "description": "Subestado de la solicitud, los dos que pide la casa. Sin asistir NO es un tercer estado: es una Abierta sin fecha_asistencia."
+    },
+    "prioridad": {
+      "type": "string",
+      "enum": [
+        "Baja",
+        "Media",
+        "Alta",
+        "Urgente"
+      ],
+      "default": "Media",
+      "description": "Urgencia con la que llego."
+    },
+    "fecha_solicitud": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando entro la solicitud."
+    },
+    "fecha_asistencia": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando el broker presiono el boton. Vacio significa que NADIE la ha tocado todavia: es el dato que hoy no existe en ninguna parte."
+    },
+    "fecha_cierre": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuando se cerro."
+    },
+    "resultado": {
+      "type": "string",
+      "description": "Que se hizo. Es lo que convierte el registro en historial util; sin esto la lista solo dice que alguien la toco."
+    }
+  },
+  "required": [
+    "asunto"
+  ]
+}

@@ -10,20 +10,41 @@
 // Por eso agenteInbound (24 modulos) y continuarTurno (18) nunca aparecieron en
 // el panel, mientras enviarPendientes (9) si. El limite esta entre 9 y 18.
 //
-// El grafo cuenta, no los archivos de la carpeta: enviarPendientes tiene 26
-// archivos en su carpeta y solo 9 en su grafo, y despliega bien.
+// Asi que `entry.ts` sigue siendo la fuente editable —importa _core con
+// normalidad— y este script genera el `bundle.ts` de un solo modulo que es lo
+// que function.jsonc declara como entry. Editar el bundle a mano no tiene
+// sentido: se regenera en cada build.
 //
-// Asi que `entry.ts` sigue siendo la fuente editable —importa _core con normalidad—
-// y este script genera el `bundle.ts` de un solo modulo que es lo que
-// function.jsonc declara como entry. Editar el bundle a mano no tiene sentido:
-// se regenera en cada build.
+// POR QUE ESBUILD Y NO CONCATENAR. La version anterior borraba los imports con
+// expresiones regulares y pegaba los archivos en orden topologico. Aplanar asi
+// mete todos los modulos en un mismo ambito, y eso rompe de dos formas que el
+// despliegue no reportaba:
+//
+//   1. Colisiones. whatsapp.ts y telegram.ts declaran cada uno su `const API` y
+//      su `function normalizar`. Al aplanarlos, uno pisaba al otro: el webhook
+//      de Telegram terminaba normalizando con el codigo de WhatsApp.
+//   2. Namespaces huerfanos. `import * as tg from './canales/telegram.ts'` se
+//      borraba, pero las llamadas `tg.enviar(...)` quedaban apuntando a un `tg`
+//      que ya no existia. enviarPendientes quedo con tres referencias muertas.
+//
+// El bundle resultante no compilaba, Base44 rechazaba el despliegue y seguia
+// sirviendo la ultima version buena: el codigo se veia actualizado en el repo y
+// en el sandbox, pero el agente que contestaba era el de cinco commits atras.
+// Nada lo delataba porque `npm run build` typecheckeaba entry.ts y _core, que
+// son correctos — nunca el bundle, que es el archivo que de verdad se ejecuta.
+//
+// esbuild resuelve el grafo entendiendo ambitos: renombra lo que colisiona y
+// convierte los namespaces en objetos reales. Y el build ahora typecheckea el
+// bundle (ver tsconfig.bundles.json), que es lo que habria cazado esto el
+// primer dia.
 //
 //   node scripts/empaquetar.mjs            empaqueta todas las consumidoras
 //   node scripts/empaquetar.mjs <funcion>  empaqueta una
 //   node scripts/empaquetar.mjs --check    falla si algun bundle esta desactualizado
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { dirname, resolve, relative } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { buildSync } from 'esbuild';
 
 const RAIZ = 'base44/functions';
 
@@ -36,33 +57,32 @@ const soloCheck = args.includes('--check');
 const objetivos = args.filter((a) => !a.startsWith('--'));
 const funciones = objetivos.length ? objetivos : EMPAQUETAR;
 
-// `H` = espacio horizontal: todo lo blanco MENOS los saltos de linea.
-//
-// Con `\s*` el borrado se comia los saltos: "// nota\r\n\r\nexport type X" quedaba
-// como "// nota\rtype X", con un \r suelto que tecnicamente sigue siendo
-// terminador —por eso compilaba— pero dejaba el bundle como una sola linea para
-// grep y cualquier editor. Peor: Base44 lo normaliza al desplegar y devuelve un
-// archivo distinto del que genera este script, asi que `--check` fallaba en cada
-// despliegue y habia que reempaquetar y volver a subir, en bucle.
-const H = '[^\\S\\r\\n]';
+const CABECERA = [
+  '// ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.',
+  '//',
+  '// Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.',
+  '// La fuente editable es entry.ts + _core/; esto es su aplanado, y es lo que',
+  '// function.jsonc declara como entry.',
+  '//',
+  '// Lo empaqueta esbuild, no una concatenacion: hay simbolos que se repiten',
+  '// entre modulos (`API`, `normalizar` viven en whatsapp.ts y en telegram.ts)',
+  '// y namespaces que hay que materializar (`import * as tg`). Pegar los',
+  '// archivos en un solo ambito los hacia colisionar en silencio.',
+  '',
+].join('\n');
 
-const RE_IMPORT_REL = new RegExp(
-  `^${H}*import${H}+(?:type${H}+)?(?:[\\s\\S]*?)${H}+from${H}+'(\\.[^']+)';?${H}*$`,
-  'gm',
-);
-
-/** Quita imports/exports entre modulos propios; conserva los de npm/deno. */
-function limpiar(src, esEntry) {
-  let out = src.replace(RE_IMPORT_REL, '');
-  // `export const x` -> `const x`: en un solo archivo no hay nada que exportar,
-  // y dejar los `export` haria que Deno lo trate como modulo con exports sueltos.
-  if (!esEntry) {
-    out = out
-      .replace(new RegExp(`^${H}*export${H}+(const|function|async function|class|interface|type|enum)\\b`, 'gm'), '$1')
-      .replace(new RegExp(`^${H}*export${H}+default${H}+`, 'gm'), '')
-      .replace(new RegExp(`^${H}*export${H}*\\{[^}]*\\};?${H}*$`, 'gm'), '');
-  }
-  return out.trim();
+/** Cuenta los modulos del grafo, que es lo que Base44 limita. */
+function contarModulos(entry) {
+  const vistos = new Set();
+  (function visitar(archivo) {
+    if (vistos.has(archivo)) return;
+    vistos.add(archivo);
+    for (const m of readFileSync(archivo, 'utf8').matchAll(/from\s+'(\.[^']+)'/g)) {
+      const dep = resolve(dirname(archivo), m[1]);
+      if (existsSync(dep)) visitar(dep);
+    }
+  })(entry);
+  return vistos.size;
 }
 
 /** Devuelve el contenido del bundle de una funcion, o null si no existe. */
@@ -71,49 +91,50 @@ function generar(fnNombre) {
   const entry = resolve(dirFn, 'entry.ts');
   if (!existsSync(entry)) return null;
 
-  // Orden topologico: las dependencias van antes que quien las usa.
-  const orden = [];
-  const estado = new Map();
-  (function visitar(archivo) {
-    if (estado.get(archivo)) return; // 'visitando' (ciclo) o 'listo'
-    estado.set(archivo, 'visitando');
-    for (const m of readFileSync(archivo, 'utf8').matchAll(/from\s+'(\.[^']+)'/g)) {
-      const dep = resolve(dirname(archivo), m[1]);
-      if (existsSync(dep)) visitar(dep);
-    }
-    estado.set(archivo, 'listo');
-    orden.push(archivo);
-  })(entry);
+  const r = buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    write: false,
+    format: 'esm',
+    // Deno corre ES moderno; bajar mas solo mete helpers que nadie necesita.
+    target: 'es2022',
+    platform: 'neutral',
+    // El grafo es 100% relativo. Si algun dia entra un `npm:`/`https:`, que
+    // falle aqui y no en el despliegue, que es donde no se ve.
+    external: [],
+    // Legible a proposito: este archivo se lee cuando algo falla en produccion,
+    // y un bundle minificado ahi no sirve de nada.
+    minify: false,
+    charset: 'utf8',
+    logLevel: 'silent',
+  });
 
-  const partes = [
-    '// ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.',
-    '//',
-    `// Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.`,
-    `// La fuente editable es entry.ts + _core/; esto es su aplanado (${orden.length} modulos`,
-    '// -> 1) y es lo que function.jsonc declara como entry.',
-    '',
-  ];
-
-  for (const archivo of orden) {
-    const rel = relative(dirFn, archivo).replace(/\\/g, '/');
-    const limpio = limpiar(readFileSync(archivo, 'utf8'), archivo === entry);
-    if (!limpio) continue;
-    partes.push(`// ─── ${rel} ${'─'.repeat(Math.max(3, 60 - rel.length))}`);
-    partes.push(limpio, '');
-  }
-
-  return { texto: partes.join('\n'), modulos: orden.length, destino: resolve(dirFn, 'bundle.ts') };
+  const texto = `${CABECERA}\n${r.outputFiles[0].text}`;
+  return {
+    texto: texto.replace(/\r\n/g, '\n'),
+    modulos: contarModulos(entry),
+    destino: resolve(dirFn, 'bundle.ts'),
+  };
 }
 
 const kb = (n) => (n / 1024).toFixed(1);
 let desactualizados = 0;
 
 for (const fn of funciones) {
-  const r = generar(fn);
+  let r;
+  try {
+    r = generar(fn);
+  } catch (e) {
+    console.error(`  ${fn}: esbuild fallo — ${e.message.split('\n')[0]}`);
+    process.exitCode = 1;
+    continue;
+  }
   if (!r) { console.error(`  ${fn}: no existe entry.ts`); process.exitCode = 1; continue; }
 
   if (soloCheck) {
-    const actual = existsSync(r.destino) ? readFileSync(r.destino, 'utf8') : '';
+    const actual = existsSync(r.destino)
+      ? readFileSync(r.destino, 'utf8').replace(/\r\n/g, '\n')
+      : '';
     if (actual !== r.texto) {
       console.error(`  ${fn}: bundle.ts desactualizado — corre "npm run empaquetar"`);
       desactualizados++;

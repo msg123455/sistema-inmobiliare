@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Download, Wrench, AlertCircle } from 'lucide-react';
+import { Loader2, Download, Wrench, AlertCircle, FileText } from 'lucide-react';
 import { pedir, pesos, periodoLegible } from '@/lib/portal';
 import { MARCA } from '@/lib/marca';
 
@@ -285,6 +285,60 @@ export function PortalReparaciones() {
       <p className="text-[13px] text-muted-foreground px-1 pt-2">
         ¿Necesitas reportar algo nuevo? Escríbenos por WhatsApp al {MARCA.whatsapp} y adjunta una foto.
       </p>
+    </Envoltura>
+  );
+}
+
+// ── Certificados (propietario) ───────────────────────────────────────────────
+
+/**
+ * El certificado anual del propietario.
+ *
+ * Existe porque el asistente lo entrega por link, y un link tiene que llegar a
+ * algo: sin esta página el agente decía "aquí está tu certificado" y el cliente
+ * aterrizaba en el inicio del portal sin nada que descargar.
+ *
+ * Un año sin archivo se muestra igual, con la etiqueta de que no está: es el
+ * mismo criterio de Pagos, y esconderlo haría que el propietario que sabe que
+ * ese año existe crea que se perdió.
+ */
+export function PortalCertificados() {
+  const estado = useSeccion('certificados');
+  const d = estado.datos;
+
+  return (
+    <Envoltura
+      titulo="Certificados"
+      subtitulo="Tus certificados anuales"
+      estado={estado}
+      vacio={d && !d.certificados?.length ? 'Todavía no hay certificados disponibles.' : null}
+    >
+      {d?.certificados?.length > 0 && (
+        <div className="space-y-2">
+          {d.certificados.map((c) => (
+            <Card key={c.anio} className="rounded-2xl border-border/60">
+              <CardContent className="p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex items-center gap-2.5">
+                  <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <p className="text-[15px] font-medium">Año {c.anio || '—'}</p>
+                </div>
+                {c.url_pdf ? (
+                  <a
+                    href={c.url_pdf}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[13px] font-medium text-primary hover:underline flex-shrink-0"
+                  >
+                    <Download className="w-4 h-4" /> Descargar
+                  </a>
+                ) : (
+                  <span className="text-[12px] text-muted-foreground flex-shrink-0">Sin archivo</span>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </Envoltura>
   );
 }

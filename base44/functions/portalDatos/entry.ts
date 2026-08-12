@@ -161,6 +161,24 @@ async function liquidaciones(sesion: Record<string, any>) {
   };
 }
 
+// El certificado anual del propietario. Mismo molde que `pagos`, con la misma
+// regla: el id sale del JWT, nunca del cuerpo de la peticion. Se devuelven
+// tambien los anos sin archivo, en vez de esconderlos, porque el propietario
+// que ya sabe que existe ese ano preferira ver "sin archivo" a no ver nada.
+async function certificados(sesion: Record<string, any>) {
+  if (sesion.tipo !== 'propietario') return { certificados: [] };
+  const cs = await listar('CertificadoPropietario', `propietario_id=${encodeURIComponent(sesion.sub)}`, 12);
+  return {
+    certificados: cs
+      .sort((a, b) => Number(b.anio || 0) - Number(a.anio || 0))
+      .map((c) => ({
+        anio: Number(c.anio) || null,
+        url_pdf: c.url_pdf || null,
+        fecha_envio: c.fecha_envio || null,
+      })),
+  };
+}
+
 async function resumen(sesion: Record<string, any>) {
   const nombre = sesion.tipo === 'propietario'
     ? (await uno('Propietario', sesion.sub))?.nombre
@@ -175,7 +193,7 @@ async function resumen(sesion: Record<string, any>) {
 }
 
 const SECCIONES: Record<string, (s: Record<string, any>) => Promise<unknown>> = {
-  resumen, 'estado-cuenta': estadoCuenta, contrato, pagos, reparaciones, liquidaciones,
+  resumen, 'estado-cuenta': estadoCuenta, contrato, pagos, reparaciones, liquidaciones, certificados,
 };
 
 // ── Handler ──────────────────────────────────────────────────────────────────

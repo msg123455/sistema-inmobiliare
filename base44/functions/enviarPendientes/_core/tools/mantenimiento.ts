@@ -1,6 +1,7 @@
 import { definirTool, str, strOpc, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 import { exigirVerificado } from './comunes.ts';
 import { verificarIdentidad } from './cartera.ts';
+import { abrirAsistencia } from './asistidos.ts';
 
 export const registrarReparacion: Tool = {
   ...definirTool(
@@ -34,6 +35,20 @@ export const registrarReparacion: Tool = {
     if (!rep) return { error: 'no_se_pudo_registrar' };
 
     c.ctxAgente.reparacion_id = rep.id;
+
+    // Reparacion.estado cuenta como va el ARREGLO. La orden cuenta como va la
+    // ATENCION a quien lo reporto, que es otra cosa: hoy una reparacion podia
+    // estar En_proceso con el tecnico mientras al cliente no le habia hablado
+    // nadie, y no habia forma de notarlo.
+    await abrirAsistencia(c, {
+      origen_tipo: 'Reparacion',
+      origen_id: String(rep.id || ''),
+      origen_radicado: String(rep.numero_radicado || ''),
+      asunto: `${String(input.categoria)}: ${String(input.descripcion || '')}`,
+      detalle: [String(input.descripcion || ''), input.ubicacion ? `Ubicacion: ${String(input.ubicacion)}` : '']
+        .filter(Boolean).join('\n'),
+      prioridad: urgencia,
+    });
 
     if (urgencia === 'Emergencia') {
       c.efectos.notificar.push(

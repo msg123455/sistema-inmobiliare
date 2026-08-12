@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { agentesAutomaticosActivos, seleccionarRag } from '../base44/functions/_core/contexto.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from '../base44/functions/_core/prompts.ts';
 import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
@@ -13,11 +14,14 @@ import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_co
 import { calificar } from '../base44/functions/_core/scoring.ts';
 import { briefLead } from '../base44/functions/_core/brief.ts';
 import { hayEquipo, instruccionHorario } from '../base44/functions/_core/horario.ts';
-import { responder } from '../base44/functions/_core/tools/comunes.ts';
+import { escalarAHumano, responder } from '../base44/functions/_core/tools/comunes.ts';
+import { abrirAsistencia, consultarHistorialSolicitudes, numeroOrden } from '../base44/functions/_core/tools/asistidos.ts';
 import {
   POLITICA_VERSION, debeAvisar, marcaAutorizacion, textoAviso,
 } from '../base44/functions/_core/privacidad.ts';
-import { estadoVacio } from '../base44/functions/_core/state.ts';
+import {
+  cargarEstado, claveDe, ctxDe, estadoVacio, guardarEstado, olvidarTransitorios, transferir,
+} from '../base44/functions/_core/state.ts';
 import * as telegram from '../base44/functions/_core/canales/telegram.ts';
 
 assert.equal(Object.keys(PROMPTS).length, 8, 'deben existir exactamente ocho agentes');
@@ -384,6 +388,497 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
   const vacio = briefLead(estadoVacio(), '573009999999', 'telegram');
   assert.ok(vacio.includes('Sin nombre'));
   assert.ok(!vacio.includes('undefined'));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MEMORIA DEL CHAT
+//
+// El bug: cargarContexto trae datos frescos por turno (para ventas, hasta 100
+// Propiedad completas) y se mezclan en estado.ctx[agente], que es justo el
+// objeto que se serializa a estado_json. Con 2703 inmuebles en la tabla el
+// estado paso de ~2.000 a ~85.000 chars y Base44 empezo a RECHAZAR la
+// escritura. Como db.actualizar traga el error y devuelve null, el agente
+// respondia normal pero no quedaba nada guardado: cada mensaje entraba como
+// conversacion nueva. No recordaba el nombre, repetia preguntas, se contradecia.
+//
+// La defensa es de dos capas y las dos se prueban aqui:
+//   1. olvidarTransitorios() saca del scratch lo que vino de cargarContexto.
+//   2. el tope de 60k en guardarEstado descarta ctx antes que la conversacion.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Chequeo de sensibilidad. Una prueba que pasa tambien con el bug puesto no
+// prueba nada, asi que cada capa se rompe a proposito y se EXIGE que la
+// asercion falle. Se cuentan al final para que el conteo no se caiga en
+// silencio si alguien borra un mutante.
+const mutantes = [];
+const exigeFallo = (nombre, fn) => {
+  assert.throws(fn, `MUTANTE "${nombre}": la prueba paso con el bug puesto, no sirve de nada`);
+  mutantes.push(nombre);
+};
+
+// El tope grita por console.error a proposito. Se captura para no ensuciar la
+// salida del banco y, de paso, para poder afirmar que grito.
+const capturandoErrores = async (fn) => {
+  const original = console.error;
+  const lineas = [];
+  console.error = (...args) => lineas.push(args.map(String).join(' '));
+  try {
+    return { valor: await fn(), lineas };
+  } finally {
+    console.error = original;
+  }
+};
+
+/**
+ * Doble de db en memoria con la misma superficie que crearDb(): las filas viven
+ * en un Map y cada escritura queda registrada CON SU TAMANO, que es la variable
+ * que causo el incidente.
+ *
+ * `limiteChars` reproduce lo unico que importa del backend real: por encima de
+ * cierto peso la escritura se rechaza, se anota en `fallos` y devuelve null sin
+ * lanzar. Sin eso el bug es irreproducible fuera del despliegue.
+ */
+const crearDbMemoria = ({ limiteChars = Infinity } = {}) => {
+  const filas = new Map();      // `${entidad}:${id}` -> fila
+  const escrituras = [];        // toda escritura intentada, aceptada o no
+  const fallos = [];
+  let seq = 0;
+
+  // qs() del db real descarta undefined, null y '' — un filtro vacio no filtra.
+  const coincide = (fila, filtro = {}) => Object.entries(filtro).every(([k, v]) => (
+    k === 'limit' || v === undefined || v === null || v === ''
+      ? true
+      : String(fila[k] ?? '') === String(v)
+  ));
+
+  const list = async (entidad, filtro = {}) => {
+    const limite = Number(filtro.limit) || Infinity;
+    const res = [];
+    for (const [k, fila] of filas) {
+      if (!k.startsWith(`${entidad}:`) || !coincide(fila, filtro)) continue;
+      res.push({ ...fila });
+      if (res.length >= limite) break;
+    }
+    return res;
+  };
+  const uno = async (entidad, filtro) => (await list(entidad, { ...filtro, limit: 1 }))[0] ?? null;
+
+  const escribir = (entidad, id, datos, op) => {
+    const chars = JSON.stringify(datos).length;
+    const registro = {
+      entidad, id, op, chars,
+      estadoChars: String(datos.estado_json ?? '').length,
+      rechazada: chars > limiteChars,
+      datos,
+    };
+    escrituras.push(registro);
+    if (registro.rechazada) {
+      fallos.push(`${op} ${entidad} 413: payload de ${chars} chars`);
+      return null;
+    }
+    const previa = filas.get(`${entidad}:${id}`) || {};
+    const fila = { ...previa, ...datos, id };   // db.actualizar ya fusiona
+    filas.set(`${entidad}:${id}`, fila);
+    return { ...fila };
+  };
+
+  const crear = async (entidad, datos) => escribir(entidad, `${entidad}-${++seq}`, datos, 'crear');
+  const actualizar = async (entidad, id, datos) => escribir(entidad, id, datos, 'actualizar');
+  const guardar = async (entidad, id, datos) => {
+    const res = id ? await actualizar(entidad, id, datos) : await crear(entidad, datos);
+    return res?.id ?? null;
+  };
+
+  return {
+    filas, escrituras, fallos, list, uno, crear, actualizar, guardar,
+    contar: (entidad) => [...filas.keys()].filter((k) => k.startsWith(`${entidad}:`)).length,
+    ultima: () => escrituras.at(-1),
+  };
+};
+
+// Lo que cargarContexto('ventas') mete en el scratch en CADA turno: hasta 100
+// Propiedad enteras. No es el peor caso, es el turno normal desde que la tabla
+// dejo de estar vacia.
+const catalogoGordo = (n = 100) => Array.from({ length: n }, (_, i) => ({
+  id: `prop-${i}`,
+  titulo: `Apartamento ${i} en Chapinero Alto`,
+  operacion: i % 2 ? 'Arriendo' : 'Venta',
+  estado: 'Disponible',
+  barrio: 'Chapinero', ciudad: 'Bogota', tipo: 'Apartamento',
+  canon_arriendo: 2_500_000 + i * 1000, precio_venta: 450_000_000 + i * 1000,
+  habitaciones: 3, banos: 2, area: 78, estrato: 4, parqueadero: true,
+  direccion: `Calle ${100 + i} # 15-${i}`,
+  descripcion: `Apartamento remodelado con excelente iluminacion natural. `.repeat(11),
+  portales: { metrocuadrado: `https://www.metrocuadrado.com/inmueble/${i}` },
+}));
+
+// El tamano del catalogo es la premisa de todo lo que sigue: si algun dia deja
+// de desbordar, estas pruebas pasarian por la razon equivocada.
+const PESO_CATALOGO = JSON.stringify(catalogoGordo()).length;
+assert.ok(PESO_CATALOGO > 80_000,
+  `premisa rota: el catalogo simulado pesa ${PESO_CATALOGO} chars y ya no reproduce el incidente`);
+
+// Base44 empezo a rechazar alrededor de los 85.000 chars. El doble corta en
+// 80.000 para que el rechazo sea determinista y no dependa del azar del padding.
+const LIMITE_BACKEND = 80_000;
+
+// ── olvidarTransitorios saca el catalogo y NO se lleva la memoria ────────────
+// El scratch tiene dos clases de datos mezclados a proposito: lo que trajo
+// cargarContexto (se recarga solo, no se persiste) y lo que escribieron las
+// tools (guardar_dato, la etapa de ventas: si se pierde, se pierde de verdad).
+// Distinguirlos es todo el trabajo de esta funcion.
+{
+  const st = estadoVacio();
+  st.agente_activo = 'ventas';
+  st.compartido.nombre = 'Laura Gomez';
+  st.compartido.contacto_id = 'contacto-1';
+  st.identidad.verificado = true;
+  st.identidad.arrendatario_id = 'arr-1';
+  st.identidad.contrato_id = 'ctr-1';
+  st.historial = [{ role: 'user', content: 'busco apartamento en Chapinero', ts: '2026-08-11T10:00:00Z' }];
+
+  const scratch = ctxDe(st, 'ventas');
+  scratch.datos = { operacion: 'arriendo', zona: 'Chapinero', presupuesto: 3_000_000 };  // guardar_dato
+  scratch.etapa_ventas = 'calificacion';
+  scratch.objeciones_activas = ['precio'];
+
+  const delTurno = {
+    catalogo: catalogoGordo(),
+    campana: { id: 'cmp-1', nombre: 'Chapinero agosto' },
+    resumen_portafolio: 'Hoy hay 100 inmuebles activos: 50 en arriendo y 50 en venta.',
+  };
+  const transitorias = Object.keys(delTurno);
+  Object.assign(scratch, delTurno);
+  assert.ok(JSON.stringify(st).length > 80_000, 'con el catalogo mezclado el estado desborda');
+
+  olvidarTransitorios(st, 'ventas', transitorias);
+
+  // Se va lo que se recarga solo, y se va de verdad: la clave deja de existir.
+  for (const k of transitorias) {
+    assert.equal(k in st.ctx.ventas, false, `${k} no puede persistirse: se recarga en cada turno`);
+  }
+  // Sobrevive lo que nadie puede reconstruir.
+  assert.deepEqual(st.ctx.ventas.datos, { operacion: 'arriendo', zona: 'Chapinero', presupuesto: 3_000_000 },
+    'lo que guardo guardar_dato NO se toca');
+  assert.equal(st.ctx.ventas.etapa_ventas, 'calificacion');
+  assert.deepEqual(st.ctx.ventas.objeciones_activas, ['precio']);
+  assert.equal(st.compartido.nombre, 'Laura Gomez');
+  assert.equal(st.identidad.verificado, true, 'la verificacion sobrevive: re-verificar es un turno perdido');
+  assert.equal(st.identidad.arrendatario_id, 'arr-1');
+  assert.equal(st.historial.length, 1, 'el historial no se toca');
+  assert.ok(JSON.stringify(st).length < 2_000, 'el estado vuelve a un tamano sano');
+
+  // Idempotente, y un agente sin scratch no revienta (recepcion, avaluos y pqr
+  // no cargan contexto: su ctx[agente] puede no existir).
+  olvidarTransitorios(st, 'ventas', transitorias);
+  olvidarTransitorios(st, 'cartera', ['catalogo']);
+  assert.deepEqual(st.ctx.ventas.datos, { operacion: 'arriendo', zona: 'Chapinero', presupuesto: 3_000_000 });
+
+  // Mutante: olvidarTransitorios convertida en no-op.
+  const conBug = estadoVacio();
+  Object.assign(ctxDe(conBug, 'ventas'), { datos: { zona: 'Chapinero' } }, delTurno);
+  exigeFallo('olvidarTransitorios como no-op',
+    () => assert.equal('catalogo' in conBug.ctx.ventas, false));
+}
+
+// ── Tope de 60k: se sacrifica el ctx, jamas la conversacion ─────────────────
+// Segunda capa, para el dia en que alguien agregue una clave transitoria y se
+// olvide de registrarla. Perder el scratch cuesta un turno; perder el historial
+// cuesta el cliente.
+{
+  const db = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
+  const st = estadoVacio();
+  st.agente_activo = 'ventas';
+  st.compartido.nombre = 'Laura Gomez';
+  st.identidad.verificado = true;
+  st.identidad.arrendatario_id = 'arr-1';
+  st.historial = Array.from({ length: 6 }, (_, i) => ({
+    role: i % 2 ? 'assistant' : 'user', content: `mensaje ${i}`, ts: '2026-08-11T10:00:00Z',
+  }));
+  ctxDe(st, 'ventas').catalogo = catalogoGordo();   // nadie llamo a olvidarTransitorios
+  assert.ok(JSON.stringify(st).length > LIMITE_BACKEND, 'sin el tope, esta escritura la rechaza el backend');
+
+  const { valor: id, lineas } = await capturandoErrores(
+    () => guardarEstado(db, null, 'telegram', '573001112233', st, { ultimo_mensaje: 'mensaje 4' }),
+  );
+
+  assert.ok(id, 'se escribio igual: perder el scratch es aceptable, perder la conversacion no');
+  assert.deepEqual(db.fallos, [], 'la escritura no fue rechazada por tamano');
+  assert.match(lineas.join('\n'), /supera 60000/, 'un estado de este tamano siempre es un bug y hay que gritarlo');
+
+  const escrito = db.ultima();
+  assert.ok(escrito.estadoChars < 60_000, `estado_json quedo en ${escrito.estadoChars} chars`);
+  const guardado = JSON.parse(escrito.datos.estado_json);
+  assert.deepEqual(guardado.ctx, {}, 'ctx se descarta ENTERO, no se poda a medias');
+  assert.equal(guardado.historial.length, 6, 'el historial sobrevive');
+  assert.equal(guardado.compartido.nombre, 'Laura Gomez');
+  assert.equal(guardado.identidad.verificado, true);
+  assert.equal(escrito.datos.agente_activo, 'ventas', 'las columnas indexadas se escriben igual');
+
+  // El recorte es solo de lo que se ESCRIBE: el turno en curso sigue viendo su
+  // catalogo, porque las tools todavia lo estan usando cuando esto corre.
+  assert.equal(st.ctx.ventas.catalogo.length, 100, 'el objeto en memoria no se muta');
+
+  // Y lo escrito se puede volver a leer: no quedo un JSON partido a la mitad.
+  const releida = await cargarEstado(db, 'telegram', '573001112233');
+  assert.equal(releida.estado.historial.length, 6);
+  assert.equal(releida.estado.compartido.nombre, 'Laura Gomez');
+
+  // Mutante: sin el tope se manda el JSON entero, tal como estaba antes.
+  const dbSinTope = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
+  const crudo = await dbSinTope.guardar('MemoriaChat', null, {
+    clave: claveDe('telegram', '573001112233'),
+    telefono: '573001112233',
+    estado_json: JSON.stringify(st),
+  });
+  assert.equal(crudo, null, 'ESE era el bug: el backend rechaza y db devuelve null sin lanzar');
+  assert.equal(dbSinTope.fallos.length, 1, 'el rechazo queda en fallos, no en una excepcion');
+  assert.equal((await cargarEstado(dbSinTope, 'telegram', '573001112233')).id, null,
+    'sin tope no queda NADA escrito: el turno siguiente arranca de cero');
+  exigeFallo('guardarEstado sin el tope de 60k', () => assert.ok(crudo));
+}
+
+// ── Multi-turno: la definicion operativa de "el chat tiene memoria" ─────────
+// Tres mensajes seguidos del mismo cliente, cada uno con su carga de contexto
+// fresca, pasando por guardarEstado y cargarEstado de verdad. Si en el tercero
+// sigue estando lo del primero, la memoria funciona. Es la unica prueba que
+// habria detectado el incidente antes de que llegara a un cliente.
+{
+  const CANAL = 'telegram';
+  const TEL = '573001112233';
+
+  // Un turno completo tal como lo encadena agenteInbound: cargar -> mezclar el
+  // contexto fresco en el scratch -> tools -> olvidar lo transitorio -> guardar.
+  // `olvidar: false` reproduce el codigo anterior al fix.
+  const correrTurno = async (db, { texto, respuesta, tools = () => {}, olvidar = true }) => {
+    const { id, estado } = await cargarEstado(db, CANAL, TEL);
+    estado.historial.push({ role: 'user', content: texto, ts: new Date().toISOString() });
+    if (!estado.agente_historial.length) {
+      estado.agente_activo = 'ventas';
+      estado.agente_historial.push({ agente: 'ventas', desde: new Date().toISOString(), motivo: 'frase:ventas' });
+    }
+    const scratch = ctxDe(estado, estado.agente_activo);
+    const delTurno = { catalogo: catalogoGordo(), resumen_portafolio: 'Hoy hay 100 inmuebles activos.' };
+    const transitorias = Object.keys(delTurno);
+    Object.assign(scratch, delTurno);
+
+    tools(estado, scratch);
+
+    estado.historial.push({ role: 'assistant', content: respuesta, ts: new Date().toISOString() });
+    if (olvidar) olvidarTransitorios(estado, estado.agente_activo, transitorias);
+    return await guardarEstado(db, id, CANAL, TEL, estado, { ultimo_mensaje: texto, ultima_respuesta: respuesta });
+  };
+
+  // El dato de cada turno se escribe fusionando para que el guion corra igual
+  // aunque la memoria se haya perdido: asi falla la asercion del final y no un
+  // TypeError a mitad de camino, que no diria en que turno se rompio.
+  const GUION = [
+    {
+      texto: 'Hola, soy Laura Gomez', respuesta: 'Hola Laura. En que zona la buscas?',
+      tools: (estado, scratch) => {
+        estado.compartido.nombre = 'Laura Gomez';
+        scratch.datos = { ...scratch.datos, operacion: 'arriendo' };
+      },
+    },
+    {
+      texto: 'En Chapinero', respuesta: 'Perfecto. Cual es tu presupuesto?',
+      tools: (_estado, scratch) => { scratch.datos = { ...scratch.datos, zona: 'Chapinero' }; },
+    },
+    {
+      texto: 'Hasta 3 millones', respuesta: 'Listo, te paso opciones esta tarde.',
+      tools: (_estado, scratch) => { scratch.datos = { ...scratch.datos, presupuesto: 3_000_000 }; },
+    },
+  ];
+
+  const db = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
+  const { lineas } = await capturandoErrores(async () => {
+    for (const paso of GUION) {
+      assert.ok(await correrTurno(db, paso), `turno "${paso.texto}": la escritura NO puede fallar`);
+    }
+  });
+  assert.deepEqual(lineas, [], 'ningun turno tuvo que activar el tope: olvidarTransitorios basto');
+  assert.deepEqual(db.fallos, [], 'ninguna escritura fue rechazada por tamano');
+
+  // Turno 3: ¿sigue ahi lo del turno 1?
+  const { estado: final } = await cargarEstado(db, CANAL, TEL);
+  assert.equal(final.compartido.nombre, 'Laura Gomez', 'el nombre del PRIMER mensaje sigue ahi');
+  assert.equal(final.ctx.ventas.datos.operacion, 'arriendo', 'el dato del turno 1 llego al turno 3');
+  assert.equal(final.ctx.ventas.datos.zona, 'Chapinero', 'el dato del turno 2 llego al turno 3');
+  assert.equal(final.ctx.ventas.datos.presupuesto, 3_000_000);
+  assert.equal(final.historial.length, 6, 'los tres turnos completos quedaron en el historial');
+  assert.equal(final.historial[0].content, 'Hola, soy Laura Gomez');
+  assert.equal(final.historial.at(-1).content, 'Listo, te paso opciones esta tarde.');
+  assert.equal(final.agente_activo, 'ventas');
+  assert.equal(final.agente_historial.length, 1, 'un solo ruteo en todo el hilo');
+  assert.equal('catalogo' in final.ctx.ventas, false, 'el catalogo nunca viajo al almacen');
+
+  // Un solo hilo. Si esto diera 3, cada mensaje seria una conversacion nueva:
+  // exactamente el sintoma que veia el cliente.
+  assert.equal(db.contar('MemoriaChat'), 1, 'los tres mensajes son UN hilo');
+  assert.equal(db.escrituras[0].op, 'crear');
+  assert.deepEqual(db.escrituras.slice(1).map((e) => e.op), ['actualizar', 'actualizar']);
+  assert.ok(db.escrituras.every((e) => e.chars < 5_000),
+    'el estado no crece turno a turno: es la senal temprana del incidente');
+
+  // Mutante: los mismos tres turnos sin olvidarTransitorios. El tope salva la
+  // conversacion —por eso el bug era invisible en la Bandeja— pero se lleva por
+  // delante todo lo que las tools habian guardado.
+  const dbBug = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
+  await capturandoErrores(async () => {
+    for (const paso of GUION) await correrTurno(dbBug, { ...paso, olvidar: false });
+  });
+  const { estado: conBug } = await cargarEstado(dbBug, CANAL, TEL);
+  assert.equal(conBug.historial.length, 6, 'el historial se ve bien: por eso nadie lo noto');
+  assert.deepEqual(conBug.ctx, {}, 'pero el ctx se perdio en cada turno');
+  exigeFallo('multi-turno sin olvidarTransitorios',
+    () => assert.equal(conBug.ctx.ventas?.datos?.zona, 'Chapinero'));
+}
+
+// ── El bot dedicado ya no fija el agente en CADA turno ──────────────────────
+// El bot de Telegram define POR DONDE ENTRA la conversacion, no donde se queda.
+// Cuando fijaba el agente en cada mensaje, toda transferencia se deshacia al
+// turno siguiente: el cliente decia "necesito una reparacion", el sistema pasaba
+// a mantenimiento, y el mensaje siguiente lo devolvia a ventas, que volvia a
+// preguntar si buscaba comprar o arrendar. En bucle, sin salida.
+{
+  // Copia del gate de agenteInbound/entry.ts. Mas abajo se contrasta contra el
+  // archivo real para que esta copia no se quede vieja en silencio.
+  const rutear = async (estado, ent, agenteBot) => {
+    const hiloNuevo = !estado.agente_historial.length;
+    return (agenteBot && hiloNuevo)
+      ? { agente: agenteBot, nivel: 0, motivo: 'bot dedicado (entrada)' }
+      : await decidirAgente(dbVacio, estado, ent, optsRouter);
+  };
+
+  // Primer mensaje del hilo: el bot manda y el router ni corre. Eso es lo que
+  // permite probar un agente aislado del ruteo.
+  const hilo = estadoVacio();
+  const d0 = await rutear(hilo, entrada('necesito una reparacion'), 'ventas');
+  assert.equal(d0.agente, 'ventas', 'en el primer mensaje el bot dedicado define la entrada');
+  assert.equal(d0.motivo, 'bot dedicado (entrada)');
+  hilo.agente_activo = d0.agente;
+  hilo.agente_historial.push({ agente: d0.agente, desde: new Date().toISOString(), motivo: d0.motivo });
+
+  // Segundo mensaje por el MISMO bot: el hilo ya tiene agente, manda la frase.
+  const d1 = await rutear(hilo, entrada('necesito una reparacion'), 'ventas');
+  assert.equal(d1.agente, 'mantenimiento', 'el bot dedicado NO puede devolver el hilo a ventas');
+  assert.equal(d1.motivo, 'frase:mantenimiento');
+
+  // Y una transferencia hecha por tool tampoco se deshace al turno siguiente.
+  const transferido = estadoVacio();
+  transferido.agente_activo = 'ventas';
+  transferido.agente_historial.push({ agente: 'ventas', desde: new Date().toISOString(), motivo: 'bot dedicado (entrada)' });
+  transferir(transferido, 'mantenimiento', 'tool:transferir_a');
+  const d2 = await rutear(transferido, entrada('si, en el bano del fondo'), 'ventas');
+  assert.equal(d2.agente, 'mantenimiento', 'la transferencia sobrevive al turno siguiente');
+  assert.equal(d2.motivo, 'pegajosidad', 'y no cuesta una llamada al modelo');
+
+  // El gate vive en entry.ts, que importa Deno.serve y no se puede cargar aqui:
+  // se ancla contra la fuente para que quitarlo rompa el banco de pruebas.
+  // Se afirma con includes y no con assert.match para que el fallo diga el
+  // mensaje y no escupa el archivo entero.
+  const fuente = readFileSync(new URL('../base44/functions/agenteInbound/entry.ts', import.meta.url), 'utf8');
+  assert.ok(fuente.includes('const hiloNuevo = !estado.agente_historial.length;'),
+    'entry.ts dejo de calcular hiloNuevo');
+  assert.ok(fuente.includes('(agenteBot && hiloNuevo)'),
+    'el bot dedicado volvio a fijar el agente en todos los turnos');
+
+  // Mutante: el gate viejo, sin hiloNuevo.
+  const gateViejo = (agenteBot) => (agenteBot ? { agente: agenteBot, motivo: 'bot dedicado' } : null);
+  const bug = gateViejo('ventas');
+  assert.equal(bug.agente, 'ventas');
+  exigeFallo('bot dedicado fijando el agente en cada turno',
+    () => assert.equal(bug.agente, 'mantenimiento'));
+}
+
+assert.equal(mutantes.length, 4, 'se esperan 4 chequeos de sensibilidad; alguno se perdio');
+console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mutantes.join(' | ')}`);
+// ── Control de asistidos ─────────────────────────────────────────────────────
+// escalar_a_humano dejaba una Tarea: registraba el pendiente pero nadie podia
+// marcar "yo lo atendi" ni ver que habia quedado sin atender, y la fila no
+// apuntaba a la solicitud que la origino.
+{
+  const escrituras = [];
+  const db = {
+    list: async () => [],
+    crear: async (entidad, datos) => { escrituras.push({ entidad, datos }); return { id: 'orden-1', ...datos }; },
+  };
+  const ctx = {
+    db, estado: estadoVacio(), entrada: entrada('quiero hablar con una persona'),
+    ctxAgente: {}, config: {},
+    salida: { globos: [], finTurno: false },
+    efectos: { transferir: null, escalado: null, notificar: [] },
+  };
+  ctx.estado.agente_activo = 'cartera';
+  ctx.estado.compartido.nombre = 'Luis Pardo';
+  ctx.estado.identidad.contrato_id = 'ctr-9';
+
+  const r = await escalarAHumano.ejecutar({ motivo: 'reclama un pago que no aparece', prioridad: 'alta' }, ctx);
+  assert.equal(r.ok, true);
+
+  assert.equal(escrituras.length, 1, 'el escalamiento escribe UNA fila, no dos');
+  const [{ entidad, datos }] = escrituras;
+  assert.equal(entidad, 'OrdenAsistencia', 'ya no crea Tarea: la agenda personal no es la bandeja de asistidos');
+  assert.equal(datos.estado, 'Abierta');
+  assert.equal(datos.origen_tipo, 'Escalamiento');
+  assert.equal(datos.solicitante_nombre, 'Luis Pardo', 'el nombre viaja para poder leer la orden sin joins');
+  assert.equal(datos.solicitante_telefono, '573001112233', 'la llave del historial por persona');
+  assert.equal(datos.contrato_id, 'ctr-9', 'queda enganchada al contrato cuando se sabe cual es');
+  assert.equal(datos.prioridad, 'Alta', 'la escala del escalamiento se normaliza a la de la entidad');
+  assert.equal(datos.fecha_asistencia, undefined, 'nace SIN asistir: ese es el dato que faltaba');
+  assert.match(r.orden, /^ORD-\d{4}-\d{6}-[A-Z0-9]{4}$/);
+  assert.ok(ctx.efectos.notificar[0].includes(r.orden), 'el aviso al equipo lleva el numero de orden');
+
+  // Un numero de orden repetido le entrega a un cliente la orden de otro. Los
+  // 6 digitos del reloj se repiten cada ~16 minutos; lo que separa dos ordenes
+  // del mismo instante es el sufijo. Se fija Math.random para no dejar el test
+  // al azar.
+  const fijo = new Date('2026-08-11T10:00:00Z');
+  const azarReal = Math.random;
+  Math.random = () => 0.111;
+  const ordenA = numeroOrden(fijo);
+  Math.random = () => 0.999;
+  const ordenB = numeroOrden(fijo);
+  Math.random = azarReal;
+  assert.notEqual(ordenA, ordenB, 'dos ordenes del mismo milisegundo se distinguen por el sufijo');
+
+  // La escritura puede fallar: devolver un numero inventado seria peor.
+  const ctxRoto = { ...ctx, db: { list: async () => [], crear: async () => null } };
+  assert.equal(await abrirAsistencia(ctxRoto, { origen_tipo: 'PQR', asunto: 'x' }), '');
+}
+
+// ── Historial por persona ────────────────────────────────────────────────────
+// El sujeto sale del telefono de la entrada, nunca de un parametro: si el modelo
+// pudiera pedir "el historial de 3009999999" bastaria una inyeccion de prompt.
+{
+  assert.deepEqual(consultarHistorialSolicitudes.def.input_schema.properties, {},
+    'no recibe identificadores: el sujeto lo pone el servidor');
+
+  let filtro = null;
+  const db = {
+    list: async (_e, f) => {
+      filtro = f;
+      return [
+        { numero_orden: 'ORD-2026-000001-AAAA', origen_tipo: 'Reparacion', origen_radicado: 'REP-1', asunto: 'fuga en el bano', estado: 'Cerrada', fecha_solicitud: '2026-01-05T10:00:00Z', fecha_asistencia: '2026-01-05T11:00:00Z', resultado: 'fue el plomero', detalle: 'brief interno con datos del cliente' },
+        { numero_orden: 'ORD-2026-000002-BBBB', origen_tipo: 'Escalamiento', asunto: 'pide hablar con alguien', estado: 'Abierta', fecha_solicitud: '2026-02-01T10:00:00Z', detalle: 'brief interno con datos del cliente' },
+      ];
+    },
+  };
+  const c = { db, estado: estadoVacio(), entrada: entrada('es sobre lo de la otra vez'), ctxAgente: {} };
+  const r = await consultarHistorialSolicitudes.ejecutar({}, c);
+
+  assert.equal(filtro.solicitante_telefono, '573001112233');
+  assert.equal(r.total, 2);
+  assert.equal(r.abiertas, 1);
+  assert.equal(r.solicitudes[0].orden, 'ORD-2026-000002-BBBB', 'lo mas reciente primero');
+  assert.equal(r.solicitudes[0].atendida, false, 'sin fecha_asistencia no se puede decir que alguien lo esta viendo');
+  assert.equal(r.solicitudes[1].resultado, 'fue el plomero');
+  assert.ok(!JSON.stringify(r).includes('brief interno'), 'el detalle interno no viaja al modelo');
+
+  // Sin historial no se afirma que la persona nunca escribio: pudo hacerlo por otro canal.
+  const vacio = await consultarHistorialSolicitudes.ejecutar({}, { ...c, db: { list: async () => [] } });
+  assert.equal(vacio.total, 0);
+  assert.match(vacio.instruccion, /otro numero/);
 }
 
 console.log('agent-core: OK');

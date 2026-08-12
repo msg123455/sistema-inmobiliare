@@ -10,14 +10,15 @@
     "check:funciones": "tsc -p tsconfig.functions.json",
     "check:entidades": "node scripts/check-entidades.mjs",
     "test:agentes": "node scripts/test-agent-core.mjs",
-    "build": "node scripts/check-entries.mjs && node scripts/sync-core.mjs --check && node scripts/empaquetar.mjs --check && tsc -p tsconfig.functions.json && node scripts/check-entidades.mjs && vite build",
+    "build": "node scripts/check-entries.mjs && node scripts/sync-core.mjs --check && node scripts/empaquetar.mjs --check && node scripts/check-bundles.mjs && tsc -p tsconfig.functions.json && node scripts/check-entidades.mjs && vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview",
     "empaquetar": "node scripts/empaquetar.mjs",
-    "check:bundles": "node scripts/empaquetar.mjs --check",
-    "check:entries": "node scripts/check-entries.mjs"
+    "check:bundles": "node scripts/check-bundles.mjs",
+    "check:entries": "node scripts/check-entries.mjs",
+    "check:bundles-al-dia": "node scripts/empaquetar.mjs --check"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.41",

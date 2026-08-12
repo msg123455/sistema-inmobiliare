@@ -1,5 +1,6 @@
 import { definirTool, str, enumStr, type Tool, type CtxTool } from '../protocol.ts';
 import { sumarHabiles } from '../habiles.ts';
+import { abrirAsistencia } from './asistidos.ts';
 
 // Palabra legal: dispara prioridad y notificacion inmediata al equipo.
 const LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
@@ -72,6 +73,20 @@ export const registrarPqr: Tool = {
     });
     if (!pqr) return { error: 'no_se_pudo_registrar' };
     c.ctxAgente.pqr_id = pqr.id;
+
+    // La PQR ya tiene su expediente y su plazo legal; lo que no tenia era quien
+    // responde por ella. La orden de asistencia es ese lado: no copia el estado
+    // de la PQR, lo referencia, y ademas la mete en el mismo historial por
+    // persona que las reparaciones y los escalamientos.
+    await abrirAsistencia(c, {
+      origen_tipo: 'PQR',
+      origen_id: String(pqr.id || ''),
+      origen_radicado: radicado,
+      asunto: `${tipo}: ${String(input.asunto || '')}`,
+      detalle: String(input.descripcion || ''),
+      prioridad: esLegal ? 'urgente' : tipo === 'Reclamo' ? 'alta' : 'media',
+      solicitante_nombre: String(input.nombre || ''),
+    });
 
     // El agente de PQR SIEMPRE notifica: una queja que nadie ve es una queja
     // que se convierte en algo peor.

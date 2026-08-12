@@ -24,6 +24,7 @@ const TABS_ARRENDATARIO = [
 const TABS_PROPIETARIO = [
   { to: '/portal', label: 'Inicio', icon: Building2, end: true },
   { to: '/portal/liquidaciones', label: 'Liquidaciones', icon: Receipt },
+  { to: '/portal/certificados', label: 'Certificados', icon: FileText },
 ];
 
 export default function PortalLayout() {

@@ -58,7 +58,7 @@ import PortalLayout from '@/pages/portal/PortalLayout.jsx';
 import PortalEntrar from '@/pages/portal/PortalEntrar.jsx';
 import {
   PortalInicio, PortalEstadoCuenta, PortalPagos,
-  PortalContrato, PortalReparaciones, PortalLiquidaciones,
+  PortalContrato, PortalReparaciones, PortalLiquidaciones, PortalCertificados,
 } from '@/pages/portal/paginas.jsx';
 
 // IA Agente + Lead management
@@ -203,6 +203,7 @@ function PortalApp() {
         <Route path="contrato" element={<PortalContrato />} />
         <Route path="reparaciones" element={<PortalReparaciones />} />
         <Route path="liquidaciones" element={<PortalLiquidaciones />} />
+        <Route path="certificados" element={<PortalCertificados />} />
       </Route>
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

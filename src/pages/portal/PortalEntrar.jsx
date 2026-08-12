@@ -11,6 +11,17 @@ import { entrar, leerSesion } from '@/lib/portal';
  * por que (vencido, ya usado, inexistente): el backend responde igual en los
  * tres casos para no volverse un oraculo de tokens.
  */
+/**
+ * Secciones que existen como ruta. La sesión trae la que pidió el agente
+ * (SesionPortal.tipo), y se aterriza ahí en vez de en el inicio: el agente
+ * acaba de decir "aquí está tu certificado", y dejar al cliente en una
+ * pantalla de resumen es hacerle buscar lo que ya le prometimos. Lo que no
+ * esté en esta lista cae al inicio, nunca a una ruta inventada.
+ */
+const SECCIONES_CON_RUTA = new Set([
+  'estado-cuenta', 'pagos', 'contrato', 'reparaciones', 'liquidaciones', 'certificados',
+]);
+
 export default function PortalEntrar() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -29,11 +40,12 @@ export default function PortalEntrar() {
     let cancelado = false;
     (async () => {
       try {
-        await entrar(token);
+        const sesion = await entrar(token);
         if (cancelado) return;
         // Se saca el token de la URL: queda en el historial del navegador y en
         // cualquier captura de pantalla que el cliente comparta.
-        navigate('/portal', { replace: true });
+        const destino = SECCIONES_CON_RUTA.has(sesion?.seccion) ? `/portal/${sesion.seccion}` : '/portal';
+        navigate(destino, { replace: true });
       } catch (err) {
         if (!cancelado) setError(err.message || 'No se pudo abrir el enlace');
       }

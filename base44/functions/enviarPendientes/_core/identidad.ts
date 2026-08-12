@@ -196,6 +196,13 @@ export async function verificar(
   return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
 }
 
+// Secciones que solo existen del lado del propietario. Sin esto, alguien que
+// ademas arrienda con la casa (es dueno de un inmueble Y vive en otro nuestro)
+// recibia SIEMPRE una sesion de arrendatario, porque el sujeto salia de
+// `arrendatario_id || propietario_id`. El portal entonces le mostraba una
+// pagina vacia: sus liquidaciones y sus certificados cuelgan de propietario_id.
+const SECCIONES_PROPIETARIO = new Set(['certificados', 'liquidaciones']);
+
 // ── Nivel C: magic link al portal. ──────────────────────────────────────────
 // Nunca sale un PDF ni un extracto completo por WhatsApp. Sale un link de un
 // solo uso, atado a este telefono, que vence en 15 minutos.
@@ -205,7 +212,12 @@ export async function crearSesionPortal(
   estado: Estado,
   tipo: string,
 ): Promise<string | null> {
-  const sujeto = estado.identidad.arrendatario_id || estado.identidad.propietario_id;
+  const arrendatarioId = estado.identidad.arrendatario_id;
+  const propietarioId = estado.identidad.propietario_id;
+  const comoPropietario = SECCIONES_PROPIETARIO.has(tipo)
+    ? !!propietarioId
+    : !arrendatarioId && !!propietarioId;
+  const sujeto = comoPropietario ? propietarioId : arrendatarioId;
   if (!sesionVigente(estado) || !sujeto) return null;
 
   const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
@@ -213,7 +225,7 @@ export async function crearSesionPortal(
     token_hash: await sha256(token),      // en reposo solo queda el hash
     tipo,
     sujeto_id: sujeto,
-    sujeto_tipo: estado.identidad.arrendatario_id ? 'arrendatario' : 'propietario',
+    sujeto_tipo: comoPropietario ? 'propietario' : 'arrendatario',
     contrato_id: estado.identidad.contrato_id || '',
     telefono: soloDigitos(entrada.tel),
     expira: new Date(Date.now() + TTL_PORTAL_MIN * 60_000).toISOString(),

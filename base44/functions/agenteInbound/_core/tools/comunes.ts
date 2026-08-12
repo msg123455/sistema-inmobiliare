@@ -3,6 +3,7 @@
 import { definirTool, str, strOpc, bool, lista, enumStr, AGENTES, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe, transferir } from '../state.ts';
 import { briefLead } from '../brief.ts';
+import { abrirAsistencia } from './asistidos.ts';
 
 // Campos que viven en `compartido`, no en el scratch del agente: los ve todo
 // el mundo y sobreviven al handoff.
@@ -128,22 +129,30 @@ export const escalarAHumano: Tool = {
     // asesor volvia a preguntarle al cliente lo que ya habia contestado.
     const brief = briefLead(c.estado, c.entrada.tel, c.entrada.canal, [`MOTIVO: ${motivo}`]);
 
-    await c.db.crear('Tarea', {
-      contacto_id: String(c.estado.compartido.contacto_id || ''),
-      titulo: `Escalamiento ${c.estado.agente_activo}: ${nombre}`,
-      descripcion: brief,
-      fecha_limite: new Date(Date.now() + (prioridad === 'urgente' ? 0 : 864e5)).toISOString().split('T')[0],
-      prioridad: prioridad === 'urgente' || prioridad === 'alta' ? 'Alta' : prioridad === 'baja' ? 'Baja' : 'Media',
-      completada: false,
-      origen_agente: c.estado.agente_activo,
+    // Antes esto creaba una fila de Tarea. Registraba que habia algo pendiente,
+    // pero el circulo no se cerraba: nadie podia marcar "yo la atendi", nadie
+    // sabia que habia quedado sin atender, y la Tarea no apuntaba a nada, asi
+    // que el asesor siguiente no tenia historial. Ademas le inventaba una
+    // fecha_limite (hoy o manana) que ensuciaba el calendario del equipo con
+    // vencimientos que nadie habia acordado.
+    //
+    // Ahora abre una orden en el control de asistidos, que es donde esta el
+    // boton. Tarea vuelve a ser lo que era: la agenda personal.
+    const orden = await abrirAsistencia(c, {
+      origen_tipo: 'Escalamiento',
+      asunto: `${c.estado.agente_activo}: ${motivo}`.slice(0, 200),
+      detalle: brief,
+      prioridad,
+      solicitante_nombre: nombre.startsWith('+') ? '' : nombre,
     });
 
     c.efectos.notificar.push(
-      `ESCALAMIENTO (${prioridad.toUpperCase()}) — desde ${c.estado.agente_activo}\n\n` +
-      `${brief}\n\n` +
-      `La IA quedo en pausa para este chat. Responde desde la Bandeja.`,
+      `ESCALAMIENTO (${prioridad.toUpperCase()}) — desde ${c.estado.agente_activo}\n` +
+      (orden ? `Orden: ${orden}\n` : 'ATENCION: no se pudo abrir la orden, quedo solo este aviso.\n') +
+      `\n${brief}\n\n` +
+      `La IA quedo en pausa para este chat. Responde desde la Bandeja y marcala en Asistidos.`,
     );
-    return { ok: true, escalado: true };
+    return { ok: true, escalado: true, orden: orden || null };
   },
 };
 
