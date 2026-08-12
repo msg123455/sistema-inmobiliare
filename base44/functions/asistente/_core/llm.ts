@@ -90,7 +90,14 @@ export async function correrAgente(opts: {
 }): Promise<ResultadoAgente> {
   const defs = Object.values(opts.tools).map((t) => t.def);
   const mensajes = [...opts.mensajes];
-  const tope = opts.presupuestoLlamadas ?? 2;
+  // Cuatro y no dos. Con dos, un tramite normal se quedaba sin cupo antes de
+  // hablar: mantenimiento gastaba la primera en identificar_titular (que
+  // `retorna`, o sea que exige otra vuelta) y la segunda en guardar_dato, que es
+  // efecto lateral. El turno se aparcaba sin una sola frase para el cliente.
+  //
+  // El tope de 2 venia de un presupuesto de 15s que no es el real: los logs de
+  // produccion muestran turnos de 47s y de 108s completandose sin problema.
+  const tope = opts.presupuestoLlamadas ?? 4;
   let llamadas = 0;
 
   while (llamadas < tope) {
@@ -179,7 +186,50 @@ export async function correrAgente(opts: {
     }
   }
 
-  // Se agoto el presupuesto sin `responder`. El turno se aparca con el historial
-  // exacto que llevaba; continuarTurno lo retoma donde quedo.
-  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: { mensajes }, llamadas };
+  // Se agoto el presupuesto sin que el modelo hablara.
+  //
+  // Antes esto aparcaba el turno y listo, confiando en que el cron
+  // continuarTurno lo retomara. Ese cron ya no existe: Base44 deshabilito las
+  // automatizaciones legacy en esta app. Aparcar hoy es quedarse MUDO para
+  // siempre, y eso le paso a un cliente real: dio su documento, dio su nombre, y
+  // el bot no volvio a contestar nunca.
+  //
+  // Callarse es el peor final posible de un turno. Peor que una respuesta
+  // mediocre, porque el cliente no sabe si le llego, si lo estan leyendo o si el
+  // numero sirve. Asi que se gasta UNA llamada mas, con `responder` forzado: el
+  // modelo ya tiene todos los resultados de las tools en `mensajes`, solo le
+  // falta decirlo.
+  if (!opts.ctx.salida.globos.length) {
+    const cierre = await llamarModelo({
+      apiKey: opts.apiKey,
+      modelos: opts.modelos,
+      system: opts.system,
+      messages: mensajes,
+      tools: defs,
+      maxTokens: opts.maxTokens,
+      effort: opts.effort,
+      toolChoice: { type: 'tool', name: 'responder' },
+    });
+    llamadas++;
+    for (const uso of (cierre?.bloques || []).filter((b: any) => b.type === 'tool_use')) {
+      const tool = opts.tools[uso.name];
+      if (tool) await tool.ejecutar(uso.input, opts.ctx);
+    }
+    // Si ni forzandolo hablo, algo esta muy mal: se dice lo minimo honesto en vez
+    // de dejar el chat en blanco. No promete tiempos ni inventa un estado.
+    if (!opts.ctx.salida.globos.length) {
+      console.error('el modelo no hablo ni con responder forzado — globo de emergencia');
+      opts.ctx.salida.globos.push(
+        'Perdon, se me enredo el sistema con eso. Un asesor te escribe para continuar.',
+      );
+      opts.ctx.efectos.escalado = {
+        motivo: 'El agente no logro responder: turno agotado sin respuesta.',
+        prioridad: 'alta',
+      };
+    }
+  }
+
+  // Ya hay algo que decir, asi que NO se aparca: aparcar sin quien lo retome es
+  // perder el turno.
+  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
 }

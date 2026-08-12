@@ -808,7 +808,7 @@ async function llamarModelo(opts) {
 async function correrAgente(opts) {
   const defs = Object.values(opts.tools).map((t) => t.def);
   const mensajes = [...opts.mensajes];
-  const tope = opts.presupuestoLlamadas ?? 2;
+  const tope = opts.presupuestoLlamadas ?? 4;
   let llamadas = 0;
   while (llamadas < tope) {
     const res = await llamarModelo({
@@ -870,7 +870,34 @@ async function correrAgente(opts) {
       continue;
     }
   }
-  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: { mensajes }, llamadas };
+  if (!opts.ctx.salida.globos.length) {
+    const cierre = await llamarModelo({
+      apiKey: opts.apiKey,
+      modelos: opts.modelos,
+      system: opts.system,
+      messages: mensajes,
+      tools: defs,
+      maxTokens: opts.maxTokens,
+      effort: opts.effort,
+      toolChoice: { type: "tool", name: "responder" }
+    });
+    llamadas++;
+    for (const uso of (cierre?.bloques || []).filter((b) => b.type === "tool_use")) {
+      const tool = opts.tools[uso.name];
+      if (tool) await tool.ejecutar(uso.input, opts.ctx);
+    }
+    if (!opts.ctx.salida.globos.length) {
+      console.error("el modelo no hablo ni con responder forzado — globo de emergencia");
+      opts.ctx.salida.globos.push(
+        "Perdon, se me enredo el sistema con eso. Un asesor te escribe para continuar."
+      );
+      opts.ctx.efectos.escalado = {
+        motivo: "El agente no logro responder: turno agotado sin respuesta.",
+        prioridad: "alta"
+      };
+    }
+  }
+  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
 }
 
 // base44/functions/agenteInbound/_core/privacidad.ts

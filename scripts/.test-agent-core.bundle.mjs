@@ -242,18 +242,29 @@ function olvidarTransitorios(estado, agente, claves) {
   if (!scratch) return;
   for (const k of claves) delete scratch[k];
 }
-var MAX_ESTADO_CHARS = 6e4;
+var ESCALONES = [
+  { nombre: "completo", reducir: (e) => e },
+  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
+  { nombre: "sin ctx", reducir: (e) => ({ ...e, ctx: {} }) },
+  { nombre: "sin ctx, 8 mensajes", reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
+  {
+    nombre: "minimo",
+    reducir: (e) => ({
+      ...estadoVacio(),
+      agente_activo: e.agente_activo,
+      agente_historial: e.agente_historial.slice(-3),
+      identidad: e.identidad,
+      compartido: e.compartido,
+      historial: e.historial.slice(-2),
+      msg_ids: e.msg_ids.slice(-5),
+      pausada: e.pausada
+    })
+  }
+];
 async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   estado.historial = estado.historial.slice(-24);
   estado.msg_ids = estado.msg_ids.slice(-20);
-  let json = JSON.stringify(estado);
-  if (json.length > MAX_ESTADO_CHARS) {
-    console.error(
-      `estado_json de ${json.length} chars supera ${MAX_ESTADO_CHARS}: se descarta ctx para no perder la conversacion`
-    );
-    json = JSON.stringify({ ...estado, ctx: {} });
-  }
-  return await db.guardar("MemoriaChat", memoriaId, {
+  const fila = (json) => ({
     clave: claveDe(canal, tel),
     telefono: String(tel).replace(/\D/g, ""),
     canal: canal === "telegram" ? "Telegram" : "WhatsApp",
@@ -268,6 +279,21 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
     ultima_respuesta: (extra.ultima_respuesta || "").slice(0, 1e3),
     fecha_ultimo_mensaje: (/* @__PURE__ */ new Date()).toISOString()
   });
+  for (const [i, escalon] of ESCALONES.entries()) {
+    const json = JSON.stringify(escalon.reducir(estado));
+    const id = await db.guardar("MemoriaChat", memoriaId, fila(json));
+    if (id) {
+      if (i > 0) {
+        console.error(
+          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): Base44 rechazo los ${i} intento(s) anteriores por tamano`
+        );
+      }
+      return id;
+    }
+    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
+  }
+  console.error("NO SE PUDO GUARDAR MemoriaChat en ningun escalon \u2014 la conversacion se pierde");
+  return null;
 }
 
 // base44/functions/_core/brief.ts
@@ -3084,8 +3110,13 @@ var LIMITE_BACKEND = 8e4;
     () => guardarEstado(db, null, "telegram", "573001112233", st, { ultimo_mensaje: "mensaje 4" })
   );
   assert.ok(id, "se escribio igual: perder el scratch es aceptable, perder la conversacion no");
-  assert.deepEqual(db.fallos, [], "la escritura no fue rechazada por tamano");
-  assert.match(lineas.join("\n"), /supera 60000/, "un estado de este tamano siempre es un bug y hay que gritarlo");
+  assert.equal(db.fallos.length, 1, "el primer intento lo rechaza el backend, y queda anotado");
+  assert.match(
+    lineas.join("\n"),
+    /escalon "completo" rechazado/,
+    "hay que decir que se degrado, no degradar en silencio"
+  );
+  assert.match(lineas.join("\n"), /escalon "sin ctx"/, "y en que escalon quedo");
   const escrito = db.ultima();
   assert.ok(escrito.estadoChars < 6e4, `estado_json quedo en ${escrito.estadoChars} chars`);
   const guardado = JSON.parse(escrito.datos.estado_json);
@@ -3217,13 +3248,18 @@ var LIMITE_BACKEND = 8e4;
   assert.equal(d2.agente, "mantenimiento", "la transferencia sobrevive al turno siguiente");
   assert.equal(d2.motivo, "pegajosidad", "y no cuesta una llamada al modelo");
   const fuente = readFileSync(new URL("../base44/functions/agenteInbound/entry.ts", import.meta.url), "utf8");
+  const cuerpo = fuente.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
   assert.ok(
-    fuente.includes("const hiloNuevo = !estado.agente_historial.length;"),
-    "entry.ts dejo de calcular hiloNuevo"
+    cuerpo.includes("const decision = await decidirAgente("),
+    "el router debe decidir SIEMPRE, sin condicional delante"
   );
   assert.ok(
-    fuente.includes("(agenteBot && hiloNuevo)"),
-    "el bot dedicado volvio a fijar el agente en todos los turnos"
+    !/agenteBot\s*&&/.test(cuerpo),
+    "agenteBot volvio a condicionar el ruteo: ?agente= solo elige el bot de salida"
+  );
+  assert.ok(
+    cuerpo.includes("tgToken:     tokenDeAgente(agenteBot)"),
+    "agenteBot sigue haciendo falta para saber por que bot se contesta"
   );
   const gateViejo = (agenteBot) => agenteBot ? { agente: agenteBot, motivo: "bot dedicado" } : null;
   const bug = gateViejo("ventas");

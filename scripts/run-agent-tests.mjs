@@ -32,4 +32,9 @@ const r = buildSync({
 });
 
 writeFileSync(destino, r.outputFiles[0].text, 'utf8');
-await import(destino);
+
+// Se importa por URL y no por ruta del sistema: en Windows `destino` es
+// "c:\...\bundle.mjs" y el loader ESM lo lee como el esquema de protocolo "c:",
+// asi que revienta con ERR_UNSUPPORTED_ESM_URL_SCHEME. En Linux y macOS pasa
+// desapercibido porque las rutas absolutas empiezan por "/".
+await import(new URL('./.test-agent-core.bundle.mjs', import.meta.url).href);
