@@ -7,6 +7,7 @@
 
 import type { Agente, Tool } from '../protocol.ts';
 import { COMUNES, enviarMenu } from './comunes.ts';
+import { identificarTitular } from './identificacion.ts';
 import { VENTAS } from './ventas.ts';
 import { CARTERA } from './cartera.ts';
 import { MANTENIMIENTO } from './mantenimiento.ts';
@@ -15,16 +16,24 @@ import { AVALUOS } from './avaluos.ts';
 import { PQR } from './pqr.ts';
 import { MATRICULA } from './matricula.ts';
 
+// identificar_titular la reciben los tramites que atienden a alguien que YA es
+// cliente y no divulgan cifras. Cartera queda fuera a proposito: ahi el camino
+// sigue siendo verificar_identidad, que exige el segundo factor antes de soltar
+// un saldo. Ventas y consignacion tampoco: hablan con gente que todavia no esta
+// en la base, asi que buscarla por documento no aporta y solo daria pie a
+// teclear cedulas ajenas.
+const IDENT = { identificar_titular: identificarTitular };
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
   ventas:        VENTAS,
   consignacion:  CONSIGNACION,
   cartera:       CARTERA,
-  mantenimiento: MANTENIMIENTO,
-  avaluos:       AVALUOS,
-  pqr:           PQR,
-  matricula:     MATRICULA,
+  mantenimiento: { ...MANTENIMIENTO, ...IDENT },
+  avaluos:       { ...AVALUOS, ...IDENT },
+  pqr:           { ...PQR, ...IDENT },
+  matricula:     { ...MATRICULA, ...IDENT },
 };
 
 export function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {

@@ -57,6 +57,68 @@ export async function reconocerTelefono(db: Db, tel: string) {
   return { arrendatario, propietario: props[0] || null, contrato };
 }
 
+/**
+ * Busca al titular por su NIT o cedula en TitularInmueble.
+ *
+ * POR QUE HACE FALTA: hasta ahora la unica llave de entrada era el telefono, asi
+ * que un titular que escribiera desde otro numero (el del trabajo, el de la
+ * esposa, uno nuevo) simplemente no existia para el sistema, y el asistente
+ * terminaba pidiendole nombre y direccion como el bot viejo. El documento es lo
+ * que la operacion usa de verdad para identificar a alguien.
+ *
+ * POR QUE NO DEVUELVE LAS DIRECCIONES SIN MAS: una cedula en Colombia no es un
+ * secreto. Si bastara con teclearla para que el asistente lea en voz alta donde
+ * vive esa persona y cuantos inmuebles tiene, esto seria un buscador de
+ * patrimonio ajeno.
+ *
+ * Por eso el detalle solo sale cuando el telefono desde el que escriben TAMBIEN
+ * coincide con el registrado: ahi hay dos factores. Si no coincide, se devuelve
+ * unicamente cuantos inmuebles hay, y le toca al cliente decir la direccion para
+ * que el asistente la contraste. Confirmar un dato que el otro ya dijo no filtra
+ * nada; leerselo si.
+ */
+export async function buscarTitularPorDocumento(
+  db: Db,
+  documento: string,
+  telefono: string,
+): Promise<{
+  existe: boolean;
+  coincide_telefono: boolean;
+  total: number;
+  nombre: string;
+  inmuebles: Array<{ id: string; direccion: string; ciudad: string; codigo: string; rol: string; contrato_id: string }>;
+}> {
+  const doc = soloDigitos(documento);
+  const vacio = { existe: false, coincide_telefono: false, total: 0, nombre: '', inmuebles: [] };
+  // Menos de 5 digitos no es un documento: es un dedazo, y no vale la pena
+  // convertir esta funcion en un oraculo para tantear numeros cortos.
+  if (doc.length < 5) return vacio;
+
+  const filas = await db.list('TitularInmueble', { numero_documento: doc, limit: 50 });
+  const vigentes = (filas || []).filter((f: any) => String(f.estado || 'Vigente') === 'Vigente');
+  if (!vigentes.length) return vacio;
+
+  const tel = soloDigitos(telefono);
+  const coincide = !!tel && vigentes.some((f: any) => soloDigitos(f.telefono) === tel);
+
+  return {
+    existe: true,
+    coincide_telefono: coincide,
+    total: vigentes.length,
+    nombre: coincide ? String(vigentes[0].nombre_titular || '') : '',
+    inmuebles: coincide
+      ? vigentes.map((f: any) => ({
+        id: String(f.id || ''),
+        direccion: String(f.direccion || ''),
+        ciudad: String(f.ciudad || ''),
+        codigo: String(f.codigo_inmueble || ''),
+        rol: String(f.rol || ''),
+        contrato_id: String(f.contrato_id || ''),
+      }))
+      : [],
+  };
+}
+
 export function sesionVigente(estado: Estado): boolean {
   const i = estado.identidad;
   if (!i.verificado || !i.expira) return false;

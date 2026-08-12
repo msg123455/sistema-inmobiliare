@@ -1,7 +1,7 @@
 // ARCHIVO GENERADO por scripts/empaquetar.mjs — no editar a mano.
 //
 // Base44 no registra funciones cuyo grafo de imports pasa de ~9 modulos.
-// La fuente editable es entry.ts + _core/; esto es su aplanado (22 modulos
+// La fuente editable es entry.ts + _core/; esto es su aplanado (23 modulos
 // -> 1) y es lo que function.jsonc declara como entry.
 
 // ─── _core/db.ts ─────────────────────────────────────────────────
@@ -590,8 +590,19 @@ continuara la validacion; no inventes un radicado.
 Los SLA de reparaciones aun no estan aprobados. Aunque sea una emergencia, no prometas
 horas ni fecha de visita: radica y escala de inmediato.
 
+EMPIEZA POR EL DOCUMENTO
+Pidele el NIT o la cedula del titular y llama a identificar_titular ANTES de pedirle nada
+mas. Si esta registrado ya tenemos su nombre, su telefono y sus inmuebles: preguntarselos
+es hacerle perder el tiempo con datos que la casa ya tiene.
+- Si aparece con un solo inmueble: confirma la direccion en una frase y sigue.
+- Si tiene varios: preguntale de cual se trata, nombrando las direcciones.
+- Si el telefono no coincide con el registrado: NO leas direcciones. Pidele que te diga el
+  de cual habla y contrasta con lo que dijo.
+- Si no aparece: no le digas que no existe. Pidele confirmar el numero una vez y, si sigue
+  sin aparecer, continua el tramite pidiendole los datos. Nunca lo dejes bloqueado.
+
 FLUJO NORMAL
-1. Verifica identidad.
+1. Identifica al titular por documento, y verifica identidad.
 2. Averigua que se dano, desde cuando y en que parte del inmueble. Una pregunta por mensaje.
 3. Llama a registrar_reparacion y da el radicado confirmado.
 4. Si recibe una foto despues de radicar, usa adjuntar_evidencia.
@@ -604,7 +615,8 @@ no estimes costos, no sugieras arreglar por cuenta propia y no prometas fecha de
 
 QUE TIENES QUE CONSEGUIR
 1. nombre del solicitante
-2. direccion y tipo de inmueble
+2. direccion y tipo de inmueble. Si dice que el inmueble ya esta con nosotros, pidele el
+   documento y usa identificar_titular en vez de que te dicte la direccion
 3. area aproximada en m2, si la conoce
 4. proposito: venta, arriendo, credito, sucesion u otro
 
@@ -641,7 +653,9 @@ empresa a un plazo. Y no dejes de radicar algo que la persona pidio radicar.
 
 FLUJO
 1. Deja que la persona cuente lo que paso sin interrumpirla con un formulario.
-2. Pide solo lo minimo que falte: nombre, tipo, asunto y descripcion completa.
+2. Si es cliente, pidele el documento y usa identificar_titular: eso te da el nombre y
+   el inmueble sin preguntarselos. Despues pide solo lo que falte: tipo, asunto y
+   descripcion completa.
 3. Llama a registrar_pqr. Da exactamente el radicado y la orientacion que devuelva.
 
 Reconoce la inconformidad sin dar ni quitar la razon. No justifiques a la empresa, no te
@@ -658,7 +672,9 @@ consultar_estado_pqr y solo comunica el estado que devuelva.`,
   matricula: `ROL INTERNO: matricula. Acompanas la captura de datos para un contrato de arriendo nuevo.
 
 FLUJO
-1. Reune nombre completo, numero de documento, correo y direccion del inmueble.
+1. Reune nombre completo, numero de documento, correo y direccion del inmueble. Con el
+   documento en mano llama a identificar_titular: si ya es cliente de la casa, el nombre
+   y la direccion salen de ahi y no se los vuelves a pedir.
 2. Llama a iniciar_matricula y da el numero de solicitud.
 3. Pregunta si hay codeudores o coarrendatarios. Agrega cada persona por separado con
    agregar_participante cuando tengas nombre, documento, telefono y rol.
@@ -1812,6 +1828,309 @@ const enviarMenu: Tool = {
   },
 };
 
+// ─── _core/identidad.ts ──────────────────────────────────────────
+// Verificacion de identidad y sesiones de portal.
+//
+// Regla que sostiene todo lo demas: el modelo NUNCA ve el dato correcto ni
+// puede pasar un id arbitrario. La comparacion ocurre aqui, server-side, y las
+// tools que leen PII no tienen parametros identificadores (ver tools/cartera.ts).
+// Solo este modulo escribe estado.identidad.
+
+
+
+
+
+const HORAS_VIGENCIA = 24;
+const MAX_INTENTOS = 3;
+const BLOQUEO_MIN = 60;
+const TTL_PORTAL_MIN = 15;
+
+const soloDigitos = (s: unknown) => String(s ?? '').replace(/\D/g, '');
+
+async function sha256(txt: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function auditar(
+  db: Db,
+  datos: { tipo: string; sujeto_id?: string; telefono: string; exito: boolean; detalle?: string },
+) {
+  try {
+    await db.crear('AuditoriaAcceso', {
+      tipo: datos.tipo,
+      sujeto_id: datos.sujeto_id || '',
+      telefono: soloDigitos(datos.telefono),
+      exito: datos.exito,
+      detalle: (datos.detalle || '').slice(0, 500),
+      fecha: new Date().toISOString(),
+    });
+  } catch (e) {
+    console.error('auditar error:', (e as Error).message);
+  }
+}
+
+// ── Nivel A: implicito. El `from` del canal contra Arrendatario/Propietario. ──
+// Suficiente para RUTEAR a cartera. Nunca suficiente para divulgar: SIM swap,
+// telefonos familiares compartidos, numeros reasignados por el operador.
+async function reconocerTelefono(db: Db, tel: string) {
+  const t = soloDigitos(tel);
+  if (!t) return { arrendatario: null, propietario: null, contrato: null };
+  const [arrs, props] = await Promise.all([
+    db.list('Arrendatario', { telefono: t, limit: 1 }),
+    db.list('Propietario', { telefono: t, limit: 1 }),
+  ]);
+  const arrendatario = arrs[0] || null;
+  let contrato = null;
+  if (arrendatario) {
+    contrato = (await db.list('ContratoArriendo', { arrendatario_id: arrendatario.id, estado: 'Activo', limit: 1 }))[0] || null;
+  }
+  return { arrendatario, propietario: props[0] || null, contrato };
+}
+
+/**
+ * Busca al titular por su NIT o cedula en TitularInmueble.
+ *
+ * POR QUE HACE FALTA: hasta ahora la unica llave de entrada era el telefono, asi
+ * que un titular que escribiera desde otro numero (el del trabajo, el de la
+ * esposa, uno nuevo) simplemente no existia para el sistema, y el asistente
+ * terminaba pidiendole nombre y direccion como el bot viejo. El documento es lo
+ * que la operacion usa de verdad para identificar a alguien.
+ *
+ * POR QUE NO DEVUELVE LAS DIRECCIONES SIN MAS: una cedula en Colombia no es un
+ * secreto. Si bastara con teclearla para que el asistente lea en voz alta donde
+ * vive esa persona y cuantos inmuebles tiene, esto seria un buscador de
+ * patrimonio ajeno.
+ *
+ * Por eso el detalle solo sale cuando el telefono desde el que escriben TAMBIEN
+ * coincide con el registrado: ahi hay dos factores. Si no coincide, se devuelve
+ * unicamente cuantos inmuebles hay, y le toca al cliente decir la direccion para
+ * que el asistente la contraste. Confirmar un dato que el otro ya dijo no filtra
+ * nada; leerselo si.
+ */
+async function buscarTitularPorDocumento(
+  db: Db,
+  documento: string,
+  telefono: string,
+): Promise<{
+  existe: boolean;
+  coincide_telefono: boolean;
+  total: number;
+  nombre: string;
+  inmuebles: Array<{ id: string; direccion: string; ciudad: string; codigo: string; rol: string; contrato_id: string }>;
+}> {
+  const doc = soloDigitos(documento);
+  const vacio = { existe: false, coincide_telefono: false, total: 0, nombre: '', inmuebles: [] };
+  // Menos de 5 digitos no es un documento: es un dedazo, y no vale la pena
+  // convertir esta funcion en un oraculo para tantear numeros cortos.
+  if (doc.length < 5) return vacio;
+
+  const filas = await db.list('TitularInmueble', { numero_documento: doc, limit: 50 });
+  const vigentes = (filas || []).filter((f: any) => String(f.estado || 'Vigente') === 'Vigente');
+  if (!vigentes.length) return vacio;
+
+  const tel = soloDigitos(telefono);
+  const coincide = !!tel && vigentes.some((f: any) => soloDigitos(f.telefono) === tel);
+
+  return {
+    existe: true,
+    coincide_telefono: coincide,
+    total: vigentes.length,
+    nombre: coincide ? String(vigentes[0].nombre_titular || '') : '',
+    inmuebles: coincide
+      ? vigentes.map((f: any) => ({
+        id: String(f.id || ''),
+        direccion: String(f.direccion || ''),
+        ciudad: String(f.ciudad || ''),
+        codigo: String(f.codigo_inmueble || ''),
+        rol: String(f.rol || ''),
+        contrato_id: String(f.contrato_id || ''),
+      }))
+      : [],
+  };
+}
+
+function sesionVigente(estado: Estado): boolean {
+  const i = estado.identidad;
+  if (!i.verificado || !i.expira) return false;
+  return new Date(i.expira).getTime() > Date.now();
+}
+
+function bloqueado(estado: Estado): boolean {
+  const h = estado.identidad.bloqueado_hasta;
+  return !!h && new Date(h).getTime() > Date.now();
+}
+
+// ── Nivel B: reto. Segundo factor que el registro ya tiene. ──────────────────
+// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.
+async function verificar(
+  db: Db,
+  estado: Estado,
+  entrada: Entrada,
+  tipo: 'cedula_ultimos4' | 'numero_solicitud',
+  valor: string,
+): Promise<{ verificado: boolean; intentos_restantes: number; bloqueado: boolean }> {
+  if (bloqueado(estado)) {
+    await auditar(db, { tipo: 'verificacion', telefono: entrada.tel, exito: false, detalle: 'intento durante bloqueo' });
+    return { verificado: false, intentos_restantes: 0, bloqueado: true };
+  }
+
+  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
+  let ok = false;
+  let sujeto: string | undefined;
+
+  if (tipo === 'cedula_ultimos4') {
+    const dado = soloDigitos(valor).slice(-4);
+    for (const p of [arrendatario, propietario]) {
+      if (!p) continue;
+      const real = soloDigitos(p.numero_documento).slice(-4);
+      if (dado.length === 4 && real.length === 4 && dado === real) { ok = true; sujeto = p.id; break; }
+    }
+  } else {
+    const dado = String(valor || '').trim().toUpperCase();
+    if (dado) {
+      const sol = await db.uno('SolicitudMatricula', { numero_solicitud: dado });
+      // El numero de solicitud solo vale si pertenece a este telefono.
+      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada.tel)) { ok = true; sujeto = sol.id; }
+    }
+  }
+
+  const i = estado.identidad;
+  if (ok) {
+    const ahora = new Date();
+    estado.identidad = {
+      ...identidadVacia(),
+      verificado: true,
+      metodo: tipo,
+      arrendatario_id: arrendatario?.id ?? null,
+      propietario_id: propietario?.id ?? null,
+      contrato_id: contrato?.id ?? null,
+      verificado_en: ahora.toISOString(),
+      expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 3600_000).toISOString(),
+      intentos: 0,
+      bloqueado_hasta: null,
+    };
+    await auditar(db, { tipo: 'verificacion', sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
+    return { verificado: true, intentos_restantes: MAX_INTENTOS, bloqueado: false };
+  }
+
+  i.intentos = (i.intentos || 0) + 1;
+  i.verificado = false;
+  const restantes = Math.max(0, MAX_INTENTOS - i.intentos);
+  if (restantes === 0) {
+    i.bloqueado_hasta = new Date(Date.now() + BLOQUEO_MIN * 60_000).toISOString();
+  }
+  await auditar(db, {
+    tipo: 'verificacion', telefono: entrada.tel, exito: false,
+    detalle: `${tipo} fallido (intento ${i.intentos}/${MAX_INTENTOS})`,
+  });
+  return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
+}
+
+// ── Nivel C: magic link al portal. ──────────────────────────────────────────
+// Nunca sale un PDF ni un extracto completo por WhatsApp. Sale un link de un
+// solo uso, atado a este telefono, que vence en 15 minutos.
+async function crearSesionPortal(
+  db: Db,
+  entrada: Entrada,
+  estado: Estado,
+  tipo: string,
+): Promise<string | null> {
+  const sujeto = estado.identidad.arrendatario_id || estado.identidad.propietario_id;
+  if (!sesionVigente(estado) || !sujeto) return null;
+
+  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+  const fila = await db.crear('SesionPortal', {
+    token_hash: await sha256(token),      // en reposo solo queda el hash
+    tipo,
+    sujeto_id: sujeto,
+    sujeto_tipo: estado.identidad.arrendatario_id ? 'arrendatario' : 'propietario',
+    contrato_id: estado.identidad.contrato_id || '',
+    telefono: soloDigitos(entrada.tel),
+    expira: new Date(Date.now() + TTL_PORTAL_MIN * 60_000).toISOString(),
+    usado: false,
+    creada: new Date().toISOString(),
+  });
+  if (!fila) return null;
+
+  await auditar(db, { tipo: 'sesion_portal', sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
+  const app = (Deno.env.get('PORTAL_URL') || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
+  return `${app}/portal/entrar?t=${token}`;
+}
+
+// ─── _core/tools/identificacion.ts ───────────────────────────────
+/**
+ * Identifica al titular por su NIT o cedula.
+ *
+ * Es la herramienta que le faltaba al sistema. Hasta ahora la unica llave era el
+ * telefono, asi que un titular escribiendo desde otro numero no existia y el
+ * asistente terminaba pidiendole nombre y direccion, que es exactamente la queja
+ * que la operacion tenia del bot anterior.
+ *
+ * No la reciben todos los agentes. Cartera queda fuera a proposito: ahi se
+ * divulgan cifras, y para eso el camino sigue siendo verificar_identidad, que
+ * exige el segundo factor. Esta sirve para ENCONTRAR a alguien y confirmar de
+ * que inmueble habla, no para abrirle la cuenta.
+ */
+const identificarTitular: Tool = {
+  ...definirTool(
+    'identificar_titular',
+    'Busca al titular por su NIT o cedula para saber que inmuebles tiene con nosotros. Usala apenas te de el numero, antes de pedirle nombre o direccion: si esta registrado, esos datos ya los tenemos.',
+    { documento: str('NIT o cedula tal como lo dijo el cliente, solo los digitos') },
+    { retorna: true },
+  ),
+  ejecutar: async (input, c: CtxTool) => {
+    const r = await buscarTitularPorDocumento(c.db, String(input.documento), c.entrada.tel);
+
+    await auditar(c.db, {
+      tipo: 'identificacion_documento',
+      telefono: c.entrada.tel,
+      exito: r.existe,
+      detalle: r.existe
+        ? `${r.total} inmueble(s), telefono ${r.coincide_telefono ? 'coincide' : 'no coincide'}`
+        : 'documento sin coincidencias',
+    });
+
+    if (!r.existe) {
+      return {
+        encontrado: false,
+        instruccion: 'No aparece con ese numero. NO le digas que no existe en la base: pudo escribirlo mal o '
+          + 'estar a nombre de otra persona. Pidele que lo confirme una vez, y si vuelve a no aparecer sigue '
+          + 'con el tramite pidiendole los datos, sin bloquearlo.',
+      };
+    }
+
+    // El detalle solo sale con dos factores. Sin eso, el cliente dice la
+    // direccion y el asistente contrasta: confirmar no filtra, leer si.
+    if (!r.coincide_telefono) {
+      c.ctxAgente.titular_documento = String(input.documento).replace(/\D/g, '');
+      return {
+        encontrado: true,
+        total_inmuebles: r.total,
+        instruccion: `Ese documento si figura, con ${r.total} inmueble(s), pero estas escribiendo desde un `
+          + 'numero que no es el registrado. NO leas direcciones ni nombres. Pidele que te diga la direccion '
+          + 'del inmueble del que habla y sigue con eso.',
+      };
+    }
+
+    c.ctxAgente.titular_documento = String(input.documento).replace(/\D/g, '');
+    c.ctxAgente.titular_nombre = r.nombre;
+    c.ctxAgente.titular_inmuebles = r.inmuebles;
+
+    return {
+      encontrado: true,
+      nombre: r.nombre,
+      total_inmuebles: r.total,
+      inmuebles: r.inmuebles.map((i) => ({ direccion: i.direccion, ciudad: i.ciudad, rol: i.rol })),
+      instruccion: r.total === 1
+        ? `Ya sabes quien es. Confirma con una frase que es sobre ${r.inmuebles[0].direccion} y sigue. `
+          + 'NO le pidas el nombre ni la direccion: ya los tienes.'
+        : `Tiene ${r.total} inmuebles con nosotros. Preguntale sobre cual es, nombrando las direcciones. `
+          + 'NO le pidas el nombre: ya lo tienes.',
+    };
+  },
+};
+
 // ─── _core/scoring.ts ────────────────────────────────────────────
 // Calificacion de leads: rubrica unica, deterministica y testeable.
 //
@@ -2361,174 +2680,6 @@ const VENTAS: Record<string, Tool> = {
   calificar_lead: calificarLead,
   agendar_visita: agendarVisita,
 };
-
-// ─── _core/identidad.ts ──────────────────────────────────────────
-// Verificacion de identidad y sesiones de portal.
-//
-// Regla que sostiene todo lo demas: el modelo NUNCA ve el dato correcto ni
-// puede pasar un id arbitrario. La comparacion ocurre aqui, server-side, y las
-// tools que leen PII no tienen parametros identificadores (ver tools/cartera.ts).
-// Solo este modulo escribe estado.identidad.
-
-
-
-
-
-const HORAS_VIGENCIA = 24;
-const MAX_INTENTOS = 3;
-const BLOQUEO_MIN = 60;
-const TTL_PORTAL_MIN = 15;
-
-const soloDigitos = (s: unknown) => String(s ?? '').replace(/\D/g, '');
-
-async function sha256(txt: string): Promise<string> {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-async function auditar(
-  db: Db,
-  datos: { tipo: string; sujeto_id?: string; telefono: string; exito: boolean; detalle?: string },
-) {
-  try {
-    await db.crear('AuditoriaAcceso', {
-      tipo: datos.tipo,
-      sujeto_id: datos.sujeto_id || '',
-      telefono: soloDigitos(datos.telefono),
-      exito: datos.exito,
-      detalle: (datos.detalle || '').slice(0, 500),
-      fecha: new Date().toISOString(),
-    });
-  } catch (e) {
-    console.error('auditar error:', (e as Error).message);
-  }
-}
-
-// ── Nivel A: implicito. El `from` del canal contra Arrendatario/Propietario. ──
-// Suficiente para RUTEAR a cartera. Nunca suficiente para divulgar: SIM swap,
-// telefonos familiares compartidos, numeros reasignados por el operador.
-async function reconocerTelefono(db: Db, tel: string) {
-  const t = soloDigitos(tel);
-  if (!t) return { arrendatario: null, propietario: null, contrato: null };
-  const [arrs, props] = await Promise.all([
-    db.list('Arrendatario', { telefono: t, limit: 1 }),
-    db.list('Propietario', { telefono: t, limit: 1 }),
-  ]);
-  const arrendatario = arrs[0] || null;
-  let contrato = null;
-  if (arrendatario) {
-    contrato = (await db.list('ContratoArriendo', { arrendatario_id: arrendatario.id, estado: 'Activo', limit: 1 }))[0] || null;
-  }
-  return { arrendatario, propietario: props[0] || null, contrato };
-}
-
-function sesionVigente(estado: Estado): boolean {
-  const i = estado.identidad;
-  if (!i.verificado || !i.expira) return false;
-  return new Date(i.expira).getTime() > Date.now();
-}
-
-function bloqueado(estado: Estado): boolean {
-  const h = estado.identidad.bloqueado_hasta;
-  return !!h && new Date(h).getTime() > Date.now();
-}
-
-// ── Nivel B: reto. Segundo factor que el registro ya tiene. ──────────────────
-// `valor` es lo que dijo el cliente; el dato correcto no sale de esta funcion.
-async function verificar(
-  db: Db,
-  estado: Estado,
-  entrada: Entrada,
-  tipo: 'cedula_ultimos4' | 'numero_solicitud',
-  valor: string,
-): Promise<{ verificado: boolean; intentos_restantes: number; bloqueado: boolean }> {
-  if (bloqueado(estado)) {
-    await auditar(db, { tipo: 'verificacion', telefono: entrada.tel, exito: false, detalle: 'intento durante bloqueo' });
-    return { verificado: false, intentos_restantes: 0, bloqueado: true };
-  }
-
-  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
-  let ok = false;
-  let sujeto: string | undefined;
-
-  if (tipo === 'cedula_ultimos4') {
-    const dado = soloDigitos(valor).slice(-4);
-    for (const p of [arrendatario, propietario]) {
-      if (!p) continue;
-      const real = soloDigitos(p.numero_documento).slice(-4);
-      if (dado.length === 4 && real.length === 4 && dado === real) { ok = true; sujeto = p.id; break; }
-    }
-  } else {
-    const dado = String(valor || '').trim().toUpperCase();
-    if (dado) {
-      const sol = await db.uno('SolicitudMatricula', { numero_solicitud: dado });
-      // El numero de solicitud solo vale si pertenece a este telefono.
-      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada.tel)) { ok = true; sujeto = sol.id; }
-    }
-  }
-
-  const i = estado.identidad;
-  if (ok) {
-    const ahora = new Date();
-    estado.identidad = {
-      ...identidadVacia(),
-      verificado: true,
-      metodo: tipo,
-      arrendatario_id: arrendatario?.id ?? null,
-      propietario_id: propietario?.id ?? null,
-      contrato_id: contrato?.id ?? null,
-      verificado_en: ahora.toISOString(),
-      expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 3600_000).toISOString(),
-      intentos: 0,
-      bloqueado_hasta: null,
-    };
-    await auditar(db, { tipo: 'verificacion', sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
-    return { verificado: true, intentos_restantes: MAX_INTENTOS, bloqueado: false };
-  }
-
-  i.intentos = (i.intentos || 0) + 1;
-  i.verificado = false;
-  const restantes = Math.max(0, MAX_INTENTOS - i.intentos);
-  if (restantes === 0) {
-    i.bloqueado_hasta = new Date(Date.now() + BLOQUEO_MIN * 60_000).toISOString();
-  }
-  await auditar(db, {
-    tipo: 'verificacion', telefono: entrada.tel, exito: false,
-    detalle: `${tipo} fallido (intento ${i.intentos}/${MAX_INTENTOS})`,
-  });
-  return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
-}
-
-// ── Nivel C: magic link al portal. ──────────────────────────────────────────
-// Nunca sale un PDF ni un extracto completo por WhatsApp. Sale un link de un
-// solo uso, atado a este telefono, que vence en 15 minutos.
-async function crearSesionPortal(
-  db: Db,
-  entrada: Entrada,
-  estado: Estado,
-  tipo: string,
-): Promise<string | null> {
-  const sujeto = estado.identidad.arrendatario_id || estado.identidad.propietario_id;
-  if (!sesionVigente(estado) || !sujeto) return null;
-
-  const token = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-  const fila = await db.crear('SesionPortal', {
-    token_hash: await sha256(token),      // en reposo solo queda el hash
-    tipo,
-    sujeto_id: sujeto,
-    sujeto_tipo: estado.identidad.arrendatario_id ? 'arrendatario' : 'propietario',
-    contrato_id: estado.identidad.contrato_id || '',
-    telefono: soloDigitos(entrada.tel),
-    expira: new Date(Date.now() + TTL_PORTAL_MIN * 60_000).toISOString(),
-    usado: false,
-    creada: new Date().toISOString(),
-  });
-  if (!fila) return null;
-
-  await auditar(db, { tipo: 'sesion_portal', sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
-  const app = (Deno.env.get('PORTAL_URL') || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
-  return `${app}/portal/entrar?t=${token}`;
-}
 
 // ─── _core/tools/cartera.ts ──────────────────────────────────────
 // verificar_identidad NO recibe ningun identificador ni devuelve ninguno. El
@@ -3232,16 +3383,25 @@ const MATRICULA: Record<string, Tool> = {
 
 
 
+
+// identificar_titular la reciben los tramites que atienden a alguien que YA es
+// cliente y no divulgan cifras. Cartera queda fuera a proposito: ahi el camino
+// sigue siendo verificar_identidad, que exige el segundo factor antes de soltar
+// un saldo. Ventas y consignacion tampoco: hablan con gente que todavia no esta
+// en la base, asi que buscarla por documento no aporta y solo daria pie a
+// teclear cedulas ajenas.
+const IDENT = { identificar_titular: identificarTitular };
+
 // encuestas no se registra: esta fuera de AGENTES (ver protocol.ts).
 const EXTRA: Record<Agente, Record<string, Tool>> = {
   recepcion:     { enviar_menu: enviarMenu },
   ventas:        VENTAS,
   consignacion:  CONSIGNACION,
   cartera:       CARTERA,
-  mantenimiento: MANTENIMIENTO,
-  avaluos:       AVALUOS,
-  pqr:           PQR,
-  matricula:     MATRICULA,
+  mantenimiento: { ...MANTENIMIENTO, ...IDENT },
+  avaluos:       { ...AVALUOS, ...IDENT },
+  pqr:           { ...PQR, ...IDENT },
+  matricula:     { ...MATRICULA, ...IDENT },
 };
 
 function toolsDe(agente: Agente, habilitadas?: string[]): Record<string, Tool> {
