@@ -23,7 +23,18 @@
          superficie del CSP y una dependencia de red de terceros. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; connect-src 'self' https://*.base44.com wss://*.base44.com https://www.googleapis.com https://calendar.google.com https://accounts.google.com; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self';" />
+    <!-- Esta politica es la que SIEMPRE aplica, incluida la app servida desde
+         base44.app, donde las cabeceras de vercel.json no existen. Cuando hay
+         varias politicas el navegador exige la interseccion, asi que cualquier
+         origen nuevo hay que agregarlo aqui Y en vercel.json o queda bloqueado.
+
+         connect-src lista .app ademas de .com: el backend es
+         inmobiliare.base44.app (ver .env.example). Con solo *.base44.com,
+         callFunction() queda bloqueada al servir desde Vercel.
+
+         worker-src hace falta para el worker de pdf.js; sin declararlo cae a
+         default-src 'self' y el worker no arranca. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com https://apis.google.com; worker-src 'self' blob:; connect-src 'self' https://*.base44.com wss://*.base44.com https://*.base44.app wss://*.base44.app https://www.googleapis.com https://calendar.google.com https://accounts.google.com; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; frame-src https://accounts.google.com; object-src 'none'; base-uri 'self';" />
   </head>
   <body>
     <div id="root"></div>
