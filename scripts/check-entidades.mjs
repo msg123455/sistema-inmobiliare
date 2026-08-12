@@ -46,6 +46,13 @@ function cargarEsquemas() {
       esquemas.set(d.name || archivo.replace('.jsonc', ''), {
         campos: new Set(Object.keys(d.properties || {})),
         obligatorios: d.required || [],
+        // Los enums, para poder revisar tambien contra que se COMPARA y no solo
+        // que se escribe (ver el bloque de enum-inexistente mas abajo).
+        enums: new Map(
+          Object.entries(d.properties || {})
+            .filter(([, p]) => Array.isArray(p?.enum))
+            .map(([campo, p]) => [campo, p.enum]),
+        ),
         archivo,
       });
     } catch (e) {
@@ -198,6 +205,55 @@ for (const ruta of archivosTs(DIR_CODIGO)) {
           hallazgos.push({ rel, linea, entidad, tipo: 'falta-obligatorio', detalle: `"${req}" es obligatorio y no se envia` });
         }
       }
+    }
+  }
+}
+
+// ── Comparaciones contra valores que no existen en el enum ──────────────────
+//
+// El bloque de arriba revisa lo que se ESCRIBE. Este revisa lo que se COMPARA,
+// que falla igual de callado y es peor:
+//
+//   TitularInmueble.estado tiene enum [Activo, Terminado]
+//   identidad.ts filtraba con  String(f.estado || 'Vigente') === 'Vigente'
+//
+// 'Vigente' no existe en la entidad, asi que el filtro descartaba TODAS las
+// filas, siempre. La busqueda de un cliente por su documento era incapaz de
+// encontrar a nadie, hubiera datos o no, y en el chat se veia como que el
+// cliente habia escrito mal su propia cedula.
+//
+// Se unen los enums de todas las entidades que tengan un campo con ese nombre:
+// baja la sensibilidad, pero evita acusar en falso a un `estado` de otra tabla.
+{
+  const enumsPorCampo = new Map();
+  for (const esq of esquemas.values()) {
+    for (const [campo, valores] of esq.enums || []) {
+      if (!enumsPorCampo.has(campo)) enumsPorCampo.set(campo, new Set());
+      for (const v of valores) enumsPorCampo.get(campo).add(v);
+    }
+  }
+
+  // Lo que NO es una fila de la base. `input` es el parametro de una tool, cuyo
+  // enum es aparte y a proposito distinto: la tool recibe 'arriendo' en
+  // minuscula y lo traduce a 'Arriendo' al escribir. Compararlo con el enum de
+  // la entidad acusaria en falso justo a las lineas que hacen la traduccion
+  // bien.
+  const NO_ES_FILA = new Set(['input', 'args', 'body', 'params', 'opts', 'entrada', 'extra', 'datos']);
+
+  const RE_CMP = /(\w+)\.(\w+)\s*(?:\|\|\s*'[^']*')?\s*\)?\s*(===|!==)\s*'([^']+)'/g;
+  for (const archivo of archivosTs(DIR_CODIGO)) {
+    const txt = readFileSync(archivo, 'utf8');
+    const rel = relative(RAIZ, archivo).replace(/\\/g, '/');
+    for (const m of txt.matchAll(RE_CMP)) {
+      const [, receptor, campo, , literal] = m;
+      if (NO_ES_FILA.has(receptor)) continue;
+      const permitidos = enumsPorCampo.get(campo);
+      if (!permitidos || permitidos.has(literal)) continue;
+      const linea = txt.slice(0, m.index).split('\n').length;
+      hallazgos.push({
+        rel, linea, entidad: `campo ${campo}`, tipo: 'enum-inexistente',
+        detalle: `se compara contra "${literal}", que no esta en el enum (${[...permitidos].join(', ')})`,
+      });
     }
   }
 }

@@ -8,6 +8,7 @@ import type { Db } from './db.ts';
 import { type Agente, type Entrada, type Estado } from './protocol.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from './prompts.ts';
 import { instruccionHorario } from './horario.ts';
+import { buscarTitularPorDocumento } from './identidad.ts';
 
 /**
  * Tope de conocimiento inyectado por agente.
@@ -181,6 +182,41 @@ export async function cargarBase(db: Db, agente: Agente): Promise<Base> {
   };
 }
 
+/**
+ * Si el mensaje trae un documento, lo busca y deja al titular en el contexto.
+ *
+ * POR QUE NO SE LE DEJA AL MODELO. La tool identificar_titular existe y esta
+ * bien registrada, el prompt dice de llamarla ANTES que nada, y el modelo
+ * igual no la llamaba: leia el chunk que dice "si el documento no arroja nada,
+ * pidelo otra vez por si quedo mal escrito" y respondia eso directamente, sin
+ * consultar. El cliente dictaba su cedula correcta y el agente le pedia que la
+ * confirmara. Verificado en produccion: dos llamadas al modelo y CERO llamadas
+ * a la herramienta.
+ *
+ * Instruir mas fuerte no arregla esto, solo lo hace menos frecuente. Aqui la
+ * busqueda pasa a ser del servidor: cuando llega un documento, se consulta
+ * SIEMPRE y el resultado ya esta en el prompt antes de que el modelo piense.
+ * Es la misma idea que el juego de tools por agente: no se le pide al modelo
+ * que se porte bien, se le quita la posibilidad de portarse mal.
+ *
+ * Solo inyecta cuando ENCUENTRA. Un numero de diez digitos tambien puede ser un
+ * celular, y anunciar "no lo encontre" por un telefono seria peor que callar:
+ * la tool sigue disponible para los casos que esto no cubra.
+ */
+async function titularDelMensaje(db: Db, entrada: Entrada): Promise<Record<string, any>> {
+  // 6 a 12 digitos, sin puntos ni guiones, aislado del resto del texto. Cubre
+  // cedula (6-10), NIT (9-10) y deja fuera los anos y los numeros sueltos.
+  const m = entrada.texto.replace(/[.\-\s]/g, ' ').match(/\b(\d{6,12})\b/);
+  if (!m) return {};
+  const r = await buscarTitularPorDocumento(db, m[1], entrada.tel);
+  if (!r.existe || !r.coincide_telefono) return {};
+  return {
+    titular_documento: m[1],
+    titular_nombre: r.nombre,
+    titular_inmuebles: r.inmuebles,
+  };
+}
+
 type Cargador = (db: Db, estado: Estado, entrada: Entrada) => Promise<Record<string, any>>;
 
 const CARGADORES: Record<Agente, Cargador> = {
@@ -232,7 +268,12 @@ const CARGADORES: Record<Agente, Cargador> = {
       ? (await db.list('Reparacion', { arrendatario_id: arr.id, limit: 5 }))
           .filter((r: any) => r.estado !== 'Cerrada' && r.estado !== 'Cancelada')
       : [];
-    return { es_cliente: !!arr, reparaciones_abiertas: abiertas.length, nombre_registrado: arr?.nombre || '' };
+    return {
+      es_cliente: !!arr,
+      reparaciones_abiertas: abiertas.length,
+      nombre_registrado: arr?.nombre || '',
+      ...(await titularDelMensaje(db, entrada)),
+    };
   },
 
   consignacion: async (db, _estado, entrada) => {
@@ -240,9 +281,11 @@ const CARGADORES: Record<Agente, Cargador> = {
     return { ya_es_propietario: !!prop, nombre_registrado: prop?.nombre || '' };
   },
 
-  avaluos: async () => ({}),
-  pqr: async () => ({}),
-  matricula: async () => ({}),
+  // Estos tres tambien atienden a alguien que YA es cliente, asi que el
+  // documento del mensaje se resuelve igual que en mantenimiento.
+  avaluos: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  pqr: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
 };
 
 export async function cargarContexto(db: Db, agente: Agente, estado: Estado, entrada: Entrada) {
@@ -284,6 +327,27 @@ export function armarSystem(
     ctxAgente.nombre_registrado ? `En el sistema figura como: ${ctxAgente.nombre_registrado}` : '',
   ].filter(Boolean).join('\n');
   partes.push(estadoTxt);
+
+  // El titular que el servidor ya busco por el documento del mensaje. Va en su
+  // propio bloque y no como una linea mas del estado: es EL dato que cambia la
+  // conversacion, y enterrarlo entre otros diez hace que el modelo lo ignore y
+  // siga pidiendo lo que ya tiene delante.
+  if (ctxAgente.titular_nombre) {
+    const inmuebles = (ctxAgente.titular_inmuebles || []) as Array<Record<string, string>>;
+    partes.push([
+      '=== YA ENCONTRASTE A ESTA PERSONA EN LA BASE ===',
+      `Documento ${ctxAgente.titular_documento} -> ${ctxAgente.titular_nombre}`,
+      inmuebles.length === 1
+        ? `Tiene UN inmueble con nosotros: ${inmuebles[0].direccion}${inmuebles[0].ciudad ? `, ${inmuebles[0].ciudad}` : ''}`
+        : `Tiene ${inmuebles.length} inmuebles con nosotros:\n${inmuebles.map((i) => `  - ${i.direccion}${i.ciudad ? `, ${i.ciudad}` : ''}`).join('\n')}`,
+      '',
+      'DILO DE ENTRADA, en el mismo mensaje: que ya lo encontraste, su nombre, y su inmueble',
+      inmuebles.length === 1 ? 'para que lo confirme.' : 'para que elija de cual se trata.',
+      'Despues preguntale que necesita.',
+      'PROHIBIDO pedirle el nombre, la direccion o el telefono: los tienes aqui arriba.',
+      'PROHIBIDO decirle que no aparece o pedirle que confirme el documento: SI aparece.',
+    ].join('\n'));
+  }
 
   partes.push(
     '=== COMO RESPONDER ===\n' +

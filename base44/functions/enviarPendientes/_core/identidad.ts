@@ -95,7 +95,24 @@ export async function buscarTitularPorDocumento(
   if (doc.length < 5) return vacio;
 
   const filas = await db.list('TitularInmueble', { numero_documento: doc, limit: 50 });
-  const vigentes = (filas || []).filter((f: any) => String(f.estado || 'Vigente') === 'Vigente');
+  // Se registra que devolvio la consulta, no solo el veredicto. Sin esto, "no
+  // aparece" tapa por igual tres causas distintas —la persona no esta, el filtro
+  // del backend no aplica, o el campo se llama de otra forma— y desde el chat se
+  // ven identicas.
+  console.log(`titular ${doc}: ${(filas || []).length} fila(s) crudas, estados=[${(filas || []).map((f: any) => f.estado).join(',')}]`);
+  // Se descarta lo TERMINADO, en vez de exigir un valor concreto de "vigente".
+  //
+  // Antes decia `=== 'Vigente'`, y ese valor NO EXISTE en la entidad: el enum de
+  // TitularInmueble.estado es Activo | Terminado. O sea que el filtro descartaba
+  // todas las filas siempre, hubiera datos o no, y la busqueda por documento era
+  // estructuralmente incapaz de encontrar a nadie. El sintoma en el chat era el
+  // peor posible: el cliente dictaba su cedula correcta y el agente le pedia que
+  // la confirmara, como si se hubiera equivocado.
+  //
+  // Preguntar por lo que descalifica y no por lo que califica: si manana el enum
+  // gana un estado nuevo (Suspendido, En_mora), la fila sigue apareciendo, que
+  // es lo que se quiere. Al reves, desapareceria en silencio.
+  const vigentes = (filas || []).filter((f: any) => String(f.estado || '') !== 'Terminado');
   if (!vigentes.length) return vacio;
 
   const tel = soloDigitos(telefono);

@@ -576,6 +576,397 @@ function instruccionHorario(ahora, config = {}) {
   return `FUERA DE HORARIO. El equipo atiende de lunes a viernes, de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. Agenda la visita o la llamada con la herramienta que corresponda, registra lo que haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo contacta el siguiente dia habil. Nunca uses eso como primera salida.`;
 }
 
+// base44/functions/asistente/_core/protocol.ts
+var AGENTES = [
+  "recepcion",
+  "ventas",
+  "consignacion",
+  "cartera",
+  "mantenimiento",
+  "avaluos",
+  "pqr",
+  "matricula"
+];
+var esAgente = (v) => typeof v === "string" && AGENTES.includes(v);
+var ETIQUETAS_AGENTE = {
+  recepcion: "saludo suelto, mensaje ambiguo, o no encaja en ninguna otra categoria",
+  ventas: "busca comprar o arrendar un inmueble, pide fotos, precios, visitas",
+  consignacion: "ES DUENO de un inmueble y quiere venderlo, arrendarlo o ponerlo en administracion",
+  cartera: "pagos, canon, saldo, estado de cuenta, mora, recibo, codigo de barras, certificado",
+  mantenimiento: "algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias",
+  avaluos: "quiere un avaluo comercial de un inmueble, o pregunta cuanto vale",
+  pqr: "inquietud o consulta sobre el servicio, y tambien peticion, queja, reclamo, sugerencia o felicitacion",
+  matricula: "esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117"
+};
+function definirTool(name, description, props, opts = {}) {
+  return {
+    def: {
+      name,
+      description,
+      strict: true,
+      input_schema: {
+        type: "object",
+        properties: props,
+        // strict exige que `required` cubra todas las propiedades; los campos
+        // opcionales se modelan como nullable, no omitiendolos de required.
+        required: Object.keys(props),
+        additionalProperties: false
+      }
+    },
+    ...opts
+  };
+}
+var str = (description) => ({ type: "string", description });
+var strOpc = (description) => ({ type: ["string", "null"], description });
+var numOpc = (description) => ({ type: ["number", "null"], description });
+var bool = (description) => ({ type: "boolean", description });
+var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
+var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
+
+// base44/functions/asistente/_core/state.ts
+var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
+function identidadVacia() {
+  return {
+    verificado: false,
+    metodo: null,
+    arrendatario_id: null,
+    contrato_id: null,
+    propietario_id: null,
+    verificado_en: null,
+    expira: null,
+    intentos: 0,
+    bloqueado_hasta: null
+  };
+}
+function estadoVacio() {
+  return {
+    v: 2,
+    agente_activo: "recepcion",
+    agente_historial: [],
+    identidad: identidadVacia(),
+    compartido: {},
+    historial: [],
+    ctx: {},
+    turno_pendiente: null,
+    msg_ids: [],
+    pausada: false
+  };
+}
+function migrar(raw) {
+  const v = estadoVacio();
+  if (!raw || typeof raw !== "object") return v;
+  const o = raw;
+  if (o.v === 2) {
+    return {
+      ...v,
+      ...o,
+      identidad: { ...identidadVacia(), ...o.identidad || {} },
+      ctx: o.ctx && typeof o.ctx === "object" ? o.ctx : {},
+      agente_activo: esAgente(o.agente_activo) ? o.agente_activo : "recepcion",
+      historial: Array.isArray(o.historial) ? o.historial : [],
+      msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
+      agente_historial: Array.isArray(o.agente_historial) ? o.agente_historial : []
+    };
+  }
+  const ahora = (/* @__PURE__ */ new Date()).toISOString();
+  return {
+    ...v,
+    agente_activo: "ventas",
+    agente_historial: [{ agente: "ventas", desde: ahora, motivo: "migracion:v1" }],
+    compartido: {
+      nombre: o.datos?.nombre || o.nombre || "",
+      contacto_id: o.contacto_id || "",
+      campana_id: o.campana_id || "",
+      campana_nombre: o.campana_nombre || ""
+    },
+    historial: Array.isArray(o.historial) ? o.historial : [],
+    msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
+    pausada: !!o.pausada,
+    ctx: {
+      ventas: {
+        datos: o.datos && typeof o.datos === "object" ? o.datos : {},
+        etapa_ventas: o.etapa_ventas || "calentamiento",
+        estado_emocional: o.estado_emocional || "sin_definir",
+        tipo_comprador: o.tipo_comprador || "sin_definir",
+        motivacion_principal: o.motivacion_principal || "sin_definir",
+        nivel_urgencia: o.nivel_urgencia || "explorando",
+        objeciones_activas: Array.isArray(o.objeciones_activas) ? o.objeciones_activas : [],
+        calificado: !!o.calificado,
+        descalificado: !!o.descalificado,
+        motivo_desc: o.motivo_desc || "",
+        broker: o.broker || "",
+        broker_tel: o.broker_tel || "",
+        broker_genero: o.broker_genero || "",
+        despidio: !!o.despidio
+      }
+    }
+  };
+}
+async function cargarEstado(db, canal, tel) {
+  const clave2 = claveDe(canal, tel);
+  let fila = await db.uno("MemoriaChat", { clave: clave2 });
+  if (!fila) fila = await db.uno("MemoriaChat", { telefono: String(tel).replace(/\D/g, "") });
+  if (!fila) return { id: null, estado: estadoVacio(), fila: null };
+  let bruto = {};
+  try {
+    bruto = JSON.parse(fila.estado_json || "{}");
+  } catch {
+  }
+  return { id: fila.id, estado: migrar(bruto), fila };
+}
+function ctxDe(estado, agente) {
+  if (!estado.ctx[agente]) estado.ctx[agente] = {};
+  return estado.ctx[agente];
+}
+function transferir(estado, destino, motivo) {
+  const origen = estado.agente_activo;
+  if (origen === destino) return;
+  estado.agente_activo = destino;
+  estado.agente_historial = [
+    ...estado.agente_historial,
+    { agente: destino, desde: (/* @__PURE__ */ new Date()).toISOString(), motivo }
+  ].slice(-20);
+  estado.historial.push({
+    role: "user",
+    content: `[Sistema: transferido de ${origen} a ${destino}. Motivo: ${motivo}]`,
+    ts: (/* @__PURE__ */ new Date()).toISOString()
+  });
+}
+function olvidarTransitorios(estado, agente, claves) {
+  const scratch = estado.ctx[agente];
+  if (!scratch) return;
+  for (const k of claves) delete scratch[k];
+}
+var ESCALONES = [
+  { nombre: "completo", reducir: (e) => e },
+  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
+  { nombre: "sin ctx", reducir: (e) => ({ ...e, ctx: {} }) },
+  { nombre: "sin ctx, 8 mensajes", reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
+  {
+    nombre: "minimo",
+    reducir: (e) => ({
+      ...estadoVacio(),
+      agente_activo: e.agente_activo,
+      agente_historial: e.agente_historial.slice(-3),
+      identidad: e.identidad,
+      compartido: e.compartido,
+      historial: e.historial.slice(-2),
+      msg_ids: e.msg_ids.slice(-5),
+      pausada: e.pausada
+    })
+  }
+];
+async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
+  estado.historial = estado.historial.slice(-24);
+  estado.msg_ids = estado.msg_ids.slice(-20);
+  const fila = (json) => ({
+    clave: claveDe(canal, tel),
+    telefono: String(tel).replace(/\D/g, ""),
+    canal: canal === "telegram" ? "Telegram" : "WhatsApp",
+    nombre: String(estado.compartido.nombre || ""),
+    contacto_id: extra.contacto_id ?? String(estado.compartido.contacto_id || ""),
+    agente_activo: estado.agente_activo,
+    pausada: estado.pausada,
+    // Campo indexado: continuarTurno lo consulta en vez de escanear la tabla.
+    tiene_turno_pendiente: !!estado.turno_pendiente,
+    estado_json: json,
+    ultimo_mensaje: (extra.ultimo_mensaje || "").slice(0, 1e3),
+    ultima_respuesta: (extra.ultima_respuesta || "").slice(0, 1e3),
+    fecha_ultimo_mensaje: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  for (const [i, escalon] of ESCALONES.entries()) {
+    const json = JSON.stringify(escalon.reducir(estado));
+    const id = await db.guardar("MemoriaChat", memoriaId, fila(json));
+    if (id) {
+      if (i > 0) {
+        console.error(
+          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): Base44 rechazo los ${i} intento(s) anteriores por tamano`
+        );
+      }
+      return id;
+    }
+    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
+  }
+  console.error("NO SE PUDO GUARDAR MemoriaChat en ningun escalon — la conversacion se pierde");
+  return null;
+}
+
+// base44/functions/asistente/_core/identidad.ts
+var HORAS_VIGENCIA = 24;
+var MAX_INTENTOS = 3;
+var BLOQUEO_MIN = 60;
+var TTL_PORTAL_MIN = 15;
+var soloDigitos = (s) => String(s ?? "").replace(/\D/g, "");
+async function sha256(txt) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+async function auditar(db, datos) {
+  try {
+    await db.crear("AuditoriaAcceso", {
+      tipo: datos.tipo,
+      sujeto_id: datos.sujeto_id || "",
+      telefono: soloDigitos(datos.telefono),
+      exito: datos.exito,
+      detalle: (datos.detalle || "").slice(0, 500),
+      fecha: (/* @__PURE__ */ new Date()).toISOString()
+    });
+  } catch (e) {
+    console.error("auditar error:", e.message);
+  }
+}
+async function reconocerTelefono(db, tel) {
+  const t = soloDigitos(tel);
+  if (!t) return { arrendatario: null, propietario: null, contrato: null };
+  const [arrs, props] = await Promise.all([
+    db.list("Arrendatario", { telefono: t, limit: 1 }),
+    db.list("Propietario", { telefono: t, limit: 1 })
+  ]);
+  const arrendatario = arrs[0] || null;
+  let contrato = null;
+  if (arrendatario) {
+    contrato = (await db.list("ContratoArriendo", { arrendatario_id: arrendatario.id, estado: "Activo", limit: 1 }))[0] || null;
+  }
+  return { arrendatario, propietario: props[0] || null, contrato };
+}
+async function buscarTitularPorDocumento(db, documento, telefono) {
+  const doc = soloDigitos(documento);
+  const vacio = { existe: false, coincide_telefono: false, total: 0, nombre: "", inmuebles: [] };
+  if (doc.length < 5) return vacio;
+  const filas = await db.list("TitularInmueble", { numero_documento: doc, limit: 50 });
+  console.log(`titular ${doc}: ${(filas || []).length} fila(s) crudas, estados=[${(filas || []).map((f) => f.estado).join(",")}]`);
+  const vigentes = (filas || []).filter((f) => String(f.estado || "") !== "Terminado");
+  if (!vigentes.length) return vacio;
+  const tel = soloDigitos(telefono);
+  const coincide = !!tel && vigentes.some((f) => soloDigitos(f.telefono) === tel);
+  return {
+    existe: true,
+    coincide_telefono: coincide,
+    total: vigentes.length,
+    nombre: coincide ? String(vigentes[0].nombre_titular || "") : "",
+    inmuebles: coincide ? vigentes.map((f) => ({
+      id: String(f.id || ""),
+      direccion: String(f.direccion || ""),
+      ciudad: String(f.ciudad || ""),
+      codigo: String(f.codigo_inmueble || ""),
+      rol: String(f.rol || ""),
+      contrato_id: String(f.contrato_id || "")
+    })) : []
+  };
+}
+function sesionVigente(estado) {
+  const i = estado.identidad;
+  if (!i.verificado || !i.expira) return false;
+  return new Date(i.expira).getTime() > Date.now();
+}
+function bloqueado(estado) {
+  const h = estado.identidad.bloqueado_hasta;
+  return !!h && new Date(h).getTime() > Date.now();
+}
+async function verificar(db, estado, entrada, tipo, valor) {
+  if (bloqueado(estado)) {
+    await auditar(db, { tipo: "verificacion", telefono: entrada.tel, exito: false, detalle: "intento durante bloqueo" });
+    return { verificado: false, intentos_restantes: 0, bloqueado: true };
+  }
+  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
+  let ok = false;
+  let sujeto;
+  let rolArrendatario = false;
+  let rolPropietario = false;
+  if (tipo === "cedula_ultimos4") {
+    const dado = soloDigitos(valor).slice(-4);
+    for (const [rol, p] of [["arrendatario", arrendatario], ["propietario", propietario]]) {
+      if (!p) continue;
+      const real = soloDigitos(p.numero_documento || p.cedula_nit).slice(-4);
+      if (dado.length === 4 && real.length === 4 && dado === real) {
+        ok = true;
+        sujeto = p.id;
+        if (rol === "arrendatario") rolArrendatario = true;
+        else rolPropietario = true;
+      }
+    }
+  } else {
+    const dado = String(valor || "").trim().toUpperCase();
+    if (dado) {
+      const sol = await db.uno("SolicitudMatricula", { numero_solicitud: dado });
+      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada.tel)) {
+        ok = true;
+        sujeto = sol.id;
+      }
+    }
+  }
+  const i = estado.identidad;
+  if (ok) {
+    const ahora = /* @__PURE__ */ new Date();
+    estado.identidad = {
+      ...identidadVacia(),
+      verificado: true,
+      metodo: tipo,
+      // SOLO el rol cuyo documento coincidio. Antes se escribian los dos ids
+      // pasara lo que pasara, y por la rama de numero_solicitud se escribian sin
+      // que coincidiera ninguno.
+      //
+      // Es una fuga, no una imprecision: un telefono de oficina o familiar puede
+      // figurar a la vez en Arrendatario A y en Propietario B, que son personas
+      // distintas. A daba sus ultimos 4, quedaba con propietario_id = B, y podia
+      // pedir el certificado tributario de B y abrir sus liquidaciones —
+      // ingresos brutos, comision y neto a pagar.
+      //
+      // Si la misma persona es las dos cosas, su documento coincide en las dos
+      // filas y el bucle de arriba marca los dos roles. Ese caso sigue andando.
+      arrendatario_id: rolArrendatario ? arrendatario?.id ?? null : null,
+      propietario_id: rolPropietario ? propietario?.id ?? null : null,
+      // El contrato es del arrendatario. Un propietario verificado no hereda el
+      // contrato de quien le arrienda.
+      contrato_id: rolArrendatario ? contrato?.id ?? null : null,
+      verificado_en: ahora.toISOString(),
+      expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 36e5).toISOString(),
+      intentos: 0,
+      bloqueado_hasta: null
+    };
+    await auditar(db, { tipo: "verificacion", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
+    return { verificado: true, intentos_restantes: MAX_INTENTOS, bloqueado: false };
+  }
+  i.intentos = (i.intentos || 0) + 1;
+  i.verificado = false;
+  const restantes = Math.max(0, MAX_INTENTOS - i.intentos);
+  if (restantes === 0) {
+    i.bloqueado_hasta = new Date(Date.now() + BLOQUEO_MIN * 6e4).toISOString();
+  }
+  await auditar(db, {
+    tipo: "verificacion",
+    telefono: entrada.tel,
+    exito: false,
+    detalle: `${tipo} fallido (intento ${i.intentos}/${MAX_INTENTOS})`
+  });
+  return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
+}
+var SECCIONES_PROPIETARIO = /* @__PURE__ */ new Set(["certificados", "liquidaciones"]);
+async function crearSesionPortal(db, entrada, estado, tipo) {
+  const arrendatarioId = estado.identidad.arrendatario_id;
+  const propietarioId = estado.identidad.propietario_id;
+  const comoPropietario = SECCIONES_PROPIETARIO.has(tipo) ? !!propietarioId : !arrendatarioId && !!propietarioId;
+  const sujeto = comoPropietario ? propietarioId : arrendatarioId;
+  if (!sesionVigente(estado) || !sujeto) return null;
+  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+  const fila = await db.crear("SesionPortal", {
+    token_hash: await sha256(token),
+    // en reposo solo queda el hash
+    tipo,
+    sujeto_id: sujeto,
+    sujeto_tipo: comoPropietario ? "propietario" : "arrendatario",
+    contrato_id: estado.identidad.contrato_id || "",
+    telefono: soloDigitos(entrada.tel),
+    expira: new Date(Date.now() + TTL_PORTAL_MIN * 6e4).toISOString(),
+    usado: false,
+    creada: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  if (!fila) return null;
+  await auditar(db, { tipo: "sesion_portal", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
+  const app = (Deno.env.get("PORTAL_URL") || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
+  return `${app}/portal/entrar?t=${token}`;
+}
+
 // base44/functions/asistente/_core/contexto.ts
 var MAX_RAG_CHARS = 18e3;
 function destinosDe(ch) {
@@ -650,6 +1041,17 @@ ${seleccion.texto}` : "",
     ragActivos: (chunks || []).length
   };
 }
+async function titularDelMensaje(db, entrada) {
+  const m = entrada.texto.replace(/[.\-\s]/g, " ").match(/\b(\d{6,12})\b/);
+  if (!m) return {};
+  const r = await buscarTitularPorDocumento(db, m[1], entrada.tel);
+  if (!r.existe || !r.coincide_telefono) return {};
+  return {
+    titular_documento: m[1],
+    titular_nombre: r.nombre,
+    titular_inmuebles: r.inmuebles
+  };
+}
 var CARGADORES = {
   recepcion: async () => ({}),
   ventas: async (db, estado) => {
@@ -686,15 +1088,22 @@ var CARGADORES = {
     const tel = entrada.tel.replace(/\D/g, "");
     const arr = (await db.list("Arrendatario", { telefono: tel, limit: 1 }))[0] || null;
     const abiertas = arr ? (await db.list("Reparacion", { arrendatario_id: arr.id, limit: 5 })).filter((r) => r.estado !== "Cerrada" && r.estado !== "Cancelada") : [];
-    return { es_cliente: !!arr, reparaciones_abiertas: abiertas.length, nombre_registrado: arr?.nombre || "" };
+    return {
+      es_cliente: !!arr,
+      reparaciones_abiertas: abiertas.length,
+      nombre_registrado: arr?.nombre || "",
+      ...await titularDelMensaje(db, entrada)
+    };
   },
   consignacion: async (db, _estado, entrada) => {
     const prop = (await db.list("Propietario", { telefono: entrada.tel.replace(/\D/g, ""), limit: 1 }))[0] || null;
     return { ya_es_propietario: !!prop, nombre_registrado: prop?.nombre || "" };
   },
-  avaluos: async () => ({}),
-  pqr: async () => ({}),
-  matricula: async () => ({})
+  // Estos tres tambien atienden a alguien que YA es cliente, asi que el
+  // documento del mensaje se resuelve igual que en mantenimiento.
+  avaluos: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  pqr: async (db, _estado, entrada) => titularDelMensaje(db, entrada),
+  matricula: async (db, _estado, entrada) => titularDelMensaje(db, entrada)
 };
 async function cargarContexto(db, agente, estado, entrada) {
   try {
@@ -724,6 +1133,21 @@ ${ctxAgente.resumen_portafolio}` : "",
     ctxAgente.nombre_registrado ? `En el sistema figura como: ${ctxAgente.nombre_registrado}` : ""
   ].filter(Boolean).join("\n");
   partes.push(estadoTxt);
+  if (ctxAgente.titular_nombre) {
+    const inmuebles = ctxAgente.titular_inmuebles || [];
+    partes.push([
+      "=== YA ENCONTRASTE A ESTA PERSONA EN LA BASE ===",
+      `Documento ${ctxAgente.titular_documento} -> ${ctxAgente.titular_nombre}`,
+      inmuebles.length === 1 ? `Tiene UN inmueble con nosotros: ${inmuebles[0].direccion}${inmuebles[0].ciudad ? `, ${inmuebles[0].ciudad}` : ""}` : `Tiene ${inmuebles.length} inmuebles con nosotros:
+${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}`).join("\n")}`,
+      "",
+      "DILO DE ENTRADA, en el mismo mensaje: que ya lo encontraste, su nombre, y su inmueble",
+      inmuebles.length === 1 ? "para que lo confirme." : "para que elija de cual se trata.",
+      "Despues preguntale que necesita.",
+      "PROHIBIDO pedirle el nombre, la direccion o el telefono: los tienes aqui arriba.",
+      "PROHIBIDO decirle que no aparece o pedirle que confirme el documento: SI aparece."
+    ].join("\n"));
+  }
   partes.push(
     "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo."
   );
@@ -924,53 +1348,6 @@ function marcaAutorizacion() {
   };
 }
 
-// base44/functions/asistente/_core/protocol.ts
-var AGENTES = [
-  "recepcion",
-  "ventas",
-  "consignacion",
-  "cartera",
-  "mantenimiento",
-  "avaluos",
-  "pqr",
-  "matricula"
-];
-var esAgente = (v) => typeof v === "string" && AGENTES.includes(v);
-var ETIQUETAS_AGENTE = {
-  recepcion: "saludo suelto, mensaje ambiguo, o no encaja en ninguna otra categoria",
-  ventas: "busca comprar o arrendar un inmueble, pide fotos, precios, visitas",
-  consignacion: "ES DUENO de un inmueble y quiere venderlo, arrendarlo o ponerlo en administracion",
-  cartera: "pagos, canon, saldo, estado de cuenta, mora, recibo, codigo de barras, certificado",
-  mantenimiento: "algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias",
-  avaluos: "quiere un avaluo comercial de un inmueble, o pregunta cuanto vale",
-  pqr: "inquietud o consulta sobre el servicio, y tambien peticion, queja, reclamo, sugerencia o felicitacion",
-  matricula: "esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117"
-};
-function definirTool(name, description, props, opts = {}) {
-  return {
-    def: {
-      name,
-      description,
-      strict: true,
-      input_schema: {
-        type: "object",
-        properties: props,
-        // strict exige que `required` cubra todas las propiedades; los campos
-        // opcionales se modelan como nullable, no omitiendolos de required.
-        required: Object.keys(props),
-        additionalProperties: false
-      }
-    },
-    ...opts
-  };
-}
-var str = (description) => ({ type: "string", description });
-var strOpc = (description) => ({ type: ["string", "null"], description });
-var numOpc = (description) => ({ type: ["number", "null"], description });
-var bool = (description) => ({ type: "boolean", description });
-var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
-var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
-
 // base44/functions/asistente/_core/router.ts
 var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 var POR_BOTON = {
@@ -1087,174 +1464,6 @@ ${entrada.texto.slice(0, 600)}`
     confianza: Number(uso.input.confianza) || 0,
     motivo: String(uso.input.motivo || "")
   };
-}
-
-// base44/functions/asistente/_core/state.ts
-var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
-function identidadVacia() {
-  return {
-    verificado: false,
-    metodo: null,
-    arrendatario_id: null,
-    contrato_id: null,
-    propietario_id: null,
-    verificado_en: null,
-    expira: null,
-    intentos: 0,
-    bloqueado_hasta: null
-  };
-}
-function estadoVacio() {
-  return {
-    v: 2,
-    agente_activo: "recepcion",
-    agente_historial: [],
-    identidad: identidadVacia(),
-    compartido: {},
-    historial: [],
-    ctx: {},
-    turno_pendiente: null,
-    msg_ids: [],
-    pausada: false
-  };
-}
-function migrar(raw) {
-  const v = estadoVacio();
-  if (!raw || typeof raw !== "object") return v;
-  const o = raw;
-  if (o.v === 2) {
-    return {
-      ...v,
-      ...o,
-      identidad: { ...identidadVacia(), ...o.identidad || {} },
-      ctx: o.ctx && typeof o.ctx === "object" ? o.ctx : {},
-      agente_activo: esAgente(o.agente_activo) ? o.agente_activo : "recepcion",
-      historial: Array.isArray(o.historial) ? o.historial : [],
-      msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
-      agente_historial: Array.isArray(o.agente_historial) ? o.agente_historial : []
-    };
-  }
-  const ahora = (/* @__PURE__ */ new Date()).toISOString();
-  return {
-    ...v,
-    agente_activo: "ventas",
-    agente_historial: [{ agente: "ventas", desde: ahora, motivo: "migracion:v1" }],
-    compartido: {
-      nombre: o.datos?.nombre || o.nombre || "",
-      contacto_id: o.contacto_id || "",
-      campana_id: o.campana_id || "",
-      campana_nombre: o.campana_nombre || ""
-    },
-    historial: Array.isArray(o.historial) ? o.historial : [],
-    msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
-    pausada: !!o.pausada,
-    ctx: {
-      ventas: {
-        datos: o.datos && typeof o.datos === "object" ? o.datos : {},
-        etapa_ventas: o.etapa_ventas || "calentamiento",
-        estado_emocional: o.estado_emocional || "sin_definir",
-        tipo_comprador: o.tipo_comprador || "sin_definir",
-        motivacion_principal: o.motivacion_principal || "sin_definir",
-        nivel_urgencia: o.nivel_urgencia || "explorando",
-        objeciones_activas: Array.isArray(o.objeciones_activas) ? o.objeciones_activas : [],
-        calificado: !!o.calificado,
-        descalificado: !!o.descalificado,
-        motivo_desc: o.motivo_desc || "",
-        broker: o.broker || "",
-        broker_tel: o.broker_tel || "",
-        broker_genero: o.broker_genero || "",
-        despidio: !!o.despidio
-      }
-    }
-  };
-}
-async function cargarEstado(db, canal, tel) {
-  const clave2 = claveDe(canal, tel);
-  let fila = await db.uno("MemoriaChat", { clave: clave2 });
-  if (!fila) fila = await db.uno("MemoriaChat", { telefono: String(tel).replace(/\D/g, "") });
-  if (!fila) return { id: null, estado: estadoVacio(), fila: null };
-  let bruto = {};
-  try {
-    bruto = JSON.parse(fila.estado_json || "{}");
-  } catch {
-  }
-  return { id: fila.id, estado: migrar(bruto), fila };
-}
-function ctxDe(estado, agente) {
-  if (!estado.ctx[agente]) estado.ctx[agente] = {};
-  return estado.ctx[agente];
-}
-function transferir(estado, destino, motivo) {
-  const origen = estado.agente_activo;
-  if (origen === destino) return;
-  estado.agente_activo = destino;
-  estado.agente_historial = [
-    ...estado.agente_historial,
-    { agente: destino, desde: (/* @__PURE__ */ new Date()).toISOString(), motivo }
-  ].slice(-20);
-  estado.historial.push({
-    role: "user",
-    content: `[Sistema: transferido de ${origen} a ${destino}. Motivo: ${motivo}]`,
-    ts: (/* @__PURE__ */ new Date()).toISOString()
-  });
-}
-function olvidarTransitorios(estado, agente, claves) {
-  const scratch = estado.ctx[agente];
-  if (!scratch) return;
-  for (const k of claves) delete scratch[k];
-}
-var ESCALONES = [
-  { nombre: "completo", reducir: (e) => e },
-  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
-  { nombre: "sin ctx", reducir: (e) => ({ ...e, ctx: {} }) },
-  { nombre: "sin ctx, 8 mensajes", reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
-  {
-    nombre: "minimo",
-    reducir: (e) => ({
-      ...estadoVacio(),
-      agente_activo: e.agente_activo,
-      agente_historial: e.agente_historial.slice(-3),
-      identidad: e.identidad,
-      compartido: e.compartido,
-      historial: e.historial.slice(-2),
-      msg_ids: e.msg_ids.slice(-5),
-      pausada: e.pausada
-    })
-  }
-];
-async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
-  estado.historial = estado.historial.slice(-24);
-  estado.msg_ids = estado.msg_ids.slice(-20);
-  const fila = (json) => ({
-    clave: claveDe(canal, tel),
-    telefono: String(tel).replace(/\D/g, ""),
-    canal: canal === "telegram" ? "Telegram" : "WhatsApp",
-    nombre: String(estado.compartido.nombre || ""),
-    contacto_id: extra.contacto_id ?? String(estado.compartido.contacto_id || ""),
-    agente_activo: estado.agente_activo,
-    pausada: estado.pausada,
-    // Campo indexado: continuarTurno lo consulta en vez de escanear la tabla.
-    tiene_turno_pendiente: !!estado.turno_pendiente,
-    estado_json: json,
-    ultimo_mensaje: (extra.ultimo_mensaje || "").slice(0, 1e3),
-    ultima_respuesta: (extra.ultima_respuesta || "").slice(0, 1e3),
-    fecha_ultimo_mensaje: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  for (const [i, escalon] of ESCALONES.entries()) {
-    const json = JSON.stringify(escalon.reducir(estado));
-    const id = await db.guardar("MemoriaChat", memoriaId, fila(json));
-    if (id) {
-      if (i > 0) {
-        console.error(
-          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): Base44 rechazo los ${i} intento(s) anteriores por tamano`
-        );
-      }
-      return id;
-    }
-    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
-  }
-  console.error("NO SE PUDO GUARDAR MemoriaChat en ningun escalon — la conversacion se pierde");
-  return null;
 }
 
 // base44/functions/asistente/_core/tools/asistidos.ts
@@ -1536,181 +1745,6 @@ var enviarMenu = {
   }
 };
 
-// base44/functions/asistente/_core/identidad.ts
-var HORAS_VIGENCIA = 24;
-var MAX_INTENTOS = 3;
-var BLOQUEO_MIN = 60;
-var TTL_PORTAL_MIN = 15;
-var soloDigitos = (s) => String(s ?? "").replace(/\D/g, "");
-async function sha256(txt) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-async function auditar(db, datos) {
-  try {
-    await db.crear("AuditoriaAcceso", {
-      tipo: datos.tipo,
-      sujeto_id: datos.sujeto_id || "",
-      telefono: soloDigitos(datos.telefono),
-      exito: datos.exito,
-      detalle: (datos.detalle || "").slice(0, 500),
-      fecha: (/* @__PURE__ */ new Date()).toISOString()
-    });
-  } catch (e) {
-    console.error("auditar error:", e.message);
-  }
-}
-async function reconocerTelefono(db, tel) {
-  const t = soloDigitos(tel);
-  if (!t) return { arrendatario: null, propietario: null, contrato: null };
-  const [arrs, props] = await Promise.all([
-    db.list("Arrendatario", { telefono: t, limit: 1 }),
-    db.list("Propietario", { telefono: t, limit: 1 })
-  ]);
-  const arrendatario = arrs[0] || null;
-  let contrato = null;
-  if (arrendatario) {
-    contrato = (await db.list("ContratoArriendo", { arrendatario_id: arrendatario.id, estado: "Activo", limit: 1 }))[0] || null;
-  }
-  return { arrendatario, propietario: props[0] || null, contrato };
-}
-async function buscarTitularPorDocumento(db, documento, telefono) {
-  const doc = soloDigitos(documento);
-  const vacio = { existe: false, coincide_telefono: false, total: 0, nombre: "", inmuebles: [] };
-  if (doc.length < 5) return vacio;
-  const filas = await db.list("TitularInmueble", { numero_documento: doc, limit: 50 });
-  const vigentes = (filas || []).filter((f) => String(f.estado || "Vigente") === "Vigente");
-  if (!vigentes.length) return vacio;
-  const tel = soloDigitos(telefono);
-  const coincide = !!tel && vigentes.some((f) => soloDigitos(f.telefono) === tel);
-  return {
-    existe: true,
-    coincide_telefono: coincide,
-    total: vigentes.length,
-    nombre: coincide ? String(vigentes[0].nombre_titular || "") : "",
-    inmuebles: coincide ? vigentes.map((f) => ({
-      id: String(f.id || ""),
-      direccion: String(f.direccion || ""),
-      ciudad: String(f.ciudad || ""),
-      codigo: String(f.codigo_inmueble || ""),
-      rol: String(f.rol || ""),
-      contrato_id: String(f.contrato_id || "")
-    })) : []
-  };
-}
-function sesionVigente(estado) {
-  const i = estado.identidad;
-  if (!i.verificado || !i.expira) return false;
-  return new Date(i.expira).getTime() > Date.now();
-}
-function bloqueado(estado) {
-  const h = estado.identidad.bloqueado_hasta;
-  return !!h && new Date(h).getTime() > Date.now();
-}
-async function verificar(db, estado, entrada, tipo, valor) {
-  if (bloqueado(estado)) {
-    await auditar(db, { tipo: "verificacion", telefono: entrada.tel, exito: false, detalle: "intento durante bloqueo" });
-    return { verificado: false, intentos_restantes: 0, bloqueado: true };
-  }
-  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
-  let ok = false;
-  let sujeto;
-  let rolArrendatario = false;
-  let rolPropietario = false;
-  if (tipo === "cedula_ultimos4") {
-    const dado = soloDigitos(valor).slice(-4);
-    for (const [rol, p] of [["arrendatario", arrendatario], ["propietario", propietario]]) {
-      if (!p) continue;
-      const real = soloDigitos(p.numero_documento || p.cedula_nit).slice(-4);
-      if (dado.length === 4 && real.length === 4 && dado === real) {
-        ok = true;
-        sujeto = p.id;
-        if (rol === "arrendatario") rolArrendatario = true;
-        else rolPropietario = true;
-      }
-    }
-  } else {
-    const dado = String(valor || "").trim().toUpperCase();
-    if (dado) {
-      const sol = await db.uno("SolicitudMatricula", { numero_solicitud: dado });
-      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada.tel)) {
-        ok = true;
-        sujeto = sol.id;
-      }
-    }
-  }
-  const i = estado.identidad;
-  if (ok) {
-    const ahora = /* @__PURE__ */ new Date();
-    estado.identidad = {
-      ...identidadVacia(),
-      verificado: true,
-      metodo: tipo,
-      // SOLO el rol cuyo documento coincidio. Antes se escribian los dos ids
-      // pasara lo que pasara, y por la rama de numero_solicitud se escribian sin
-      // que coincidiera ninguno.
-      //
-      // Es una fuga, no una imprecision: un telefono de oficina o familiar puede
-      // figurar a la vez en Arrendatario A y en Propietario B, que son personas
-      // distintas. A daba sus ultimos 4, quedaba con propietario_id = B, y podia
-      // pedir el certificado tributario de B y abrir sus liquidaciones —
-      // ingresos brutos, comision y neto a pagar.
-      //
-      // Si la misma persona es las dos cosas, su documento coincide en las dos
-      // filas y el bucle de arriba marca los dos roles. Ese caso sigue andando.
-      arrendatario_id: rolArrendatario ? arrendatario?.id ?? null : null,
-      propietario_id: rolPropietario ? propietario?.id ?? null : null,
-      // El contrato es del arrendatario. Un propietario verificado no hereda el
-      // contrato de quien le arrienda.
-      contrato_id: rolArrendatario ? contrato?.id ?? null : null,
-      verificado_en: ahora.toISOString(),
-      expira: new Date(ahora.getTime() + HORAS_VIGENCIA * 36e5).toISOString(),
-      intentos: 0,
-      bloqueado_hasta: null
-    };
-    await auditar(db, { tipo: "verificacion", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
-    return { verificado: true, intentos_restantes: MAX_INTENTOS, bloqueado: false };
-  }
-  i.intentos = (i.intentos || 0) + 1;
-  i.verificado = false;
-  const restantes = Math.max(0, MAX_INTENTOS - i.intentos);
-  if (restantes === 0) {
-    i.bloqueado_hasta = new Date(Date.now() + BLOQUEO_MIN * 6e4).toISOString();
-  }
-  await auditar(db, {
-    tipo: "verificacion",
-    telefono: entrada.tel,
-    exito: false,
-    detalle: `${tipo} fallido (intento ${i.intentos}/${MAX_INTENTOS})`
-  });
-  return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
-}
-var SECCIONES_PROPIETARIO = /* @__PURE__ */ new Set(["certificados", "liquidaciones"]);
-async function crearSesionPortal(db, entrada, estado, tipo) {
-  const arrendatarioId = estado.identidad.arrendatario_id;
-  const propietarioId = estado.identidad.propietario_id;
-  const comoPropietario = SECCIONES_PROPIETARIO.has(tipo) ? !!propietarioId : !arrendatarioId && !!propietarioId;
-  const sujeto = comoPropietario ? propietarioId : arrendatarioId;
-  if (!sesionVigente(estado) || !sujeto) return null;
-  const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-  const fila = await db.crear("SesionPortal", {
-    token_hash: await sha256(token),
-    // en reposo solo queda el hash
-    tipo,
-    sujeto_id: sujeto,
-    sujeto_tipo: comoPropietario ? "propietario" : "arrendatario",
-    contrato_id: estado.identidad.contrato_id || "",
-    telefono: soloDigitos(entrada.tel),
-    expira: new Date(Date.now() + TTL_PORTAL_MIN * 6e4).toISOString(),
-    usado: false,
-    creada: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  if (!fila) return null;
-  await auditar(db, { tipo: "sesion_portal", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
-  const app = (Deno.env.get("PORTAL_URL") || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
-  return `${app}/portal/entrar?t=${token}`;
-}
-
 // base44/functions/asistente/_core/tools/identificacion.ts
 var identificarTitular = {
   ...definirTool(
@@ -1749,7 +1783,12 @@ var identificarTitular = {
       nombre: r.nombre,
       total_inmuebles: r.total,
       inmuebles: r.inmuebles.map((i) => ({ direccion: i.direccion, ciudad: i.ciudad, rol: i.rol })),
-      instruccion: r.total === 1 ? `Ya sabes quien es. Confirma con una frase que es sobre ${r.inmuebles[0].direccion} y sigue. NO le pidas el nombre ni la direccion: ya los tienes.` : `Tiene ${r.total} inmuebles con nosotros. Preguntale sobre cual es, nombrando las direcciones. NO le pidas el nombre: ya lo tienes.`
+      // El sentido entero del proyecto esta en estas dos instrucciones: que con
+      // SOLO el documento el cliente vea que la casa ya lo tiene, y que lo unico
+      // que le quede por contar sea el problema. Por eso se le dice de entrada
+      // que aparecio y se le nombran sus inmuebles, en vez de seguir preguntando
+      // como si no lo conocieramos.
+      instruccion: r.total === 1 ? `DILO DE ENTRADA: ya lo encontraste. Saludalo por su nombre (${r.nombre}), dile que su inmueble registrado es ${r.inmuebles[0].direccion}, y preguntale directamente que necesita. Todo en un solo mensaje corto. NO le pidas el nombre, ni la direccion, ni el telefono: ya los tienes, y volver a pedirlos es exactamente lo que veniamos a quitar.` : `DILO DE ENTRADA: ya lo encontraste. Saludalo por su nombre (${r.nombre}) y dile que tiene ${r.total} inmuebles con nosotros, nombrando las direcciones para que elija de cual se trata. NO le pidas el nombre ni el telefono: ya los tienes.`
     };
   }
 };

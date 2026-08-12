@@ -541,7 +541,8 @@ async function buscarTitularPorDocumento(db, documento, telefono) {
   const vacio = { existe: false, coincide_telefono: false, total: 0, nombre: "", inmuebles: [] };
   if (doc.length < 5) return vacio;
   const filas = await db.list("TitularInmueble", { numero_documento: doc, limit: 50 });
-  const vigentes = (filas || []).filter((f) => String(f.estado || "Vigente") === "Vigente");
+  console.log(`titular ${doc}: ${(filas || []).length} fila(s) crudas, estados=[${(filas || []).map((f) => f.estado).join(",")}]`);
+  const vigentes = (filas || []).filter((f) => String(f.estado || "") !== "Terminado");
   if (!vigentes.length) return vacio;
   const tel = soloDigitos(telefono);
   const coincide = !!tel && vigentes.some((f) => soloDigitos(f.telefono) === tel);
@@ -711,7 +712,12 @@ var identificarTitular = {
       nombre: r.nombre,
       total_inmuebles: r.total,
       inmuebles: r.inmuebles.map((i) => ({ direccion: i.direccion, ciudad: i.ciudad, rol: i.rol })),
-      instruccion: r.total === 1 ? `Ya sabes quien es. Confirma con una frase que es sobre ${r.inmuebles[0].direccion} y sigue. NO le pidas el nombre ni la direccion: ya los tienes.` : `Tiene ${r.total} inmuebles con nosotros. Preguntale sobre cual es, nombrando las direcciones. NO le pidas el nombre: ya lo tienes.`
+      // El sentido entero del proyecto esta en estas dos instrucciones: que con
+      // SOLO el documento el cliente vea que la casa ya lo tiene, y que lo unico
+      // que le quede por contar sea el problema. Por eso se le dice de entrada
+      // que aparecio y se le nombran sus inmuebles, en vez de seguir preguntando
+      // como si no lo conocieramos.
+      instruccion: r.total === 1 ? `DILO DE ENTRADA: ya lo encontraste. Saludalo por su nombre (${r.nombre}), dile que su inmueble registrado es ${r.inmuebles[0].direccion}, y preguntale directamente que necesita. Todo en un solo mensaje corto. NO le pidas el nombre, ni la direccion, ni el telefono: ya los tienes, y volver a pedirlos es exactamente lo que veniamos a quitar.` : `DILO DE ENTRADA: ya lo encontraste. Saludalo por su nombre (${r.nombre}) y dile que tiene ${r.total} inmuebles con nosotros, nombrando las direcciones para que elija de cual se trata. NO le pidas el nombre ni el telefono: ya los tienes.`
     };
   }
 };

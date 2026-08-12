@@ -85,6 +85,19 @@ function crearDb(apiKey, baseUrl) {
   return { base, list, uno, crear, actualizar, guardar, fallos };
 }
 
+// base44/functions/enviarPendientes/_core/protocol.ts
+var AGENTES = [
+  "recepcion",
+  "ventas",
+  "consignacion",
+  "cartera",
+  "mantenimiento",
+  "avaluos",
+  "pqr",
+  "matricula"
+];
+var esAgente = (v) => typeof v === "string" && AGENTES.includes(v);
+
 // base44/functions/enviarPendientes/_core/contexto.ts
 function agentesAutomaticosActivos(config) {
   return config?.activo !== false;
@@ -123,19 +136,6 @@ async function marcarEscribiendo(destino, env) {
   } catch {
   }
 }
-
-// base44/functions/enviarPendientes/_core/protocol.ts
-var AGENTES = [
-  "recepcion",
-  "ventas",
-  "consignacion",
-  "cartera",
-  "mantenimiento",
-  "avaluos",
-  "pqr",
-  "matricula"
-];
-var esAgente = (v) => typeof v === "string" && AGENTES.includes(v);
 
 // base44/functions/enviarPendientes/_core/canales/bots.ts
 var VAR_POR_AGENTE = {
