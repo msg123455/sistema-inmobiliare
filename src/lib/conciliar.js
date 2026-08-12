@@ -216,19 +216,35 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
     if (!usados.has(clave)) excepciones.inquilinoSinArchivo.push({ clave, ...grupo[0] });
   }
 
-  // ------------------------------------------- controles sobre el resultado
+  // -------------------------------------- reparto: campana vs correo aparte
   // Un contacto de Mailchimp guarda UN valor por merge field. Si una persona
-  // tiene dos inmuebles, la campana solo puede llevarle uno y el otro se pierde
-  // sin que salte ningun error. En agosto le paso a cuatro inquilinos.
+  // tiene dos inmuebles, la campana masiva solo puede llevarle uno y el otro se
+  // pierde sin que salte ningun error: en agosto le paso a cuatro inquilinos.
+  //
+  // Por eso quien tiene mas de un contrato NO va en la campana. Sale aparte, en
+  // un correo con la lista completa de sus recibos. Agrupar no tiene tope —con
+  // merge fields numerados (CODURL2, CODURL3) el que tuviera uno mas de los
+  // previstos volveria a perder un codigo en silencio, que es el fallo que se
+  // esta corrigiendo.
   const enviables = emparejados.filter((e) => e.enviable);
-  for (const [email, grupo] of repetidos(enviables, (x) => x.email.toLowerCase())) {
-    const codigos = new Set(grupo.map((g) => g.clave));
-    if (codigos.size > 1) {
-      bloqueos.push({
-        tipo: 'correo_con_varios_codigos',
-        clave: email,
-        detalle: `${email} tiene ${codigos.size} contratos (${[...codigos].join(', ')}) y la campana solo puede llevarle uno`,
-        items: grupo,
+  const porCorreo = new Map();
+  for (const e of enviables) {
+    const k = e.email.toLowerCase();
+    if (!porCorreo.has(k)) porCorreo.set(k, []);
+    porCorreo.get(k).push(e);
+  }
+
+  const campana = [];         // un contrato: merge field y campana masiva
+  const multiContrato = [];   // dos o mas: correo aparte con todos sus codigos
+  for (const [email, grupo] of porCorreo) {
+    const unicos = [...new Map(grupo.map((g) => [g.clave, g])).values()];
+    if (unicos.length === 1) campana.push(unicos[0]);
+    else {
+      multiContrato.push({
+        email,
+        nombre: unicos[0].nombre,
+        documento: unicos[0].documento,
+        codigos: unicos.map((u) => ({ codigo: u.codigo, clave: u.clave, archivo: u.archivo, url: u.url })),
       });
     }
   }
@@ -270,6 +286,8 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
 
   return {
     emparejados,
+    campana,
+    multiContrato,
     excepciones,
     bloqueos,
     senales,
@@ -279,6 +297,9 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
       directorio: indice.size,
       emparejados: emparejados.length,
       enviables: enviables.length,
+      campana: campana.length,
+      multiContrato: multiContrato.length,
+      codigosEnMultiContrato: multiContrato.reduce((n, m) => n + m.codigos.length, 0),
       bloqueos: bloqueos.length,
       excepciones: Object.values(excepciones).reduce((n, v) => n + v.length, 0),
     },

@@ -22,6 +22,7 @@
     "base44/functions/deno.d.ts",
     "base44/functions/_core/**/*.ts",
     "base44/functions/agenteInbound/entry.ts",
+    "base44/functions/codigosMensuales/entry.ts",
     "base44/functions/enviarPendientes/entry.ts",
     "base44/functions/seedAgentes/entry.ts",
     "base44/functions/configurarDemoVentas/entry.ts",

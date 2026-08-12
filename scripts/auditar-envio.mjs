@@ -85,6 +85,8 @@ t('CONTROLES DEL MOTOR');
 t(`  Archivos distintos  : ${r.resumen.leidos}`);
 t(`  Emparejados         : ${r.resumen.emparejados}`);
 t(`  Enviables           : ${r.resumen.enviables}`);
+t(`  -> campana masiva   : ${r.resumen.campana}`);
+t(`  -> correo aparte    : ${r.resumen.multiContrato} inquilinos con ${r.resumen.codigosEnMultiContrato} codigos`);
 t(`  Bloqueos            : ${r.bloqueos.length}`);
 for (const [k, v] of Object.entries(r.excepciones)) if (v.length) t(`  · ${k}: ${v.length}`);
 

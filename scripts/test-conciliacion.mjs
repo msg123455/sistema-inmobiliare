@@ -87,22 +87,49 @@ import {
 // Tavera Rodriguez, cada uno con dos inmuebles. Un contacto de Mailchimp guarda
 // UN valor por merge field, asi que cada uno recibio uno de sus dos codigos y
 // el otro se perdio sin que saltara ningun error.
+//
+// No bloquea: sale de la campana masiva y va a un correo aparte con la lista
+// completa. Lo que no puede pasar nunca es que entre a la campana con uno solo.
 {
   const r = conciliar({
     archivos: [
       { nombre: '90_Ago167.03.pdf', url: 'https://mc/167' },
       { nombre: '90_Ago194.02.pdf', url: 'https://mc/194' },
+      { nombre: '90_Ago200.01.pdf', url: 'https://mc/200' },
     ],
     directorio: [
       { codigo: '167', nombre: 'Ropa Fuerte', email: 'dos@ejemplo.com', documento: '800053470' },
       { codigo: '194', nombre: 'Ropa Fuerte', email: 'dos@ejemplo.com', documento: '800053470' },
+      { codigo: '200', nombre: 'Uno Solo', email: 'uno@ejemplo.com', documento: '123' },
     ],
   });
 
-  const b = r.bloqueos.find((x) => x.tipo === 'correo_con_varios_codigos');
-  assert.ok(b, 'un correo con dos contratos tiene que BLOQUEAR');
-  assert.equal(b.clave, 'dos@ejemplo.com');
-  assert.match(b.detalle, /2 contratos/);
+  assert.equal(r.bloqueos.length, 0, 'tener dos inmuebles no es un error');
+  assert.equal(r.campana.length, 1, 'a la campana masiva solo va quien tiene un contrato');
+  assert.equal(r.campana[0].email, 'uno@ejemplo.com');
+
+  assert.equal(r.multiContrato.length, 1);
+  assert.equal(r.multiContrato[0].email, 'dos@ejemplo.com');
+  assert.equal(r.multiContrato[0].codigos.length, 2, 'van SUS DOS codigos, no uno');
+  assert.deepEqual(r.multiContrato[0].codigos.map((c) => c.clave).sort(), ['167', '194']);
+
+  // Ni un solo codigo se pierde entre los dos grupos: ese es el invariante.
+  assert.equal(r.campana.length + r.resumen.codigosEnMultiContrato, r.resumen.enviables);
+}
+
+// ── Tres o mas contratos tampoco pierden ninguno ─────────────────────────────
+// Con merge fields numerados (CODURL2, CODURL3) quien tuviera uno mas de los
+// previstos volveria a perder un codigo en silencio. Agrupar no tiene tope.
+{
+  const r = conciliar({
+    archivos: [1, 2, 3, 4].map((n) => ({ nombre: `90_Ago${n}.pdf`, url: `https://mc/${n}` })),
+    directorio: [1, 2, 3, 4].map((n) => ({
+      codigo: String(n), nombre: 'Con cuatro locales', email: 'cuatro@ejemplo.com', documento: '9',
+    })),
+  });
+  assert.equal(r.multiContrato.length, 1);
+  assert.equal(r.multiContrato[0].codigos.length, 4);
+  assert.equal(r.campana.length, 0);
 }
 
 // ── [AGOSTO] La misma URL a varios destinatarios ─────────────────────────────
