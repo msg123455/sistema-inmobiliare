@@ -196,8 +196,18 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   }
 
   // ── 3. ROUTE antes de cargar ─────────────────────────────────────────────
-  const decision = agenteBot
-    ? { agente: agenteBot, nivel: 0, motivo: 'bot dedicado' }
+  //
+  // El bot dedicado define POR DONDE ENTRA la conversacion, no donde se queda.
+  // Antes fijaba el agente en CADA turno, asi que una transferencia se deshacia
+  // al mensaje siguiente: el cliente decia "necesito una reparacion", el sistema
+  // transferia a mantenimiento, y el turno siguiente lo devolvia a ventas, que
+  // volvia a preguntar si buscaba comprar o arrendar. En bucle.
+  //
+  // Solo manda en el primer mensaje del hilo. Despues el hilo ya tiene agente
+  // (sea por transferencia o por ruteo) y eso es lo que vale.
+  const hiloNuevo = !estado.agente_historial.length;
+  const decision = (agenteBot && hiloNuevo)
+    ? { agente: agenteBot, nivel: 0, motivo: 'bot dedicado (entrada)' }
     : await decidirAgente(db, estado, entrada, {
       anthropicKey: env.anthropicKey,
       modeloRouter: MODELO_ROUTER,
