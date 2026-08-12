@@ -68,7 +68,17 @@ export function seleccionarRag(
   chunks: ChunkRag[],
   agente: Agente,
   maxChars = MAX_RAG_CHARS,
-): { texto: string; titulos: string[]; chars: number } {
+): {
+  texto: string;
+  titulos: string[];
+  chars: number;
+  // Que entro y que quedo fuera, para que /chunks pueda decirlo. El recorte por
+  // presupuesto era invisible: un chunk que no cabia desaparecia sin dejar
+  // rastro, y el sintoma aparecia mucho despues como "el agente no sabe algo
+  // que si esta escrito".
+  detalle: Array<{ titulo: string; chars: number; especifico: boolean }>;
+  descartados: Array<{ titulo: string; chars: number; motivo: string }>;
+} {
   const relevantes = (chunks || [])
     .map((ch) => ({ ch, destinos: destinosDe(ch) }))
     .filter(({ destinos }) => destinos.includes('todos') || destinos.includes(agente))
@@ -83,19 +93,32 @@ export function seleccionarRag(
   let usado = 0;
   const trozos: string[] = [];
   const titulos: string[] = [];
-  for (const { ch } of relevantes) {
+  const detalle: Array<{ titulo: string; chars: number; especifico: boolean }> = [];
+  const descartados: Array<{ titulo: string; chars: number; motivo: string }> = [];
+  for (const { ch, destinos } of relevantes) {
     const titulo = String(ch.titulo || '').trim();
     const contenido = String(ch.contenido || '').trim();
-    if (!titulo || !contenido) continue;
+    if (!titulo || !contenido) {
+      descartados.push({ titulo: titulo || '(sin titulo)', chars: contenido.length, motivo: 'vacio' });
+      continue;
+    }
     const bloque = `[${titulo}]\n${contenido}\n\n`;
     // No cortar toda la seleccion porque un bloque no quepa: puede haber otro
     // mas pequeno y relevante despues.
-    if (usado + bloque.length > maxChars) continue;
+    if (usado + bloque.length > maxChars) {
+      descartados.push({ titulo, chars: bloque.length, motivo: 'no cabe en el presupuesto' });
+      continue;
+    }
     trozos.push(bloque);
     titulos.push(titulo);
+    detalle.push({
+      titulo,
+      chars: bloque.length,
+      especifico: destinos.includes(agente) && !destinos.includes('todos'),
+    });
     usado += bloque.length;
   }
-  return { texto: trozos.join(''), titulos, chars: usado };
+  return { texto: trozos.join(''), titulos, chars: usado, detalle, descartados };
 }
 
 /** ConfigAgente.activo funciona como kill switch global. */
@@ -110,6 +133,16 @@ export interface Base {
   rag: string;
   ragTitulos: string[];
   ragChars: number;
+  // De donde salio cada prompt. Se expone en /chunks porque la diferencia entre
+  // "lo que dice el repo" y "lo que el agente usa" es la fuente de confusion
+  // mas cara del proyecto: los prompts de la base pisan a los del codigo, y un
+  // agente sin fila cae al del codigo desplegado, que puede tener meses.
+  promptOrigen: 'base de datos' | 'codigo';
+  promptVersion: number | null;
+  marcaOrigen: 'base de datos' | 'codigo';
+  ragDetalle: Array<{ titulo: string; chars: number; especifico: boolean }>;
+  ragDescartados: Array<{ titulo: string; chars: number; motivo: string }>;
+  ragActivos: number;
 }
 
 function promptActivoMasReciente(filas: Record<string, any>[]): Record<string, any> | null {
@@ -139,6 +172,12 @@ export async function cargarBase(db: Db, agente: Agente): Promise<Base> {
     rag: seleccion.texto ? `=== CONOCIMIENTO DE LA CASA ===\n${seleccion.texto}` : '',
     ragTitulos: seleccion.titulos,
     ragChars: seleccion.chars,
+    promptOrigen: prompt ? 'base de datos' : 'codigo',
+    promptVersion: prompt ? (Number(prompt.version) || null) : null,
+    marcaOrigen: marca ? 'base de datos' : 'codigo',
+    ragDetalle: seleccion.detalle,
+    ragDescartados: seleccion.descartados,
+    ragActivos: (chunks || []).length,
   };
 }
 

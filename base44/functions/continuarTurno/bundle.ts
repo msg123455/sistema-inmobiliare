@@ -555,20 +555,33 @@ function seleccionarRag(chunks, agente, maxChars = MAX_RAG_CHARS) {
   let usado = 0;
   const trozos = [];
   const titulos = [];
-  for (const { ch } of relevantes) {
+  const detalle = [];
+  const descartados = [];
+  for (const { ch, destinos } of relevantes) {
     const titulo = String(ch.titulo || "").trim();
     const contenido = String(ch.contenido || "").trim();
-    if (!titulo || !contenido) continue;
+    if (!titulo || !contenido) {
+      descartados.push({ titulo: titulo || "(sin titulo)", chars: contenido.length, motivo: "vacio" });
+      continue;
+    }
     const bloque = `[${titulo}]
 ${contenido}
 
 `;
-    if (usado + bloque.length > maxChars) continue;
+    if (usado + bloque.length > maxChars) {
+      descartados.push({ titulo, chars: bloque.length, motivo: "no cabe en el presupuesto" });
+      continue;
+    }
     trozos.push(bloque);
     titulos.push(titulo);
+    detalle.push({
+      titulo,
+      chars: bloque.length,
+      especifico: destinos.includes(agente) && !destinos.includes("todos")
+    });
     usado += bloque.length;
   }
-  return { texto: trozos.join(""), titulos, chars: usado };
+  return { texto: trozos.join(""), titulos, chars: usado, detalle, descartados };
 }
 function agentesAutomaticosActivos(config) {
   return config?.activo !== false;
@@ -593,7 +606,13 @@ async function cargarBase(db, agente) {
     rag: seleccion.texto ? `=== CONOCIMIENTO DE LA CASA ===
 ${seleccion.texto}` : "",
     ragTitulos: seleccion.titulos,
-    ragChars: seleccion.chars
+    ragChars: seleccion.chars,
+    promptOrigen: prompt ? "base de datos" : "codigo",
+    promptVersion: prompt ? Number(prompt.version) || null : null,
+    marcaOrigen: marca ? "base de datos" : "codigo",
+    ragDetalle: seleccion.detalle,
+    ragDescartados: seleccion.descartados,
+    ragActivos: (chunks || []).length
   };
 }
 var CARGADORES = {

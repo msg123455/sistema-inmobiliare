@@ -1,16 +1,14 @@
 {
+  // SIN bloque "automations": Base44 los rechaza en esta app (409
+  // workflows_enabled, las automatizaciones legacy estan deshabilitadas) y con
+  // eso rechaza la FUNCION ENTERA. Como Publish deploya en lote, estas dos
+  // arrastraban al resto: agenteInbound se quedo cinco commits atras sin que
+  // nada lo dijera.
+  //
+  // Lo que hacia el cron (*/5 * * * *): cron_continuar_turno.
+  // Hay que rehacerlo como Workflow de Base44. Mientras tanto la entrega va
+  // inline en el turno, que es el camino normal; esto solo era la red de
+  // seguridad para lo que quedo en ColaSalida.
   "name": "continuarTurno",
-  "entry": "bundle.ts",
-  "automations": [
-    {
-      "type": "scheduled",
-      "name": "cron_continuar_turno",
-      "description": "Reanuda los turnos que excedieron el presupuesto de 2 llamadas al modelo (MemoriaChat.tiene_turno_pendiente). Tope de 2 continuaciones; despues escala a un humano.",
-      "function_args": { "token": "${CRON_TOKEN}" },
-      "is_active": true,
-      "schedule_mode": "recurring",
-      "schedule_type": "cron",
-      "cron_expression": "* * * * *"
-    }
-  ]
+  "entry": "bundle.ts"
 }

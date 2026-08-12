@@ -1,16 +1,14 @@
 {
+  // SIN bloque "automations": Base44 los rechaza en esta app (409
+  // workflows_enabled, las automatizaciones legacy estan deshabilitadas) y con
+  // eso rechaza la FUNCION ENTERA. Como Publish deploya en lote, estas dos
+  // arrastraban al resto: agenteInbound se quedo cinco commits atras sin que
+  // nada lo dijera.
+  //
+  // Lo que hacia el cron (*/5 * * * *): cron_entrega_salida.
+  // Hay que rehacerlo como Workflow de Base44. Mientras tanto la entrega va
+  // inline en el turno, que es el camino normal; esto solo era la red de
+  // seguridad para lo que quedo en ColaSalida.
   "name": "enviarPendientes",
-  "entry": "bundle.ts",
-  "automations": [
-    {
-      "type": "scheduled",
-      "name": "cron_entrega_salida",
-      "description": "Worker de entrega: toma ColaSalida (estado=pendiente) y entrega a WhatsApp/Telegram simulando tipeo. La simulacion vive aqui y no en el webhook, que tiene 15s de presupuesto.",
-      "function_args": { "token": "${CRON_TOKEN}" },
-      "is_active": true,
-      "schedule_mode": "recurring",
-      "schedule_type": "cron",
-      "cron_expression": "* * * * *"
-    }
-  ]
+  "entry": "bundle.ts"
 }
