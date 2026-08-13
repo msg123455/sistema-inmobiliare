@@ -4,11 +4,11 @@
   "properties": {
     "titulo": {
       "type": "string",
-      "description": "Título del inmueble"
+      "description": "T\u00edtulo del inmueble"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripción del inmueble"
+      "description": "Descripci\u00f3n del inmueble"
     },
     "tipo": {
       "type": "string",
@@ -27,7 +27,7 @@
     },
     "operacion": {
       "type": "string",
-      "description": "Tipo de operación",
+      "description": "Tipo de operaci\u00f3n",
       "enum": [
         "Venta",
         "Arriendo",
@@ -57,36 +57,36 @@
     },
     "administracion": {
       "type": "number",
-      "description": "Cuota de administración mensual en COP"
+      "description": "Cuota de administraci\u00f3n mensual en COP"
     },
     "comision_pct": {
       "type": "number",
-      "description": "Porcentaje de comisión",
+      "description": "Porcentaje de comisi\u00f3n",
       "default": 3
     },
     "area_m2": {
       "type": "number",
-      "description": "Área en metros cuadrados"
+      "description": "\u00c1rea en metros cuadrados"
     },
     "habitaciones": {
       "type": "number",
-      "description": "Número de habitaciones"
+      "description": "N\u00famero de habitaciones"
     },
     "banos": {
       "type": "number",
-      "description": "Número de baños"
+      "description": "N\u00famero de ba\u00f1os"
     },
     "parqueaderos": {
       "type": "number",
-      "description": "Número de parqueaderos"
+      "description": "N\u00famero de parqueaderos"
     },
     "estrato": {
       "type": "number",
-      "description": "Estrato socioeconómico (1-6)"
+      "description": "Estrato socioecon\u00f3mico (1-6)"
     },
     "piso": {
       "type": "number",
-      "description": "Número de piso"
+      "description": "N\u00famero de piso"
     },
     "ciudad": {
       "type": "string",
@@ -98,7 +98,7 @@
     },
     "direccion": {
       "type": "string",
-      "description": "Dirección completa"
+      "description": "Direcci\u00f3n completa"
     },
     "latitud": {
       "type": "number",
@@ -117,7 +117,7 @@
     },
     "valor_administracion": {
       "type": "number",
-      "description": "Cuota de administración mensual en COP (columna Administracion de la hoja Inventario)"
+      "description": "Cuota de administraci\u00f3n mensual en COP (columna Administracion de la hoja Inventario)"
     },
     "proveedor": {
       "type": "string",
@@ -139,23 +139,23 @@
     },
     "procedencia": {
       "type": "string",
-      "description": "Como llegó el inmueble al portafolio"
+      "description": "Como lleg\u00f3 el inmueble al portafolio"
     },
     "propietario_id": {
       "type": "string",
-      "description": "Dueño del inmueble"
+      "description": "Due\u00f1o del inmueble"
     },
     "contrato_activo_id": {
       "type": "string",
-      "description": "Contrato de arriendo vigente, si está arrendado"
+      "description": "Contrato de arriendo vigente, si est\u00e1 arrendado"
     },
     "duplicado_de": {
       "type": "string",
-      "description": "Si la misma dirección llegó de dos proveedores, apunta al registro maestro. Nunca se borra: los leads referencian su id."
+      "description": "Si la misma direcci\u00f3n lleg\u00f3 de dos proveedores, apunta al registro maestro. Nunca se borra: los leads referencian su id."
     },
     "portales": {
       "type": "object",
-      "description": "Publicación en portales externos (columnas METROCUADRADO, FINCARAIZ, MERCADOLIBRE de la hoja Inventario)",
+      "description": "Publicaci\u00f3n en portales externos (columnas METROCUADRADO, FINCARAIZ, MERCADOLIBRE de la hoja Inventario)",
       "properties": {
         "metrocuadrado": {
           "type": "string"
@@ -185,6 +185,14 @@
     "link_instagram": {
       "type": "string",
       "description": "URL del post/reel de Instagram del inmueble (video). Valentina lo envia cuando piden ver el inmueble en video."
+    },
+    "asesor": {
+      "type": "string",
+      "description": "Asesor que capt\u00f3 el inmueble"
+    },
+    "fecha_consignado": {
+      "type": "string",
+      "description": "Fecha en que se consign\u00f3 el inmueble, formato AAAA-MM-DD"
     }
   },
   "required": [
