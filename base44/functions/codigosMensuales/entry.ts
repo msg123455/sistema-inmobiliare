@@ -214,38 +214,52 @@ Deno.serve(async (req: Request) => {
       // Base44 descarta en silencio los campos que no existen en el esquema, asi
       // que sin esta comprobacion los sha256 y los correos se perderian sin un
       // solo error visible. La unica prueba concluyente es escribir y releer.
+      //
+      // Va en su propio try: si esta parte revienta, lo averiguado sobre
+      // Mailchimp —que es lo caro de conseguir— tiene que salir igual. Un
+      // diagnostico que no devuelve nada cuando una de sus comprobaciones falla
+      // deja de ser un diagnostico.
       const CLAVES = ['sha256', 'email_destino', 'nombre_destino', 'mailchimp_file_id'];
-      let faltan: string[] = [];
-      const rLista = await fetch(`${BASE_URL}/api/entities/CodigoBarras?limit=1`, { headers: hdrs });
-      const lista = rLista.ok ? await rLista.json() : [];
-      const muestra = Array.isArray(lista) ? lista[0] : null;
+      try {
+        let faltan: string[] = [];
+        const rLista = await fetch(`${BASE_URL}/api/entities/CodigoBarras?limit=1`, { headers: hdrs });
+        const lista = rLista.ok ? await rLista.json() : [];
+        const muestra = Array.isArray(lista) ? lista[0] : null;
 
-      if (muestra) {
-        faltan = CLAVES.filter((c) => !(c in muestra));
-      } else {
-        const sonda: Record<string, string> = { periodo: '0000-00' };
-        for (const c of CLAVES) sonda[c] = '__sonda__';
-        const rPost = await fetch(`${BASE_URL}/api/entities/CodigoBarras`, {
-          method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
-        });
-        if (rPost.ok) {
-          const creada = await rPost.json();
-          faltan = CLAVES.filter((c) => !creada?.[c]);
-          // Se borra siempre, aunque la comprobacion haya fallado: dejar la
-          // sonda entre los recibos seria peor que no haberla escrito.
-          if (creada?.id) {
-            await fetch(`${BASE_URL}/api/entities/CodigoBarras/${creada.id}`, { method: 'DELETE', headers: hdrs })
-              .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
+        if (muestra) {
+          faltan = CLAVES.filter((c) => !(c in muestra));
+        } else {
+          const sonda: Record<string, string> = { periodo: '0000-00' };
+          for (const c of CLAVES) sonda[c] = '__sonda__';
+          const rPost = await fetch(`${BASE_URL}/api/entities/CodigoBarras`, {
+            method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
+          });
+          if (rPost.ok) {
+            const creada = await rPost.json();
+            faltan = CLAVES.filter((c) => !creada?.[c]);
+            // Se borra siempre, aunque la comprobacion haya fallado: dejar la
+            // sonda entre los recibos seria peor que no haberla escrito.
+            if (creada?.id) {
+              await fetch(`${BASE_URL}/api/entities/CodigoBarras/${creada.id}`, { method: 'DELETE', headers: hdrs })
+                .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
+            }
           }
         }
+        res.campos_faltantes = faltan;
+        if (faltan.length) {
+          res.mensaje = `CodigoBarras no tiene ${faltan.join(', ')}. Sin esos campos no hay `
+            + 'auditoria ni verificacion de hash. Creelos en Base44 (Datos > CodigoBarras), '
+            + 'todos de tipo texto.';
+        }
+      } catch (e) {
+        res.campos_faltantes = null;
+        res.error_esquema = `No se pudo revisar CodigoBarras: ${(e as Error).message}`;
       }
-      res.campos_faltantes = faltan;
-      res.listo = Boolean(res.ping) && res.acepta_pdf === true && faltan.length === 0;
-      if (faltan.length) {
-        res.mensaje = `CodigoBarras no tiene ${faltan.join(', ')}. Sin esos campos no hay `
-          + 'auditoria ni verificacion de hash. Creelos en Base44 (Datos > CodigoBarras), '
-          + 'todos de tipo texto.';
-      }
+
+      res.listo = Boolean(res.ping)
+        && res.acepta_pdf === true
+        && Array.isArray(res.campos_faltantes)
+        && res.campos_faltantes.length === 0;
       return json(res);
     }
 
