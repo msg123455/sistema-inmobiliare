@@ -44,23 +44,23 @@
       ],
       "default": "Pendiente",
       "description": "Como quedo el envio"
+    },
+    "sha256": {
+      "type": "string",
+      "description": "Huella del PDF subido. Permite comprobar que la URL sirve exactamente ese archivo"
+    },
+    "email_destino": {
+      "type": "string",
+      "description": "Correo al que se le envio. La auditoria vive aqui aunque el listado venga de un Excel"
+    },
+    "nombre_destino": {
+      "type": "string",
+      "description": "Nombre del inquilino, para no mostrar 600 filas sin nombre en Envios"
+    },
+    "mailchimp_file_id": {
+      "type": "string",
+      "description": "Id del archivo en Mailchimp. Sirve para reanudar sin duplicar y para limpiar huerfanos"
     }
-
-    // PENDIENTES DE CREAR EN EL PANEL, y a proposito NO declarados aqui arriba:
-    //
-    //   sha256             huella del PDF; permite probar que la URL sirve ese archivo
-    //   email_destino      a quien se le envio
-    //   nombre_destino     para no ver 600 filas "Sin nombre" en Envios
-    //   mailchimp_file_id  reanudar sin duplicar y limpiar huerfanos
-    //
-    // Estuvieron declarados arriba un rato y hubo que sacarlos: el constructor
-    // de Base44 LEE ESTE ARCHIVO, vio los campos y contesto "ya existen, no se
-    // necesita ningun cambio" —mientras la base seguia con nueve—. Documentarlos
-    // como si existieran impide crearlos.
-    //
-    // Que este archivo no sea el esquema vivo es justo el motivo de la sonda:
-    // Base44 descarta en silencio los campos que no existen, asi que la unica
-    // prueba concluyente es escribir una fila, releerla y ver que sobrevivio.
   },
   "required": [
     "periodo"
