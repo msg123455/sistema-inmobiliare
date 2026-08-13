@@ -194,7 +194,12 @@ function desdeFilaSimi(fila: Record<string, unknown>, proveedor: string) {
     tipo,
     operacion: operacion(campo(fila, 'Gestion', 'Gestión')),
     estado: estado(campo(fila, 'Estado')),
-    precio_venta: num(campo(fila, 'ValorVenta', 'Valor Venta', 'ValorRenta', 'Valor')),
+    // 'ValorRenta' y 'Valor' salieron de la lista: eran alias defensivos por si
+    // el export cambiaba de nombre, pero una hoja que solo trae el canon dejaba
+    // ese canon guardado como PRECIO DE VENTA. Un arriendo de 2.650.000 se
+    // publicaba como un inmueble en venta por ese valor. El canon tiene su
+    // propio campo justo debajo; no hace falta que este lo adivine.
+    precio_venta: num(campo(fila, 'ValorVenta', 'Valor Venta')),
     canon_arriendo: num(campo(fila, 'ValorCanon', 'Valor Canon', 'Canon')),
     administracion: num(campo(fila, 'Administracion', 'Administración')),
     direccion: txt(campo(fila, 'Direccion', 'Dirección')),
@@ -388,9 +393,20 @@ Deno.serve(async (req) => {
   // mano no es viable. Se falla ruidoso en vez de ensuciar la base.
   //
   // Solo en la primera tanda: revisarlo en cada lote serian 10 lecturas de mas.
+  // Campos que la tabla no tiene y cuyo dato se perderia en silencio. Viaja
+  // con el resultado para que se vea.
+  let avisoCampos: string[] = [];
+
   if (desde === 0 && !simular) {
+    // Sin estos dos la importacion DUPLICA el catalogo, asi que se bloquea.
     const CLAVES = ['codigo_externo', 'proveedor'];
+    // Estos no bloquean, pero si no existen el dato se pierde EN SILENCIO. Paso
+    // exactamente eso: `asesor` y `fecha_consignado` se agregaron al adaptador
+    // sin crearlos en Base44, y se descartaron en las 2703 importaciones sin
+    // que nada lo dijera. Se avisan para que la perdida sea visible.
+    const OPCIONALES = ['asesor', 'fecha_consignado'];
     let faltan: string[] = [];
+    let faltanOpcionales: string[] = [];
 
     const rEsq = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
     const arr = rEsq.ok ? await rEsq.json() : [];
@@ -398,6 +414,7 @@ Deno.serve(async (req) => {
 
     if (muestra) {
       faltan = CLAVES.filter((c) => !(c in muestra));
+      faltanOpcionales = OPCIONALES.filter((c) => !(c in muestra));
     } else {
       // Catalogo vacio: no hay fila que inspeccionar. Antes se dejaba pasar
       // razonando que "la primera importacion no tiene nada con que duplicar",
@@ -411,6 +428,7 @@ Deno.serve(async (req) => {
       const sonda = {
         titulo: '__sonda de esquema__', tipo: 'Otro', operacion: 'Venta',
         estado: 'No_disponible', codigo_externo: '__sonda__', proveedor: '__sonda__',
+        asesor: '__sonda__', fecha_consignado: '1900-01-01',
       };
       const rPost = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
         method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
@@ -418,6 +436,7 @@ Deno.serve(async (req) => {
       if (rPost.ok) {
         const creada = await rPost.json();
         faltan = CLAVES.filter((c) => !creada?.[c]);
+        faltanOpcionales = OPCIONALES.filter((c) => !(c in (creada || {})));
         // Se borra siempre, incluso si la comprobacion fallo: dejar la sonda en
         // el catalogo seria peor que no haberla escrito.
         if (creada?.id) {
@@ -426,6 +445,11 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    // Los opcionales no bloquean, pero el aviso viaja con el resultado para que
+    // la perdida sea visible. La alternativa —lo que habia— era escribir los
+    // 2703 inmuebles sin ese dato y que nadie se enterara.
+    avisoCampos = faltanOpcionales;
 
     if (faltan.length) {
       return json({
@@ -513,6 +537,10 @@ Deno.serve(async (req) => {
     desde,
     siguiente: completado ? null : siguiente,
     completado,
+    // Campos que la tabla no tiene: su dato se esta descartando en silencio.
+    // Va en la respuesta porque la alternativa —lo que habia— era escribir los
+    // 2703 inmuebles sin ellos y que nadie se enterara nunca.
+    campos_que_faltan: avisoCampos,
     // Solo los primeros errores: la respuesta no deberia crecer sin limite.
     errores: res.errores.slice(0, 20),
   });

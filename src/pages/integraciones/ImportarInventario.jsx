@@ -113,7 +113,7 @@ export default function ImportarInventario() {
     if (!filas.length) return;
     setCorriendo(true);
     setResultado(null);
-    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, dadosDeBaja: 0, errores: [], acentos: [], zonas: {} };
+    const acum = { creados: 0, actualizados: 0, omitidos: 0, omitidosFecha: 0, dadosDeBaja: 0, errores: [], acentos: [], zonas: {}, camposQueFaltan: [] };
     let desde = 0;
 
     try {
@@ -128,6 +128,7 @@ export default function ImportarInventario() {
         acum.actualizados += r.actualizados || 0;
         acum.omitidos += r.omitidos || 0;
         acum.omitidosFecha += r.omitidos_por_fecha || 0;
+        for (const c of r.campos_que_faltan || []) if (!acum.camposQueFaltan.includes(c)) acum.camposQueFaltan.push(c);
         if (r.errores?.length) acum.errores.push(...r.errores);
         for (const a of r.acentos_truncados || []) if (!acum.acentos.includes(a)) acum.acentos.push(a);
         for (const [asesor, zs] of Object.entries(r.zonas_por_asesor || {})) {
@@ -349,6 +350,23 @@ export default function ImportarInventario() {
                 </div>
               ))}
             </div>
+            {/* Campos que la tabla no tiene: el dato se descarta en silencio.
+                Paso exactamente eso con `asesor` durante 2703 importaciones sin
+                que nada lo dijera, asi que la perdida tiene que verse. */}
+            {!!resultado.camposQueFaltan?.length && (
+              <div className="text-sm bg-amber-500/10 rounded-xl p-4 space-y-1">
+                <p className="font-medium text-amber-700 dark:text-amber-500">
+                  Se está perdiendo información
+                </p>
+                <p className="text-muted-foreground">
+                  La tabla Propiedad no tiene{' '}
+                  <strong>{resultado.camposQueFaltan.join('</strong>, <strong>')}</strong>, así que
+                  Base44 descarta ese dato al guardar, sin avisar. Créalos en Datos → Propiedad
+                  (tipo texto) y vuelve a importar para recuperarlo.
+                </p>
+              </div>
+            )}
+
             {!!resultado.errores?.length && (
               <div className="text-xs bg-destructive/10 rounded-lg p-3 space-y-1">
                 <p className="font-medium text-destructive flex items-center gap-1.5">
