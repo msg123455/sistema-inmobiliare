@@ -54,6 +54,7 @@ const NAV_SECTIONS = [
     items: [
       { label: 'Recaudo', path: '/cartera/recaudo' },
       { label: 'Envíos', path: '/cartera/envios' },
+      { label: 'Códigos del mes', path: '/cartera/codigos' },
       { label: 'Liquidaciones', path: '/cartera/liquidaciones' },
     ],
   },
