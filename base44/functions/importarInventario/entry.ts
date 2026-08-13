@@ -269,42 +269,54 @@ Deno.serve(async (req) => {
   // existir en la base. Y cuando no existe, Base44 lo DESCARTA EN SILENCIO al
   // escribir: no falla, simplemente se pierde el dato.
   //
-  // Esto lee una fila real y reporta que campos volvieron. Es la unica forma de
-  // saber con que estamos trabajando antes de meter 400 inmuebles.
+  // SIEMPRE con sonda, nunca leyendo una fila existente.
+  //
+  // Antes leia el primer inmueble y miraba sus llaves. Eso responde "que tiene
+  // ESTE registro", no "que acepta la tabla", y son cosas distintas: Base44
+  // guarda documentos, asi que un campo creado hoy NO aparece en los 2703
+  // inmuebles escritos ayer. El diagnostico reportaba `asesor` como inexistente
+  // cuando ya estaba creado y publicado, y mando a crear dos veces algo que ya
+  // estaba.
+  //
+  // La sonda escribe un registro con los campos en cuestion y lo relee: si no
+  // vuelven, la tabla no los tiene. Es la unica pregunta que responde lo que de
+  // verdad importa, y funciona igual con el catalogo lleno o vacio.
   if (body?.diagnostico === true) {
-    const r = await fetch(`${BASE_URL}/api/entities/Propiedad?limit=1`, { headers: hdrs });
-    if (!r.ok) return json({ error: `No se pudo leer Propiedad: ${r.status}` }, 500);
-    const filas0 = await r.json();
-    const muestra = Array.isArray(filas0) ? filas0[0] : null;
-
     const NECESARIOS = ['proveedor', 'codigo_externo', 'zona', 'procedencia', 'portales'];
-    const presentes = muestra ? Object.keys(muestra) : [];
-    const faltan = NECESARIOS.filter((c) => !presentes.includes(c));
+    const OPCIONALES = ['asesor', 'fecha_consignado'];
 
-    // Con el catalogo vacio no hay fila que inspeccionar y la lista de campos
-    // sale vacia: eso NO significa que falten, significa que no se sabe. Decir
-    // "faltan 5" ahi seria una alarma falsa, y decir "esta todo bien" seria
-    // peor. La comprobacion de verdad la hace la sonda al importar.
-    if (!muestra) {
-      return json({
-        ok: true,
-        modo: 'diagnostico',
-        hay_inmuebles: false,
-        campos: [],
-        faltan: [],
-        indeterminado: true,
-        nota: 'El catalogo esta vacio, asi que desde aqui no se puede leer el esquema. '
-          + 'Al importar se escribe una sonda que lo comprueba de verdad y se bloquea si faltan campos.',
-      });
+    const sonda: Record<string, unknown> = {
+      titulo: '__sonda de esquema__', tipo: 'Otro', operacion: 'Venta', estado: 'No_disponible',
+      proveedor: '__sonda__', codigo_externo: '__sonda__', zona: '__sonda__',
+      procedencia: '__sonda__', portales: { metrocuadrado: '__sonda__' },
+      asesor: '__sonda__', fecha_consignado: '1900-01-01',
+    };
+
+    const rPost = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
+      method: 'POST', headers: hdrs, body: JSON.stringify(sonda),
+    });
+    if (!rPost.ok) return json({ error: `No se pudo escribir la sonda: ${rPost.status}` }, 500);
+    const creada = await rPost.json();
+
+    // Se borra siempre, incluso si la comprobacion fallo: dejar la sonda en el
+    // catalogo seria peor que no haberla escrito.
+    if (creada?.id) {
+      await fetch(`${BASE_URL}/api/entities/Propiedad/${creada.id}`, { method: 'DELETE', headers: hdrs })
+        .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
     }
+
+    const presentes = Object.keys(creada || {});
+    const faltan = NECESARIOS.filter((c) => !(c in (creada || {})));
+    const faltanOpc = OPCIONALES.filter((c) => !(c in (creada || {})));
 
     return json({
       ok: true,
       modo: 'diagnostico',
-      hay_inmuebles: true,
+      metodo: 'sonda',
       total_campos: presentes.length,
       campos: presentes.sort(),
       faltan,
+      faltan_opcionales: faltanOpc,
       dedup_posible: !faltan.includes('codigo_externo') && !faltan.includes('proveedor'),
       nota: faltan.length
         ? `Faltan ${faltan.length} campos en Propiedad. Sin codigo_externo + proveedor la importacion DUPLICA todo el catalogo en cada corrida.`
