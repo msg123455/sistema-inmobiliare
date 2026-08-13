@@ -44,6 +44,27 @@
       ],
       "default": "Pendiente",
       "description": "Como quedo el envio"
+    },
+    // Los cuatro de abajo los escribe codigosMensuales y hay que CREARLOS A MANO
+    // en Base44 (Datos > CodigoBarras > Esquema). Base44 descarta en silencio los
+    // campos que no existen: sin ellos la subida parece funcionar y no guarda
+    // nada. El modo sonda de la funcion los comprueba y se niega a correr si
+    // faltan.
+    "sha256": {
+      "type": "string",
+      "description": "Huella del PDF subido. Permite comprobar que la URL sirve exactamente ese archivo"
+    },
+    "email_destino": {
+      "type": "string",
+      "description": "Correo al que se le envio. La auditoria vive aqui aunque el listado venga de un Excel"
+    },
+    "nombre_destino": {
+      "type": "string",
+      "description": "Nombre del inquilino, para no mostrar 600 filas sin nombre en Envios"
+    },
+    "mailchimp_file_id": {
+      "type": "string",
+      "description": "Id del archivo en Mailchimp. Sirve para reanudar sin duplicar y para limpiar huerfanos"
     }
   },
   "required": [
