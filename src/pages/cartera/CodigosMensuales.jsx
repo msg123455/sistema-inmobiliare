@@ -9,7 +9,7 @@ import {
 import { toast } from 'sonner';
 import { parsearCSV, filasAObjetos } from '@/lib/csv';
 import { leerArchivo } from '@/lib/archivos';
-import { callFunction } from '@/lib/backend';
+import { callFunction, FUNCIONES } from '@/lib/backend';
 import { conciliar, construirDirectorio, leerNombreArchivo } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
 
@@ -110,7 +110,7 @@ export default function CodigosMensuales() {
   // campos que no existen: sin esta comprobacion la subida "funcionaria" y los
   // sha256 se perderian en las 600 filas sin un solo error visible.
   useEffect(() => {
-    callFunction('codigosMensuales', { modo: 'sonda' })
+    callFunction(FUNCIONES.codigos, { modo: 'sonda' })
       .then(setEstado)
       .catch((e) => setEstado({ error: e.message }));
   }, []);
@@ -165,7 +165,7 @@ export default function CodigosMensuales() {
     const acum = { subidos: 0, verificados: 0, errores: [], fallidos: [] };
 
     try {
-      const prep = await callFunction('codigosMensuales', { modo: 'preparar', periodo });
+      const prep = await callFunction(FUNCIONES.codigos, { modo: 'preparar', periodo });
       const yaSubidos = new Set(prep.ya_subidos || []);
 
       // Solo lo que falta: si una corrida anterior murio en el archivo 400, esta
@@ -192,7 +192,7 @@ export default function CodigosMensuales() {
 
         let desde = 0;
         while (desde !== null) {
-          const r = await callFunction('codigosMensuales', {
+          const r = await callFunction(FUNCIONES.codigos, {
             modo: 'subir', periodo, folder_id: prep.folder_id, items, desde,
           });
           acum.subidos += r.subidos || 0;
@@ -208,7 +208,7 @@ export default function CodigosMensuales() {
       let desde = 0;
       while (desde !== null) {
         setProgreso({ fase: 'Verificando', hechas: acum.verificados, total: pendientes.length });
-        const r = await callFunction('codigosMensuales', { modo: 'verificar', periodo, desde });
+        const r = await callFunction(FUNCIONES.codigos, { modo: 'verificar', periodo, desde });
         acum.verificados += r.verificados || 0;
         if (r.fallidos?.length) acum.fallidos.push(...r.fallidos);
         desde = r.siguiente;

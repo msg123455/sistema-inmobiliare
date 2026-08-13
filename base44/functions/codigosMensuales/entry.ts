@@ -155,10 +155,35 @@ Deno.serve(async (req: Request) => {
     if (modo === 'sonda') {
       const dc = datacenter();
       const res: Record<string, unknown> = {
+        // Sirve para saber si un redespliegue llego de verdad. Base44 tiene fama
+        // de servir el artefacto del primer despliegue de un nombre; con esto se
+        // comprueba en vez de suponerlo.
+        revision: 2,
         mailchimp_key: Boolean(MC_KEY),
         datacenter: dc || null,
+        // Que secretos ve la funcion. Booleanos, nunca el valor ni un fragmento:
+        // basta para localizar el que falta y no filtra nada.
+        //
+        // Existe porque un secreto invisible y un secreto mal escrito se ven
+        // exactamente igual desde afuera, y "Falta MAILCHIMP_API_KEY" no
+        // distingue entre "no lo creaste", "lo llamaste distinto" y "no llega a
+        // las funciones". Aqui se ve cual de las tres es.
+        secretos: {
+          FUNCTIONS_TOKEN: Boolean(TOKEN),
+          BASE44_APP_URL: Boolean(BASE_URL),
+          BASE44_API_KEY: Boolean(API_KEY),
+          MAILCHIMP_API_KEY: Boolean(MC_KEY),
+          MAILCHIMP_SERVER_PREFIX: Boolean(MC_PREFIJO),
+        },
       };
-      if (!MC_KEY) return json({ ...res, error: 'Falta MAILCHIMP_API_KEY en los Secrets de Base44.' }, 500);
+      if (!MC_KEY) {
+        return json({
+          ...res,
+          error: 'Falta MAILCHIMP_API_KEY en los Secrets de Base44.',
+          pista: 'Mira `secretos` arriba: si FUNCTIONS_TOKEN y BASE44_API_KEY salen true, '
+            + 'los secretos SI llegan a las funciones y el problema es el nombre de este en concreto.',
+        }, 500);
+      }
       if (!dc) {
         return json({
           ...res,

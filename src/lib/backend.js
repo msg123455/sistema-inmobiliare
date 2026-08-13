@@ -25,6 +25,24 @@ export const BACKEND_URL = (
 const FUNCTIONS_TOKEN = import.meta.env.VITE_FUNCTIONS_TOKEN || 'SYNCWASI2026';
 
 /**
+ * Nombre con el que cada función está DESPLEGADA en Base44.
+ *
+ * No siempre coincide con la carpeta del repo. Base44 sirve el artefacto del
+ * primer despliegue de un nombre —los siguientes suben, dicen «deployed» y no
+ * reemplazan nada—, así que cada cambio obliga a publicar bajo un nombre nuevo.
+ * Comprobado desplegando codigosMensuales con un campo `revision` en su
+ * respuesta y viendo que la función viva seguía sin traerlo.
+ *
+ * Vive aquí, en un solo sitio, para que subir de versión sea cambiar una línea
+ * en vez de buscar el nombre por todas las pantallas. Lo publica
+ * scripts/publicar-funcion.mjs, que al terminar recuerda actualizar esto.
+ */
+export const FUNCIONES = {
+  codigos: 'codigosMensuales2',
+  campana: 'mailchimpCampana',
+};
+
+/**
  * Invoca una función de Base44 por HTTP directo.
  *
  * Se usa en vez del SDK cuando la llamada no debe depender de la versión de
