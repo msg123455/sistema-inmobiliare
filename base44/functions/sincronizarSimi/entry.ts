@@ -49,9 +49,29 @@ const SIMI_TOKEN = Deno.env.get('SIMI_API_TOKEN') || '';
 const SIMI_BASE = Deno.env.get('SIMI_API_URL')
   || 'http://simi-api.com/ApiSimiweb/response/v2.1.1/filtroInmueble';
 
-// Pagina por defecto. 30 tarda ~9,3s contra los 15s de Base44, y deja margen
-// para escribir lo traido. 50 ya son 14,6s y no cabe nada mas.
+// Pagina por defecto.
+//
+// Se queda en 30, y no se sube, porque el cuello de botella es SIMI y no
+// nosotros: traer 30 tarda 9,3s medidos, de los 15 que da Base44. Con 40 serian
+// ~11,1s y quedaria menos de 2s de margen; si se pasa, la llamada muere sin
+// devolver nada y el cursor no avanza, que es peor que ir mas lento.
+//
+// La ganancia real no estaba en pedir mas sino en escribir mejor: antes de
+// esas 30 solo se guardaban 13 y las otras 17 se tiraban. Ver CONCURRENCIA.
 const POR_PAGINA = 30;
+
+// Escrituras simultaneas contra Base44.
+//
+// Este es el arreglo que importa. Las escrituras iban de a una, esperando cada
+// respuesta: dos llamadas por inmueble a ~130ms son 0,26s, que con 30 inmuebles
+// son casi 8 segundos. Como traerlos ya se habia comido 9,3s de un presupuesto
+// de 11, solo alcanzaban a guardarse 13 y las 17 restantes se descartaban para
+// volver a pedirlas en la siguiente llamada: el 57% del trabajo se repetia.
+//
+// En tandas de cinco esas mismas 30 se guardan en ~1,6s y la pagina entera cabe.
+// Cinco es el mismo tope que usa codigosMensuales; subirlo no acelera —el freno
+// pasa a ser SIMI— y empieza a arriesgar limites del otro lado.
+const CONCURRENCIA = 5;
 
 // Tope duro de la API: por encima de 100 devuelve 10 en silencio.
 const TOPE_API = 100;
@@ -236,6 +256,63 @@ async function traerPagina(desde: number, cuantos: number, recientes = false) {
   };
 }
 
+// ── Escritura ────────────────────────────────────────────────────────────────
+
+type Resultado = { creados: number; actualizados: number; omitidos: number; errores: string[] };
+
+/**
+ * Guarda un inmueble: busca por clave y actualiza, o crea.
+ *
+ * PUT reemplaza la fila entera, asi que se mezcla sobre lo existente. Sin eso se
+ * borrarian los links de portales y todo lo que alguien haya editado dentro de
+ * la app: el sync solo es autoridad de los campos que SIMI manda.
+ */
+async function guardar(
+  p: Record<string, unknown>,
+  baseUrl: string,
+  hdrs: Record<string, string>,
+  res: Resultado,
+) {
+  const codigo = String(p.codigo_externo);
+  try {
+    const q = `${baseUrl}/api/entities/Propiedad`
+      + `?codigo_externo=${encodeURIComponent(codigo)}&proveedor=simi&limit=1`;
+    const rBusca = await fetch(q, { headers: hdrs });
+    const existentes = rBusca.ok ? await rBusca.json() : [];
+    const existente = Array.isArray(existentes) ? existentes[0] : null;
+
+    if (existente?.id) {
+      const r = await fetch(`${baseUrl}/api/entities/Propiedad/${existente.id}`, {
+        method: 'PUT', headers: hdrs, body: JSON.stringify({ ...existente, ...p }),
+      });
+      if (r.ok) res.actualizados++;
+      else res.errores.push(`${codigo}: PUT ${r.status}`);
+    } else {
+      const r = await fetch(`${baseUrl}/api/entities/Propiedad`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(p),
+      });
+      if (r.ok) res.creados++;
+      else res.errores.push(`${codigo}: POST ${r.status} ${(await r.text()).slice(0, 100)}`);
+    }
+  } catch (err) {
+    res.errores.push(`${codigo}: ${(err as Error).message}`);
+  }
+}
+
+/** Guarda en tandas simultaneas. Una por una son 130ms de espera cada vez. */
+async function guardarTodos(
+  items: Array<Record<string, unknown>>,
+  baseUrl: string,
+  hdrs: Record<string, string>,
+  res: Resultado,
+) {
+  for (let i = 0; i < items.length; i += CONCURRENCIA) {
+    await Promise.all(
+      items.slice(i, i + CONCURRENCIA).map((p) => guardar(p, baseUrl, hdrs, res)),
+    );
+  }
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -299,7 +376,7 @@ Deno.serve(async (req) => {
   // temprano: sin orden habria que mirarlos todos para saber cuales cambiaron.
   if (body?.incremental === true) {
     const t0 = Date.now();
-    const res = { creados: 0, actualizados: 0, sin_cambio: 0, errores: [] as string[] };
+    const res = { creados: 0, actualizados: 0, omitidos: 0, errores: [] as string[] };
 
     // Marca de agua: la fecha de modificacion mas nueva que ya se proceso.
     const rCfg = await fetch(`${BASE_URL}/api/entities/SimiConfig?clave=general&limit=1`, { headers: hdrs });
@@ -326,6 +403,9 @@ Deno.serve(async (req) => {
       }
       if (!pagina.inmuebles.length) break;
 
+      // Se separa mirar de escribir, igual que en la completa: primero se decide
+      // que entra —parando en la marca— y luego se escribe todo junto.
+      const listos: Array<Record<string, unknown>> = [];
       for (const inm of pagina.inmuebles) {
         const mod = txt(inm.fecha_modificacion);
         // Al llegar a algo igual o mas viejo que la marca, lo que sigue tambien
@@ -334,40 +414,18 @@ Deno.serve(async (req) => {
         if (mod > masNueva) masNueva = mod;
 
         const p = desdeApi(inm);
-        if (!p) continue;
-
-        try {
-          const q = `${BASE_URL}/api/entities/Propiedad`
-            + `?codigo_externo=${encodeURIComponent(p.codigo_externo)}&proveedor=simi&limit=1`;
-          const rB = await fetch(q, { headers: hdrs });
-          const ex = rB.ok ? await rB.json() : [];
-          const existente = Array.isArray(ex) ? ex[0] : null;
-
-          if (existente?.id) {
-            const r = await fetch(`${BASE_URL}/api/entities/Propiedad/${existente.id}`, {
-              method: 'PUT', headers: hdrs, body: JSON.stringify({ ...existente, ...p }),
-            });
-            if (r.ok) res.actualizados++;
-            else res.errores.push(`${p.codigo_externo}: PUT ${r.status}`);
-          } else {
-            const r = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
-              method: 'POST', headers: hdrs, body: JSON.stringify(p),
-            });
-            if (r.ok) res.creados++;
-            else res.errores.push(`${p.codigo_externo}: POST ${r.status}`);
-          }
-        } catch (err) {
-          res.errores.push(`${p.codigo_externo}: ${(err as Error).message}`);
-        }
+        if (!p) res.omitidos++;
+        else listos.push(p);
       }
+      await guardarTodos(listos, BASE_URL, hdrs, res);
       pag += pagina.inmuebles.length;
     }
 
     // La marca solo avanza si no hubo errores: si algo fallo, la proxima corrida
     // tiene que volver a intentarlo. Avanzarla igual dejaria ese inmueble sin
     // actualizar para siempre, y nadie lo notaria.
-    const guardar = masNueva && masNueva !== marca && !res.errores.length;
-    if (guardar) {
+    const avanzar = masNueva && masNueva !== marca && !res.errores.length;
+    if (avanzar) {
       if (cfg?.id) {
         await fetch(`${BASE_URL}/api/entities/SimiConfig/${cfg.id}`, {
           method: 'PUT', headers: hdrs, body: JSON.stringify({ ...cfg, ultima_sync: masNueva }),
@@ -384,7 +442,7 @@ Deno.serve(async (req) => {
       ...res,
       modo: 'incremental',
       marca_anterior: marca || null,
-      marca_nueva: guardar ? masNueva : marca || null,
+      marca_nueva: avanzar ? masNueva : marca || null,
       // Primera corrida: sin marca no hay donde parar, asi que solo se traen las
       // paginas del tope. Conviene una sincronizacion completa antes.
       primera_vez: !marca,
@@ -420,45 +478,26 @@ Deno.serve(async (req) => {
   // que avanzar 10: avanzar 30 se saltaria veinte inmuebles sin que nada falle.
   const recibidos = inmuebles.length;
 
+  // Se mapea toda la pagina primero y se escribe en tandas simultaneas, en vez
+  // de ir inmueble por inmueble esperando cada respuesta. Ya no hay corte por
+  // reloj aqui: la pagina esta dimensionada para caber entera, y cortarla a la
+  // mitad era justamente lo que hacia que se repitiera el trabajo.
+  const listos: Array<Record<string, unknown>> = [];
   for (const inm of inmuebles) {
-    if (Date.now() - t0 > PRESUPUESTO_MS) break;
-
     const p = desdeApi(inm);
-    if (!p) { res.omitidos++; continue; }
-
-    try {
-      const q = `${BASE_URL}/api/entities/Propiedad`
-        + `?codigo_externo=${encodeURIComponent(p.codigo_externo)}`
-        + '&proveedor=simi&limit=1';
-      const rBusca = await fetch(q, { headers: hdrs });
-      const existentes = rBusca.ok ? await rBusca.json() : [];
-      const existente = Array.isArray(existentes) ? existentes[0] : null;
-
-      if (existente?.id) {
-        // PUT reemplaza la fila entera, asi que se mezcla sobre lo que ya hay.
-        // Sin esto se borrarian los links de portales, que solo trae el CSV, y
-        // todo lo que alguien haya editado dentro de la app.
-        const r = await fetch(`${BASE_URL}/api/entities/Propiedad/${existente.id}`, {
-          method: 'PUT', headers: hdrs, body: JSON.stringify({ ...existente, ...p }),
-        });
-        if (r.ok) res.actualizados++;
-        else res.errores.push(`${p.codigo_externo}: PUT ${r.status}`);
-      } else {
-        const r = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
-          method: 'POST', headers: hdrs, body: JSON.stringify(p),
-        });
-        if (r.ok) res.creados++;
-        else res.errores.push(`${p.codigo_externo}: POST ${r.status} ${(await r.text()).slice(0, 100)}`);
-      }
-    } catch (err) {
-      res.errores.push(`${p.codigo_externo}: ${(err as Error).message}`);
-    }
+    if (!p) res.omitidos++;
+    else listos.push(p);
   }
+  await guardarTodos(listos, BASE_URL, hdrs, res);
 
   const procesados = res.creados + res.actualizados + res.omitidos;
-  // Se avanza por lo PROCESADO, no por lo pedido ni por lo recibido: si el
-  // presupuesto corto a mitad de pagina, el resto se retoma en la siguiente
-  // llamada en vez de perderse.
+  // Se avanza por lo PROCESADO y no por lo pedido: si se pidieron 30 y la API
+  // mando 10, avanzar 30 se saltaria veinte inmuebles sin que nada falle.
+  //
+  // Los que dieron error no cuentan como procesados, asi que el cursor se queda
+  // corto y la siguiente pagina se solapa con el final de esta. Es a proposito:
+  // reescribir un inmueble que ya estaba no hace danio —se busca y se mezcla—
+  // mientras que darlo por bueno lo dejaria fuera del catalogo para siempre.
   const siguiente = procesados > 0 && desde + procesados <= total ? desde + procesados : null;
 
   return json({

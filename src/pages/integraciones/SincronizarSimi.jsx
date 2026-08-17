@@ -15,7 +15,7 @@ export default function SincronizarSimi() {
   const qc = useQueryClient();
 
   const [sonda, setSonda] = useState(null);
-  const [progreso, setProgreso] = useState(null); // { hechos, total }
+  const [progreso, setProgreso] = useState(null); // { hechos, total, creados, actualizados }
   const [resultado, setResultado] = useState(null);
   const [corriendo, setCorriendo] = useState(false);
 
@@ -53,7 +53,12 @@ export default function SincronizarSimi() {
         acum.paginas += 1;
         if (r.errores?.length) acum.errores.push(...r.errores);
         total = r.total_en_simi || total;
-        setProgreso({ hechos: acum.creados + acum.actualizados + acum.omitidos, total });
+        setProgreso({
+          hechos: acum.creados + acum.actualizados + acum.omitidos,
+          total,
+          creados: acum.creados,
+          actualizados: acum.actualizados,
+        });
         desde = r.siguiente;
       }
       setResultado(acum);
@@ -127,8 +132,10 @@ export default function SincronizarSimi() {
             <div>
               <p className="text-sm font-medium">Traer todo el inventario</p>
               <p className="text-xs text-muted-foreground">
-                En tandas de {POR_PAGINA}. Con ~2.700 inmuebles tarda unos 15 minutos.
-                No cierres la pestaña.
+                En tandas de {POR_PAGINA}. Con ~2.700 inmuebles tarda unos 17 minutos.
+                No cierres la pestaña. El total de propiedades casi no va a subir:
+                los inmuebles ya están, lo que entra ahora son sus alcobas, baños,
+                fotos y coordenadas.
               </p>
             </div>
             <Button onClick={sincronizar} disabled={corriendo}>
@@ -142,8 +149,16 @@ export default function SincronizarSimi() {
               <div className="h-2 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
               </div>
+              {/* Se desglosa mientras corre, no solo al final. Casi todo el
+                  inventario ya existe, asi que lo normal es que "creados" se
+                  quede en cero y solo suba "actualizados": sin este desglose
+                  parece que no esta pasando nada, porque el numero de
+                  propiedades de la tabla efectivamente no se mueve. */}
               <p className="text-xs text-muted-foreground">
                 {progreso.hechos.toLocaleString('es-CO')} de {progreso.total.toLocaleString('es-CO')} · {pct}%
+                {' · '}
+                {progreso.creados.toLocaleString('es-CO')} nuevos,{' '}
+                {progreso.actualizados.toLocaleString('es-CO')} enriquecidos
               </p>
             </div>
           )}
