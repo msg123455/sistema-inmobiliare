@@ -222,22 +222,34 @@ type Cargador = (db: Db, estado: Estado, entrada: Entrada) => Promise<Record<str
 const CARGADORES: Record<Agente, Cargador> = {
   recepcion: async () => ({}),
 
+  // Ventas NO precarga el catalogo.
+  //
+  // Cargaba 100 inmuebles al abrir la conversacion —los primeros que devolviera
+  // la base, sin criterio— y buscar_inmuebles filtraba sobre esos. Con 2714 en
+  // el catalogo el agente veia el 4%, y si los 100 cargados eran de La Calera
+  // respondia "no tengo nada en Chapinero" teniendo 624 alli.
+  //
+  // Ahora buscar_inmuebles consulta la base con lo que el cliente pidio, que es
+  // lo que hace un asesor: no se memoriza el inventario, lo consulta. De paso
+  // cada turno arranca mas liviano.
+  //
+  // Se conserva el resumen del portafolio porque ubica al agente —cuanto hay y
+  // donde— sin cargar las fichas. Sale de un conteo, no de traer los inmuebles.
   ventas: async (db, estado) => {
-    const [catalogo, campanas] = await Promise.all([
-      db.list('Propiedad', { estado: 'Disponible', limit: 100 }),
+    const [muestra, campanas] = await Promise.all([
+      // Solo para el resumen: zonas y proporcion. No es el catalogo de busqueda.
+      db.list('Propiedad', { estado: 'Disponible', limit: 300 }),
       estado.compartido.campana_id
         ? db.list('CampanaAds', { id: String(estado.compartido.campana_id), limit: 1 })
         : Promise.resolve([]),
     ]);
-    const arr = catalogo.filter((p: any) => String(p.operacion || '').includes('Arriendo')).length;
-    const ven = catalogo.filter((p: any) => String(p.operacion || '').includes('Venta')).length;
-    const barrios = [...new Set(catalogo.map((p: any) => p.barrio).filter(Boolean))].slice(0, 20);
+    const barrios = [...new Set(muestra.map((p: any) => p.barrio).filter(Boolean))].slice(0, 25);
     return {
-      catalogo,
       campana: campanas[0] || null,
-      resumen_portafolio: catalogo.length
-        ? `Hoy hay ${catalogo.length} inmuebles activos: ${arr} en arriendo y ${ven} en venta.` +
-          (barrios.length ? ` Zonas con disponibilidad: ${barrios.join(', ')}.` : '')
+      resumen_portafolio: muestra.length
+        ? 'Tenemos inventario en venta y en arriendo.'
+          + (barrios.length ? ` Algunas zonas con disponibilidad: ${barrios.join(', ')}.` : '')
+          + ' Para saber que hay de verdad usa buscar_inmuebles: consulta el catalogo completo.'
         : '',
     };
   },

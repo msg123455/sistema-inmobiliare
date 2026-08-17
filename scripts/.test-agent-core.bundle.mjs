@@ -1117,7 +1117,6 @@ var buscarInmuebles = {
     { retorna: true }
   ),
   ejecutar: async (input, c) => {
-    const props = c.ctxAgente.catalogo || [];
     const esArr = input.operacion === "arriendo";
     const barrio = String(input.barrio || "").toLowerCase();
     const tipo = String(input.tipo || "").toLowerCase();
@@ -1128,6 +1127,15 @@ var buscarInmuebles = {
         falta_discovery: true,
         instruccion: "Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario ni digas que estas buscando."
       };
+    }
+    const filtro = { estado: "Disponible", limit: 800 };
+    if (barrio) filtro.barrio = String(input.barrio).trim();
+    let props = await c.db.list("Propiedad", filtro);
+    if (barrio && !props.length) {
+      props = await c.db.list("Propiedad", { estado: "Disponible", zona: String(input.barrio).trim(), limit: 800 });
+    }
+    if (barrio && !props.length) {
+      props = await c.db.list("Propiedad", { estado: "Disponible", limit: 800 });
     }
     const puntuados = props.filter((p) => {
       const op = String(p.operacion || "");
@@ -1173,8 +1181,8 @@ var enviarFicha = {
     "Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.",
     { inmueble_id: str("El id que devolvio buscar_inmuebles") }
   ),
-  ejecutar: (input, c) => {
-    const p = (c.ctxAgente.catalogo || []).find((x) => x.id === input.inmueble_id);
+  ejecutar: async (input, c) => {
+    const p = (await c.db.list("Propiedad", { id: String(input.inmueble_id), limit: 1 }))?.[0];
     if (!p) return { ok: false, error: "inmueble no encontrado" };
     const ficha = linkFicha(p);
     if (!ficha) return { ok: false, error: "sin_ficha", nota: "Dile que el asesor se la comparte. No inventes el link." };
@@ -1235,8 +1243,8 @@ var buscarPorCodigo = {
     const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const buscado = norm(input.codigo);
     if (!buscado) return { ok: false, error: "sin_codigo" };
-    const props = c.ctxAgente.catalogo || [];
-    let p = props.find((x) => norm(x.codigo_externo) === buscado);
+    const enBase = await c.db.list("Propiedad", { codigo_externo: String(input.codigo).trim(), limit: 1 });
+    let p = enBase?.[0] && String(enBase[0].estado) === "Disponible" ? enBase[0] : null;
     if (!p) {
       const fuera = await c.db.list("Propiedad", { codigo_externo: String(input.codigo).trim(), limit: 1 });
       if (fuera?.[0]) {
@@ -2634,6 +2642,12 @@ for (const [agente, prompt] of Object.entries(PROMPTS)) {
 }
 assert.match(PROMPTS.ventas, /guardar_dato/);
 assert.equal(fmtCOP(25e5), "$2.500.000");
+var dbFalsa = (filas) => ({
+  list: async (entidad, filtro = {}) => {
+    if (entidad !== "Propiedad") return [];
+    return filas.filter((p) => Object.entries(filtro).every(([k, v]) => k === "limit" || String(p[k] ?? "") === String(v)));
+  }
+});
 var catalogoDemo = [
   {
     id: "chapi-25",
@@ -2662,7 +2676,8 @@ var catalogoDemo = [
   }
 ];
 var ctxBusqueda = {
-  ctxAgente: { catalogo: catalogoDemo },
+  db: dbFalsa(catalogoDemo.map((p) => ({ ...p, estado: "Disponible" }))),
+  ctxAgente: {},
   salida: { globos: [], finTurno: false }
 };
 var busqueda = await buscarInmuebles.ejecutar({
@@ -2676,7 +2691,7 @@ assert.equal(busqueda.encontrados, 1);
 assert.equal(busqueda.inmuebles[0].id, "chapi-25");
 assert.equal(busqueda.inmuebles[0].precio, "$2.500.000 al mes");
 assert.equal(busqueda.inmuebles[0].ficha, "https://www.metrocuadrado.com/ficha-real");
-assert.equal(enviarFicha.ejecutar({ inmueble_id: "chapi-25" }, ctxBusqueda).ok, true);
+assert.equal((await enviarFicha.ejecutar({ inmueble_id: "chapi-25" }, ctxBusqueda)).ok, true);
 assert.equal(ctxBusqueda.salida.globos.at(-1), "https://www.metrocuadrado.com/ficha-real");
 var estadoLead = estadoVacio();
 estadoLead.compartido.contacto_id = "contacto-1";
@@ -2897,7 +2912,8 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada("buenas tardes
 }
 {
   const ctx = {
-    ctxAgente: { catalogo: [] },
+    db: dbFalsa([]),
+    ctxAgente: {},
     estado: estadoVacio(),
     entrada: entrada("busco algo"),
     salida: { globos: [], finTurno: false },
@@ -2913,7 +2929,8 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada("buenas tardes
 }
 {
   const ctx = {
-    ctxAgente: { catalogo: [{ id: "p1", operacion: "Arriendo", barrio: "Chico", tipo: "Apartamento", canon_arriendo: 3e6, habitaciones: 2 }] },
+    db: dbFalsa([{ id: "p1", estado: "Disponible", operacion: "Arriendo", barrio: "Chico", tipo: "Apartamento", canon_arriendo: 3e6, habitaciones: 2 }]),
+    ctxAgente: {},
     estado: estadoVacio(),
     entrada: entrada("busco algo"),
     salida: { globos: [], finTurno: false },

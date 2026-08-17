@@ -107,7 +107,6 @@ export const buscarInmuebles: Tool = {
     { retorna: true },
   ),
   ejecutar: async (input, c: CtxTool) => {
-    const props: any[] = c.ctxAgente.catalogo || [];
     const esArr = input.operacion === 'arriendo';
     const barrio = String(input.barrio || '').toLowerCase();
     const tipo = String(input.tipo || '').toLowerCase();
@@ -130,6 +129,36 @@ export const buscarInmuebles: Tool = {
           + 'en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario '
           + 'ni digas que estas buscando.',
       };
+    }
+
+    // Se consulta la base AHORA, con lo que el cliente pidio. Antes se filtraba
+    // sobre `ctxAgente.catalogo`: 100 inmuebles precargados al abrir la
+    // conversacion, sin ningun criterio, de un catalogo de 2714. El agente veia
+    // el 4%, y si esos 100 eran de La Calera respondia "no tengo nada en
+    // Chapinero" teniendo 624 alli. El sintoma no era un error: era el sistema
+    // funcionando como estaba escrito.
+    //
+    // La base solo filtra por igualdad, asi que la zona o el barrio se piden al
+    // servidor —que es lo selectivo— y el precio, las alcobas y la operacion se
+    // aplican aqui sobre ese resultado.
+    //
+    // LIMITE CONOCIDO: si el cliente solo dio presupuesto y ninguna zona, no hay
+    // por donde acotar y se trae un tope amplio. Es el caso raro —el gate exige
+    // zona O presupuesto y la zona es lo que la gente dice primero— pero conviene
+    // saber que ahi la busqueda no recorre el catalogo entero.
+    const filtro: Record<string, string | number> = { estado: 'Disponible', limit: 800 };
+    if (barrio) filtro.barrio = String(input.barrio).trim();
+
+    let props: any[] = await c.db.list('Propiedad', filtro);
+
+    // El barrio exacto puede no coincidir con como lo dijo el cliente ("Chico"
+    // contra "Chico Norte"). Si no hubo suerte, se reintenta por zona y se afina
+    // aqui: es preferible una segunda consulta a responder "no hay nada".
+    if (barrio && !props.length) {
+      props = await c.db.list('Propiedad', { estado: 'Disponible', zona: String(input.barrio).trim(), limit: 800 });
+    }
+    if (barrio && !props.length) {
+      props = await c.db.list('Propiedad', { estado: 'Disponible', limit: 800 });
     }
 
     const puntuados = props
@@ -195,8 +224,11 @@ export const enviarFicha: Tool = {
     'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
     { inmueble_id: str('El id que devolvio buscar_inmuebles') },
   ),
-  ejecutar: (input, c: CtxTool) => {
-    const p = (c.ctxAgente.catalogo || []).find((x: any) => x.id === input.inmueble_id);
+  ejecutar: async (input, c: CtxTool) => {
+    // Se pide por id a la base. Antes lo buscaba en el catalogo precargado, que
+    // ya no existe: si el inmueble no estaba entre los 100 que se cargaban, esta
+    // tool fallaba aunque buscar_inmuebles acabara de mostrarlo.
+    const p = (await c.db.list('Propiedad', { id: String(input.inmueble_id), limit: 1 }))?.[0];
     if (!p) return { ok: false, error: 'inmueble no encontrado' };
     const ficha = linkFicha(p);
     if (!ficha) return { ok: false, error: 'sin_ficha', nota: 'Dile que el asesor se la comparte. No inventes el link.' };
@@ -272,11 +304,13 @@ export const buscarPorCodigo: Tool = {
     const buscado = norm(input.codigo);
     if (!buscado) return { ok: false, error: 'sin_codigo' };
 
-    const props: any[] = c.ctxAgente.catalogo || [];
-    let p = props.find((x) => norm(x.codigo_externo) === buscado);
+      // Consulta directa por codigo. Antes miraba primero el catalogo
+      // precargado, que solo traia 100 de 2714: un codigo perfectamente valido
+      // que no estuviera entre esos se reportaba como inexistente.
+      const enBase = await c.db.list('Propiedad', { codigo_externo: String(input.codigo).trim(), limit: 1 });
+      let p = enBase?.[0] && String(enBase[0].estado) === 'Disponible' ? enBase[0] : null;
 
-    // El catalogo en contexto son los Disponible. Si no esta ahi, puede existir
-    // pero ya no estar en el mercado: hay que decirlo, no callarlo.
+      // Existe pero ya no esta en el mercado: hay que decirlo, no callarlo.
     if (!p) {
       const fuera = await c.db.list('Propiedad', { codigo_externo: String(input.codigo).trim(), limit: 1 });
       if (fuera?.[0]) {

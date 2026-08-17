@@ -36,6 +36,22 @@ for (const [agente, prompt] of Object.entries(PROMPTS)) {
 assert.match(PROMPTS.ventas, /guardar_dato/);
 
 assert.equal(fmtCOP(2_500_000), '$2.500.000');
+
+/**
+ * Base falsa: solo igualdad, como la de Base44. Las tools ya no reciben un
+ * catalogo precargado —consultan— asi que el test tiene que simular la consulta
+ * y no el resultado. Si aceptara filtros que Base44 no soporta, el test pasaria
+ * y produccion fallaria.
+ */
+const dbFalsa = (filas) => ({
+  list: async (entidad, filtro = {}) => {
+    if (entidad !== 'Propiedad') return [];
+    return filas.filter((p) =>
+      Object.entries(filtro).every(([k, v]) =>
+        k === 'limit' || String(p[k] ?? '') === String(v)));
+  },
+});
+
 const catalogoDemo = [
   {
     id: 'chapi-25', titulo: 'Apartamento en Chapinero', operacion: 'Arriendo',
@@ -51,8 +67,11 @@ const catalogoDemo = [
     barrio: 'Chapinero', tipo: 'Apartamento', canon_arriendo: 4_000_000,
   },
 ];
+// Las tools ya no reciben el catalogo: lo consultan. El test simula la consulta
+// para probar lo que de verdad va a pasar en produccion.
 const ctxBusqueda = {
-  ctxAgente: { catalogo: catalogoDemo },
+  db: dbFalsa(catalogoDemo.map((p) => ({ ...p, estado: 'Disponible' }))),
+  ctxAgente: {},
   salida: { globos: [], finTurno: false },
 };
 const busqueda = await buscarInmuebles.ejecutar({
@@ -63,7 +82,7 @@ assert.equal(busqueda.encontrados, 1);
 assert.equal(busqueda.inmuebles[0].id, 'chapi-25');
 assert.equal(busqueda.inmuebles[0].precio, '$2.500.000 al mes');
 assert.equal(busqueda.inmuebles[0].ficha, 'https://www.metrocuadrado.com/ficha-real');
-assert.equal(enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctxBusqueda).ok, true);
+assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctxBusqueda)).ok, true);
 assert.equal(ctxBusqueda.salida.globos.at(-1), 'https://www.metrocuadrado.com/ficha-real');
 
 const estadoLead = estadoVacio();
@@ -305,7 +324,7 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
 // agente prometia "te aviso cuando entre algo" y no quedaba registrado.
 {
   const ctx = {
-    ctxAgente: { catalogo: [] }, estado: estadoVacio(), entrada: entrada('busco algo'),
+    db: dbFalsa([]), ctxAgente: {}, estado: estadoVacio(), entrada: entrada('busco algo'),
     salida: { globos: [], finTurno: false },
     efectos: { transferir: null, escalado: null, notificar: [] },
   };
@@ -326,7 +345,8 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
 // mensaje: un broker no abre con un listado.
 {
   const ctx = {
-    ctxAgente: { catalogo: [{ id: 'p1', operacion: 'Arriendo', barrio: 'Chico', tipo: 'Apartamento', canon_arriendo: 3e6, habitaciones: 2 }] },
+    db: dbFalsa([{ id: 'p1', estado: 'Disponible', operacion: 'Arriendo', barrio: 'Chico', tipo: 'Apartamento', canon_arriendo: 3e6, habitaciones: 2 }]),
+    ctxAgente: {},
     estado: estadoVacio(), entrada: entrada('busco algo'),
     salida: { globos: [], finTurno: false },
     efectos: { transferir: null, escalado: null, notificar: [] },

@@ -1066,18 +1066,29 @@ async function titularDelMensaje(db, entrada) {
 }
 var CARGADORES = {
   recepcion: async () => ({}),
+  // Ventas NO precarga el catalogo.
+  //
+  // Cargaba 100 inmuebles al abrir la conversacion —los primeros que devolviera
+  // la base, sin criterio— y buscar_inmuebles filtraba sobre esos. Con 2714 en
+  // el catalogo el agente veia el 4%, y si los 100 cargados eran de La Calera
+  // respondia "no tengo nada en Chapinero" teniendo 624 alli.
+  //
+  // Ahora buscar_inmuebles consulta la base con lo que el cliente pidio, que es
+  // lo que hace un asesor: no se memoriza el inventario, lo consulta. De paso
+  // cada turno arranca mas liviano.
+  //
+  // Se conserva el resumen del portafolio porque ubica al agente —cuanto hay y
+  // donde— sin cargar las fichas. Sale de un conteo, no de traer los inmuebles.
   ventas: async (db, estado) => {
-    const [catalogo, campanas] = await Promise.all([
-      db.list("Propiedad", { estado: "Disponible", limit: 100 }),
+    const [muestra, campanas] = await Promise.all([
+      // Solo para el resumen: zonas y proporcion. No es el catalogo de busqueda.
+      db.list("Propiedad", { estado: "Disponible", limit: 300 }),
       estado.compartido.campana_id ? db.list("CampanaAds", { id: String(estado.compartido.campana_id), limit: 1 }) : Promise.resolve([])
     ]);
-    const arr = catalogo.filter((p) => String(p.operacion || "").includes("Arriendo")).length;
-    const ven = catalogo.filter((p) => String(p.operacion || "").includes("Venta")).length;
-    const barrios = [...new Set(catalogo.map((p) => p.barrio).filter(Boolean))].slice(0, 20);
+    const barrios = [...new Set(muestra.map((p) => p.barrio).filter(Boolean))].slice(0, 25);
     return {
-      catalogo,
       campana: campanas[0] || null,
-      resumen_portafolio: catalogo.length ? `Hoy hay ${catalogo.length} inmuebles activos: ${arr} en arriendo y ${ven} en venta.` + (barrios.length ? ` Zonas con disponibilidad: ${barrios.join(", ")}.` : "") : ""
+      resumen_portafolio: muestra.length ? "Tenemos inventario en venta y en arriendo." + (barrios.length ? ` Algunas zonas con disponibilidad: ${barrios.join(", ")}.` : "") + " Para saber que hay de verdad usa buscar_inmuebles: consulta el catalogo completo." : ""
     };
   },
   // Cartera carga UN contrato y UN extracto. No carga inventario.
@@ -1908,7 +1919,6 @@ var buscarInmuebles = {
     { retorna: true }
   ),
   ejecutar: async (input, c) => {
-    const props = c.ctxAgente.catalogo || [];
     const esArr = input.operacion === "arriendo";
     const barrio = String(input.barrio || "").toLowerCase();
     const tipo = String(input.tipo || "").toLowerCase();
@@ -1919,6 +1929,15 @@ var buscarInmuebles = {
         falta_discovery: true,
         instruccion: "Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario ni digas que estas buscando."
       };
+    }
+    const filtro = { estado: "Disponible", limit: 800 };
+    if (barrio) filtro.barrio = String(input.barrio).trim();
+    let props = await c.db.list("Propiedad", filtro);
+    if (barrio && !props.length) {
+      props = await c.db.list("Propiedad", { estado: "Disponible", zona: String(input.barrio).trim(), limit: 800 });
+    }
+    if (barrio && !props.length) {
+      props = await c.db.list("Propiedad", { estado: "Disponible", limit: 800 });
     }
     const puntuados = props.filter((p) => {
       const op = String(p.operacion || "");
@@ -1964,8 +1983,8 @@ var enviarFicha = {
     "Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.",
     { inmueble_id: str("El id que devolvio buscar_inmuebles") }
   ),
-  ejecutar: (input, c) => {
-    const p = (c.ctxAgente.catalogo || []).find((x) => x.id === input.inmueble_id);
+  ejecutar: async (input, c) => {
+    const p = (await c.db.list("Propiedad", { id: String(input.inmueble_id), limit: 1 }))?.[0];
     if (!p) return { ok: false, error: "inmueble no encontrado" };
     const ficha = linkFicha(p);
     if (!ficha) return { ok: false, error: "sin_ficha", nota: "Dile que el asesor se la comparte. No inventes el link." };
@@ -2026,8 +2045,8 @@ var buscarPorCodigo = {
     const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const buscado = norm(input.codigo);
     if (!buscado) return { ok: false, error: "sin_codigo" };
-    const props = c.ctxAgente.catalogo || [];
-    let p = props.find((x) => norm(x.codigo_externo) === buscado);
+    const enBase = await c.db.list("Propiedad", { codigo_externo: String(input.codigo).trim(), limit: 1 });
+    let p = enBase?.[0] && String(enBase[0].estado) === "Disponible" ? enBase[0] : null;
     if (!p) {
       const fuera = await c.db.list("Propiedad", { codigo_externo: String(input.codigo).trim(), limit: 1 });
       if (fuera?.[0]) {
