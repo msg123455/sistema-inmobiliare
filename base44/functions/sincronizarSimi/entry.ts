@@ -1,9 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // sincronizarSimi — trae el inventario desde la API de SIMI
 //
-// Reemplaza el paso manual de bajar el export a una hoja y subirla. La
-// importacion por CSV se conserva como respaldo: si SIMI se cae, o hay que
-// cargar algo a mano, ese camino sigue abierto.
+// Es la UNICA entrada del inventario. La importacion por CSV se elimino: podia
+// contradecir a la API, porque su barrido daba de baja todo lo que no viniera
+// en el archivo, y un export viejo o cortado dejaba fuera inmuebles vigentes.
+// Un respaldo capaz de corromper el catalogo es peor que no tener respaldo.
+//
+// DOS MODOS:
+//   completa     recorre el catalogo entero por paginas. Para la carga inicial.
+//   incremental  pide ordenado por fecha descendente y para al llegar a lo ya
+//                conocido. Es el de la tarea programada: una corrida diaria
+//                toca ~30 inmuebles en vez de 2712.
 //
 // LO QUE GANA EL CATALOGO. El CSV no trae alcobas, banios, garajes, fotos,
 // coordenadas, estrato ni descripcion. Sin alcobas el agente no podia responder
@@ -33,6 +40,8 @@
 
 const BASE_URL = Deno.env.get('BASE44_APP_URL') || '';
 const TOKEN = Deno.env.get('FUNCTIONS_TOKEN') || '';
+// La tarea programada usa su propio token, igual que los demas crons del repo.
+const CRON_TOKEN = Deno.env.get('CRON_TOKEN') || '';
 
 // Credencial de SIMI. Sin valor por defecto: uno quemado en un repo publico no
 // protege nada y ademas disimula que falta configurarlo.
@@ -180,19 +189,26 @@ function desdeApi(inm: Record<string, unknown>) {
 
 // ── Llamada a SIMI ───────────────────────────────────────────────────────────
 
-/** Los filtros van en la ruta, no en query string. 0 significa "sin filtro". */
-function urlPagina(desde: number, cuantos: number): string {
+/**
+ * Los filtros van en la ruta, no en query string. 0 significa "sin filtro".
+ *
+ * `recientes` ordena por fecha descendente, que es lo que hace viable el modo
+ * incremental: los que se movieron hoy vienen primero, asi que se puede parar
+ * apenas se llega a lo ya conocido en vez de recorrer los 2712.
+ */
+function urlPagina(desde: number, cuantos: number, recientes = false): string {
+  const orden = recientes ? 'campo/fecha/order/desc' : 'campo/0/order/0';
   return `${SIMI_BASE}/limite/${desde}/total/${cuantos}`
     + '/departamento/0/ciudad/0/zona/0/barrio/0/tipoInm/0/tipOper/0'
-    + '/areamin/0/areamax/0/valmin/0/valmax/0/campo/0/order/0'
+    + `/areamin/0/areamax/0/valmin/0/valmax/0/${orden}`
     + '/banios/0/alcobas/0/garajes/0/sede/0/usuario/0';
 }
 
-async function traerPagina(desde: number, cuantos: number) {
+async function traerPagina(desde: number, cuantos: number, recientes = false) {
   // Basic con usuario VACIO y el token como contrasena. Comprobado contra la
   // API: las otras cuatro formas devuelven 401 en el cuerpo con HTTP 200.
   const auth = btoa(`:${SIMI_TOKEN}`);
-  const r = await fetch(urlPagina(desde, cuantos), {
+  const r = await fetch(urlPagina(desde, cuantos, recientes), {
     headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
   });
 
@@ -229,12 +245,21 @@ Deno.serve(async (req) => {
   let body: any;
   try { body = await req.json(); } catch { return json({ error: 'JSON invalido' }, 400); }
 
-  if (!TOKEN) {
+  // Dos llamadores con dos credenciales: la pantalla manda FUNCTIONS_TOKEN, y
+  // el scheduler de Base44 manda CRON_TOKEN. Base44 entrega los argumentos del
+  // scheduler dentro de `args` en algunas ejecuciones, asi que se mira ahi
+  // tambien; es el mismo patron que usan enviarPendientes y los demas crons.
+  const dado = txt(body?.token || body?.args?.token);
+  const valido = (TOKEN && dado === TOKEN) || (CRON_TOKEN && dado === CRON_TOKEN);
+  if (!TOKEN && !CRON_TOKEN) {
     return json({
-      error: 'Falta FUNCTIONS_TOKEN en Base44 (Configuracion > Secretos).',
+      error: 'Falta FUNCTIONS_TOKEN o CRON_TOKEN en Base44 (Configuracion > Secretos).',
     }, 500);
   }
-  if (body?.token !== TOKEN) return json({ error: 'No autorizado' }, 401);
+  if (!valido) return json({ error: 'No autorizado' }, 401);
+
+  // El scheduler manda `incremental` dentro de args, igual que el token.
+  if (body?.args?.incremental === true) body.incremental = true;
 
   if (!SIMI_TOKEN) {
     return json({
@@ -263,7 +288,112 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── Sincronizacion por paginas ──────────────────────────────────────────────
+  // ── Incremental: solo lo que cambio desde la ultima corrida ────────────────
+  //
+  // Es el modo que usa la tarea programada, y el que hace que esto sea barato.
+  // La API ordena por fecha descendente, asi que los que se movieron hoy vienen
+  // primero: se avanza mientras haya cambios y se para al llegar a lo ya
+  // conocido. Una corrida diaria toca ~30 inmuebles en vez de 2712.
+  //
+  // Requiere `campo/fecha/order/desc`, que es lo unico que hace posible parar
+  // temprano: sin orden habria que mirarlos todos para saber cuales cambiaron.
+  if (body?.incremental === true) {
+    const t0 = Date.now();
+    const res = { creados: 0, actualizados: 0, sin_cambio: 0, errores: [] as string[] };
+
+    // Marca de agua: la fecha de modificacion mas nueva que ya se proceso.
+    const rCfg = await fetch(`${BASE_URL}/api/entities/SimiConfig?clave=general&limit=1`, { headers: hdrs });
+    const cfgs = rCfg.ok ? await rCfg.json() : [];
+    const cfg = Array.isArray(cfgs) ? cfgs[0] : null;
+    const marca = txt(cfg?.ultima_sync);
+
+    let pag = 1;
+    let masNueva = marca;
+    let alcanzado = false;
+    // Tope de paginas por corrida: si nadie sincroniza en semanas no se puede
+    // recuperar todo en una sola llamada de 15s. Lo que falte entra en la
+    // siguiente, porque la marca solo avanza al terminar.
+    const MAX_PAGINAS = 4;
+
+    for (let i = 0; i < MAX_PAGINAS && !alcanzado; i++) {
+      if (Date.now() - t0 > PRESUPUESTO_MS) break;
+
+      let pagina;
+      try {
+        pagina = await traerPagina(pag, POR_PAGINA, true);
+      } catch (e) {
+        return json({ error: (e as Error).message, ...res }, 502);
+      }
+      if (!pagina.inmuebles.length) break;
+
+      for (const inm of pagina.inmuebles) {
+        const mod = txt(inm.fecha_modificacion);
+        // Al llegar a algo igual o mas viejo que la marca, lo que sigue tambien
+        // lo es: viene ordenado. Se para.
+        if (marca && mod && mod <= marca) { alcanzado = true; break; }
+        if (mod > masNueva) masNueva = mod;
+
+        const p = desdeApi(inm);
+        if (!p) continue;
+
+        try {
+          const q = `${BASE_URL}/api/entities/Propiedad`
+            + `?codigo_externo=${encodeURIComponent(p.codigo_externo)}&proveedor=simi&limit=1`;
+          const rB = await fetch(q, { headers: hdrs });
+          const ex = rB.ok ? await rB.json() : [];
+          const existente = Array.isArray(ex) ? ex[0] : null;
+
+          if (existente?.id) {
+            const r = await fetch(`${BASE_URL}/api/entities/Propiedad/${existente.id}`, {
+              method: 'PUT', headers: hdrs, body: JSON.stringify({ ...existente, ...p }),
+            });
+            if (r.ok) res.actualizados++;
+            else res.errores.push(`${p.codigo_externo}: PUT ${r.status}`);
+          } else {
+            const r = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
+              method: 'POST', headers: hdrs, body: JSON.stringify(p),
+            });
+            if (r.ok) res.creados++;
+            else res.errores.push(`${p.codigo_externo}: POST ${r.status}`);
+          }
+        } catch (err) {
+          res.errores.push(`${p.codigo_externo}: ${(err as Error).message}`);
+        }
+      }
+      pag += pagina.inmuebles.length;
+    }
+
+    // La marca solo avanza si no hubo errores: si algo fallo, la proxima corrida
+    // tiene que volver a intentarlo. Avanzarla igual dejaria ese inmueble sin
+    // actualizar para siempre, y nadie lo notaria.
+    const guardar = masNueva && masNueva !== marca && !res.errores.length;
+    if (guardar) {
+      if (cfg?.id) {
+        await fetch(`${BASE_URL}/api/entities/SimiConfig/${cfg.id}`, {
+          method: 'PUT', headers: hdrs, body: JSON.stringify({ ...cfg, ultima_sync: masNueva }),
+        });
+      } else {
+        await fetch(`${BASE_URL}/api/entities/SimiConfig`, {
+          method: 'POST', headers: hdrs,
+          body: JSON.stringify({ clave: 'general', ultima_sync: masNueva, activo: true }),
+        });
+      }
+    }
+
+    return json({
+      ...res,
+      modo: 'incremental',
+      marca_anterior: marca || null,
+      marca_nueva: guardar ? masNueva : marca || null,
+      // Primera corrida: sin marca no hay donde parar, asi que solo se traen las
+      // paginas del tope. Conviene una sincronizacion completa antes.
+      primera_vez: !marca,
+      ms: Date.now() - t0,
+      errores: res.errores.slice(0, 20),
+    });
+  }
+
+  // ── Sincronizacion completa, por paginas ───────────────────────────────────
   const desde = Math.max(1, Number(body?.desde) || 1);
   // Se acepta ajustar el tamano, pero nunca por encima del tope real de la API:
   // pedir 500 devolveria 10 y el cursor avanzaria 500, saltandose 490.

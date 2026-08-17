@@ -53,7 +53,6 @@ import AgenteSocial from '@/pages/marketing/AgenteSocial.jsx';
 import Campanas from '@/pages/marketing/Campanas.jsx';
 
 // Integraciones
-import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
 import SincronizarSimi from '@/pages/integraciones/SincronizarSimi.jsx';
 
 // Portal del cliente (arrendatarios y propietarios) — arbol aparte, sin auth de staff
@@ -157,7 +156,6 @@ const AuthenticatedApp = () => {
         <Route path="/marketing/campanas" element={<Campanas />} />
 
         {/* Integraciones */}
-        <Route path="/integraciones/inventario" element={<ImportarInventario />} />
         <Route path="/integraciones/simi" element={<SincronizarSimi />} />
 
         {/* IA Agente */}

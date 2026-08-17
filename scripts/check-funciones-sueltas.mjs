@@ -19,7 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const FUNCIONES = [
-  'base44/functions/importarInventario/entry.ts',
+  'base44/functions/sincronizarSimi/entry.ts',
   'base44/functions/codigosMensuales/entry.ts',
   'base44/functions/mailchimpCampana/entry.ts',
 ];
