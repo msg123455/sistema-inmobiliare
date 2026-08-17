@@ -106,7 +106,8 @@ const NAV_SECTIONS = [
     icon: Link2,
     basePath: '/integraciones',
     items: [
-      { label: 'Importar inventario', path: '/integraciones/inventario' },
+      { label: 'Sincronizar con SIMI', path: '/integraciones/simi' },
+      { label: 'Importar inventario (CSV)', path: '/integraciones/inventario' },
     ],
   },
 ];

@@ -54,6 +54,7 @@ import Campanas from '@/pages/marketing/Campanas.jsx';
 
 // Integraciones
 import ImportarInventario from '@/pages/integraciones/ImportarInventario.jsx';
+import SincronizarSimi from '@/pages/integraciones/SincronizarSimi.jsx';
 
 // Portal del cliente (arrendatarios y propietarios) — arbol aparte, sin auth de staff
 import PortalLayout from '@/pages/portal/PortalLayout.jsx';
@@ -157,6 +158,7 @@ const AuthenticatedApp = () => {
 
         {/* Integraciones */}
         <Route path="/integraciones/inventario" element={<ImportarInventario />} />
+        <Route path="/integraciones/simi" element={<SincronizarSimi />} />
 
         {/* IA Agente */}
         <Route path="/agente/configuracion" element={<AdminOnly><ConfigAgenteIA /></AdminOnly>} />
