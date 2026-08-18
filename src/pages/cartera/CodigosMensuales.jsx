@@ -12,6 +12,8 @@ import { leerArchivo } from '@/lib/archivos';
 import { callFunction, FUNCIONES } from '@/lib/backend';
 import { conciliar, construirDirectorio, leerNombreArchivo } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
+import { base44 } from '@/api/base44Client';
+import PasoCampana from '@/components/cartera/PasoCampana';
 
 /**
  * Codigos de barras del mes: de la carpeta de SIMI al correo, sin copiar URLs.
@@ -103,6 +105,7 @@ export default function CodigosMensuales() {
   const [corriendo, setCorriendo] = useState(false);
   const [progreso, setProgreso] = useState(null);
   const [resultado, setResultado] = useState(null);
+  const [paraCampana, setParaCampana] = useState(null);
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
@@ -213,6 +216,32 @@ export default function CodigosMensuales() {
         if (r.fallidos?.length) acum.fallidos.push(...r.fallidos);
         desde = r.siguiente;
       }
+
+      // Las URL para la campana se leen de CodigoBarras, no de lo que devolvio
+      // la subida: si una corrida anterior ya habia subido parte del mes, esas
+      // URL solo viven en la tabla. El libro mayor es la fuente, no la sesion.
+      setProgreso({ fase: 'Leyendo las URL guardadas', hechas: 0, total: 1 });
+      const filas = (await base44.entities.CodigoBarras.list())
+        .filter((f) => f.periodo === periodo && f.url_pdf);
+      const urlPorCodigo = new Map(filas.map((f) => [String(f.codigo), f.url_pdf]));
+
+      // Se reagrupa por correo con las URL puestas: quien tiene un inmueble va a
+      // la campana masiva y quien tiene varios a un correo con todos, que es lo
+      // que evita que se le pierda uno en silencio.
+      const porCorreo = new Map();
+      for (const e of conciliacion.emparejados) {
+        const url = urlPorCodigo.get(e.codigo);
+        if (!url || !e.enviable) continue;
+        const k = e.email.toLowerCase();
+        if (!porCorreo.has(k)) porCorreo.set(k, []);
+        porCorreo.get(k).push({ ...e, url });
+      }
+      const uno = []; const varios = [];
+      for (const [email, grupo] of porCorreo) {
+        if (grupo.length === 1) uno.push(grupo[0]);
+        else varios.push({ email, nombre: grupo[0].nombre, codigos: grupo });
+      }
+      setParaCampana({ campana: uno, multiContrato: varios });
 
       setResultado(acum);
       setProgreso(null);
@@ -482,6 +511,22 @@ export default function CodigosMensuales() {
               </a>
             </div>
           )}
+        </Paso>
+      )}
+
+      {/* 7. Campana. Aparece cuando ya hay URL: antes no hay nada que enviar. */}
+      {paraCampana && (
+        <Paso n={7} titulo="Armar la campaña" hecho={false}>
+          <p className="text-xs text-muted-foreground">
+            {paraCampana.campana.length} inquilinos en la campaña masiva
+            {paraCampana.multiContrato.length > 0
+              && ` · ${paraCampana.multiContrato.length} con varios inmuebles reciben todos sus códigos`}
+          </p>
+          <PasoCampana
+            periodo={periodo}
+            campana={paraCampana.campana}
+            multiContrato={paraCampana.multiContrato}
+          />
         </Paso>
       )}
 

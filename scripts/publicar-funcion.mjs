@@ -66,16 +66,24 @@ if (seco) {
   process.exit(0);
 }
 
-// npx.cmd directo en vez de `shell: true`: pasar argumentos por shell los
-// concatena sin escapar, y aqui viaja un app-id que no conviene dejar a merced
-// del interprete de comandos.
-execFileSync(process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['--yes', 'base44@0.1.9', '--app-id', APP_ID, 'functions', 'deploy', nombre],
-  { stdio: 'inherit' });
-
-// La copia solo servia para desplegar. Dejarla en el repo invita a editarla por
-// error, y editarla no hace nada: la fuente de verdad es el directorio base.
-rmSync(destino, { recursive: true, force: true });
+// En Windows npx es un .cmd y CreateProcess no lo lanza directo, asi que hace
+// falta el shell. Se intento sin el para evitar la concatenacion sin escapar y
+// falla con ENOENT. Es aceptable porque aqui no entra texto del usuario: el
+// nombre se valida contra los directorios del repo y el app-id es un id fijo.
+// El finally limpia tambien cuando el despliegue falla. Sin el, un intento
+// fallido dejaba el directorio a medias, la siguiente corrida lo contaba como
+// version ya usada y saltaba un numero: paso una vez y publico como 3 lo que
+// debia ser 2.
+try {
+  execFileSync('npx', ['--yes', 'base44@0.1.9', '--app-id', APP_ID, 'functions', 'deploy', nombre], {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  });
+} finally {
+  // La copia solo servia para desplegar. Dejarla en el repo invita a editarla
+  // por error, y editarla no hace nada: la fuente es el directorio base.
+  rmSync(destino, { recursive: true, force: true });
+}
 for (const vieja of previas) rmSync(resolve(RAIZ, vieja), { recursive: true, force: true });
 
 console.log(`

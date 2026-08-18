@@ -39,7 +39,7 @@ const FUNCTIONS_TOKEN = import.meta.env.VITE_FUNCTIONS_TOKEN || 'SYNCWASI2026';
  */
 export const FUNCIONES = {
   codigos: 'codigosMensuales2',
-  campana: 'mailchimpCampana',
+  campana: 'mailchimpCampana3',
 };
 
 /**

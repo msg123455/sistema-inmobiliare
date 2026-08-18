@@ -23,6 +23,9 @@ const MC_PREFIJO = Deno.env.get('MAILCHIMP_SERVER_PREFIX') || '';
 const FROM_NAME = Deno.env.get('MAILCHIMP_FROM_NAME') || '';
 const FROM_EMAIL = Deno.env.get('MAILCHIMP_FROM_EMAIL') || '';
 const REPLY_TO = Deno.env.get('MAILCHIMP_REPLY_TO') || FROM_EMAIL;
+// Unicas direcciones a las que esta funcion puede mandar un correo de prueba.
+// Vacio = no manda ninguna. Ver el modo `prueba`.
+const TEST_EMAILS = Deno.env.get('MAILCHIMP_TEST_EMAILS') || '';
 
 const PRESUPUESTO_MS = 11_000;
 // Tope de la API para el upsert por lotes de POST /lists/{id}.
@@ -176,8 +179,52 @@ Deno.serve(async (req: Request) => {
       return json({ creados, existentes: [...tags] });
     }
 
+    // ── automatizaciones ────────────────────────────────────────────────────
+    // Agregar un contacto a una audiencia parece inofensivo y no lo es: si esa
+    // audiencia tiene una automatizacion de bienvenida activa, Mailchimp le
+    // manda un correo al inquilino en el momento de suscribirlo. Es una via de
+    // envio que no pasa por ninguna campana y que nadie ve venir.
+    //
+    // Por eso se puede consultar aparte, y por eso `audiencia` se niega a correr
+    // si encuentra alguna activa sobre esa lista.
+    if (modo === 'automatizaciones' || modo === 'audiencia') {
+      let activas: any[] = [];
+      try {
+        const r = await mcJson('/automations?count=100&fields=automations.id,automations.status,automations.settings.title,automations.recipients.list_id');
+        activas = (r.automations || []).filter(
+          (a: any) => a.status === 'sending' && a.recipients?.list_id === listId,
+        );
+      } catch {
+        // Si no se puede comprobar, no se supone que no hay: se dice.
+        if (modo === 'audiencia') {
+          return json({
+            error: 'no_se_pudo_comprobar_automatizaciones',
+            mensaje: 'No se pudo consultar si la audiencia tiene automatizaciones activas. '
+              + 'No se agrego ningun contacto: suscribir con una automatizacion encendida le '
+              + 'manda un correo al inquilino sin que nadie lo dispare.',
+          }, 502);
+        }
+      }
+
+      if (activas.length) {
+        return json({
+          error: 'automatizacion_activa',
+          automatizaciones: activas.map((a: any) => ({ id: a.id, titulo: a.settings?.title })),
+          mensaje: `Esa audiencia tiene ${activas.length} automatizacion(es) enviando. Agregar `
+            + 'contactos les mandaria un correo automatico. No se agrego a nadie: pausalas en '
+            + 'Mailchimp o usa otra audiencia.',
+        }, 409);
+      }
+
+      if (modo === 'automatizaciones') return json({ activas: [], limpio: true });
+    }
+
     // ── audiencia ───────────────────────────────────────────────────────────
     // Upsert por lotes. miembros: [{ email, nombre, urls: [...] }]
+    //
+    // Esto NO manda correo por si mismo —solo escribe contactos y sus campos—,
+    // pero solo se llega aqui despues de comprobar que la audiencia no tiene una
+    // automatizacion encendida que si lo haria.
     if (modo === 'audiencia') {
       const miembros: any[] = Array.isArray(body?.miembros) ? body.miembros : [];
       const desde = Number(body?.desde || 0);
@@ -277,22 +324,55 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── prueba ──────────────────────────────────────────────────────────────
+    // ES LA UNICA RUTA DE ESTE ARCHIVO QUE MANDA CORREO DE VERDAD, asi que va
+    // cerrada con llave y FALLA CERRADA: sin la lista blanca no manda nada.
+    //
+    // La lista no se recibe por parametro sino que sale del secreto
+    // MAILCHIMP_TEST_EMAILS, que solo la oficina controla. El motivo es
+    // concreto: el token de estas funciones esta escrito en el repositorio, asi
+    // que cualquiera que lo lea puede llamarlas. Si los destinos vinieran en el
+    // cuerpo, esa persona escogeria a quien llega el correo.
     if (modo === 'prueba') {
+      const permitidos = TEST_EMAILS.split(/[,;\s]+/).map((c) => c.trim().toLowerCase()).filter(Boolean);
+      if (!permitidos.length) {
+        return json({
+          error: 'sin_lista_blanca',
+          mensaje: 'No hay MAILCHIMP_TEST_EMAILS configurado, asi que no se manda ninguna prueba. '
+            + 'Ponlo en los Secrets de Base44 con los correos de la oficina, separados por coma.',
+        }, 409);
+      }
+
       const id = String(body?.campana_id || '');
-      const destinos: string[] = (Array.isArray(body?.correos) ? body.correos : [])
-        .map((c: string) => String(c).trim()).filter(Boolean);
-      if (!id || !destinos.length) return json({ error: 'Faltan campana_id o correos.' }, 400);
+      if (!id) return json({ error: 'Falta campana_id.' }, 400);
+
+      const pedidos: string[] = (Array.isArray(body?.correos) ? body.correos : [])
+        .map((c: string) => String(c).trim().toLowerCase()).filter(Boolean);
+
+      // Sin destinos pedidos se usa la lista entera. Con destinos pedidos, solo
+      // los que ademas esten en la lista: lo que no esta, se rechaza y se dice.
+      const destinos = pedidos.length ? pedidos.filter((c) => permitidos.includes(c)) : permitidos;
+      const rechazados = pedidos.filter((c) => !permitidos.includes(c));
+
+      if (rechazados.length) {
+        return json({
+          error: 'destino_no_autorizado',
+          rechazados,
+          mensaje: 'Esos correos no estan en MAILCHIMP_TEST_EMAILS. No se envio nada. '
+            + 'Las pruebas solo salen a direcciones de la oficina, nunca a un inquilino.',
+        }, 403);
+      }
 
       await mcJson(`/campaigns/${id}/actions/test`, {
         method: 'POST',
         body: JSON.stringify({ test_emails: destinos, send_type: 'html' }),
       });
-      return json({ enviada_a: destinos.length });
+      return json({ enviada_a: destinos.length, destinos });
     }
 
     return json({
-      error: `Modo desconocido: ${modo}. Usa audiencias, preflight, mergeFields, audiencia, campana o prueba. `
-        + 'No hay modo de envio a proposito: la campana se envia a mano desde Mailchimp.',
+      error: `Modo desconocido: ${modo}. Usa audiencias, preflight, automatizaciones, mergeFields, `
+        + 'audiencia, campana o prueba. No hay modo de envio a proposito: a los inquilinos no les '
+        + 'llega nada desde aqui. La campana se envia a mano desde Mailchimp.',
     }, 400);
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
