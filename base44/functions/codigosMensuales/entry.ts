@@ -112,6 +112,14 @@ async function enOleadas<T, R>(items: T[], fn: (x: T) => Promise<R>): Promise<R[
   return out;
 }
 
+/**
+ * Nombre de archivo tal como lo publica SIMI: 90_Ago3976.02.pdf
+ *   90    oficina    Ago  mes (sin anio)    3976  contrato    .02  renovacion
+ * Patron FIJO: el mes se compara aparte. Interpolarlo dentro de un template
+ * literal se comia la barra de \d y el patron dejaba de encajar con nada.
+ */
+const RE_ARCHIVO_MES = /^(\d+)_([A-Za-z]{3})(\d+)(?:\.(\d+))?\.pdf$/i;
+
 const MESES_ES = [
   'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -158,7 +166,7 @@ Deno.serve(async (req: Request) => {
         // Sirve para saber si un redespliegue llego de verdad. Base44 tiene fama
         // de servir el artefacto del primer despliegue de un nombre; con esto se
         // comprueba en vez de suponerlo.
-        revision: 2,
+        revision: 6,
         mailchimp_key: Boolean(MC_KEY),
         datacenter: dc || null,
         // Que secretos ve la funcion. Booleanos, nunca el valor ni un fragmento:
@@ -338,6 +346,130 @@ Deno.serve(async (req: Request) => {
         // Total que Mailchimp dice tener en la carpeta. Si al final no cuadra
         // con lo subido, algo entro por fuera del robot.
         en_carpeta: carpeta.file_count ?? null,
+      });
+    }
+
+    // ── explorarArchivos ────────────────────────────────────────────────────
+    // Diagnostico: que nombres devuelve de verdad el File Manager.
+    //
+    // Existe porque indexarMes barrio los 29.690 archivos de la cuenta y no
+    // encontro ninguno de los ~592 que la carpeta del mes dice tener. Antes de
+    // suponer por que, hay que mirar los nombres reales.
+    if (modo === 'explorarArchivos') {
+      const contiene = String(body?.contiene || '').toLowerCase();
+      const desde = Number(body?.desde || 0);
+      const t0 = Date.now();
+      let offset = desde;
+      let total = 0;
+      const coinciden: string[] = [];
+      const muestra: string[] = [];
+      let pdfs = 0;
+
+      while (Date.now() - t0 < PRESUPUESTO_MS) {
+        const r = await mcJson(
+          `/file-manager/files?count=1000&offset=${offset}`
+          + '&fields=files.name,files.type,files.folder_id,total_items',
+        );
+        total = Number(r.total_items || 0);
+        const lote = r.files || [];
+        for (const f of lote) {
+          const n = String(f.name || '');
+          if (/\.pdf$/i.test(n)) pdfs++;
+          if (contiene && n.toLowerCase().includes(contiene) && coinciden.length < 40) coinciden.push(n);
+          if (muestra.length < 15 && offset > 25000) muestra.push(`${n} [carpeta ${f.folder_id}]`);
+        }
+        offset += lote.length;
+        if (!lote.length || offset >= total) break;
+      }
+
+      return json({
+        coinciden, muestra_del_final: muestra, pdfs_vistos: pdfs,
+        revisados: offset, total, siguiente: offset < total ? offset : null,
+      });
+    }
+
+    // ── indexarMes ──────────────────────────────────────────────────────────
+    // Devuelve los codigos del mes que YA estan publicados en Mailchimp, cada
+    // uno con su URL. Es la entrada cuando la oficina sube los PDFs por su
+    // cuenta y lo unico que falta es emparejarlos con el inquilino.
+    //
+    // No se filtra por carpeta a proposito: GET /file-manager/files ignora
+    // folder_id —devuelve la cuenta entera y cada archivo reporta folder_id 0—.
+    // El mes viaja en el NOMBRE (90_Ago3976.02.pdf), asi que se pagina el File
+    // Manager y se filtra por nombre.
+    //
+    // Sale mejor que filtrar por carpeta, ademas: no depende de que alguien
+    // haya dejado el archivo en la carpeta correcta, y un PDF traspapelado en
+    // otra carpeta se encuentra igual.
+    if (modo === 'indexarMes') {
+      const desde = Number(body?.desde || 0);
+      const mes = Number(periodo.slice(5, 7));
+      const abrev = (MESES_ES[mes - 1] || '').slice(0, 3).toLowerCase();
+      if (!abrev) return json({ error: 'periodo con mes invalido.' }, 400);
+
+      // LA CARPETA ES OBLIGATORIA, y no por orden: el nombre del archivo NO
+      // lleva el anio. "90_Ago947.pdf" puede ser de agosto de 2025 o de 2026, y
+      // en la cuenta conviven los dos. Filtrando solo por nombre salen 2.369
+      // archivos y 894 contratos distintos donde el mes real tiene 592: se
+      // mezclarian tres anios y alguien recibiria el recibo del ano pasado.
+      //
+      // La carpeta es lo unico que desambigua. El parametro ?folder_id= de la
+      // consulta se ignora, pero el folder_id que viene en cada archivo SI es
+      // correcto, asi que se filtra aqui.
+      const nombreDeseado = String(body?.carpeta || '').trim() || nombreCarpeta(periodo);
+      const { folders = [] } = await mcJson('/file-manager/folders?count=1000');
+      const carpeta = folders.find((f: any) => normNombre(f.name) === normNombre(nombreDeseado));
+      if (!carpeta) {
+        return json({
+          error: 'carpeta_no_encontrada',
+          buscada: nombreDeseado,
+          disponibles: folders.map((f: any) => ({ id: f.id, nombre: f.name, archivos: f.file_count })),
+          mensaje: `No hay ninguna carpeta llamada "${nombreDeseado}" en Mailchimp. `
+            + 'Sin carpeta no se puede distinguir este mes del mismo mes de otro anio.',
+        }, 404);
+      }
+      const idCarpeta = String(carpeta.id);
+      const esperados = Number(carpeta.file_count || 0);
+
+      const t0 = Date.now();
+      let offset = desde;
+      let total = 0;
+      const encontrados: Array<Record<string, string>> = [];
+
+      // Se pagina hasta agotar el presupuesto y se devuelve cursor: con ~30.000
+      // archivos en la cuenta hacen falta varias llamadas.
+      while (Date.now() - t0 < PRESUPUESTO_MS) {
+        const r = await mcJson(
+          `/file-manager/files?count=1000&offset=${offset}`
+          + '&fields=files.id,files.name,files.full_size_url,files.folder_id,total_items',
+        );
+        total = Number(r.total_items || 0);
+        const lote = r.files || [];
+        for (const f of lote) {
+          // Se usa un patron FIJO y se compara el mes aparte, en vez de
+          // interpolar el mes dentro del regex. Interpolando, la plantilla de JS
+          // se comia la barra de `\d` —dentro de un template literal `\d` no es
+          // un escape valido y queda en `d`— y el patron terminaba buscando la
+          // letra d literal. Encontraba cero archivos y parecia que Mailchimp no
+          // los devolvia.
+          if (String(f.folder_id ?? '') !== idCarpeta) continue;
+          const m = String(f.name || '').match(RE_ARCHIVO_MES);
+          if (m && m[2].toLowerCase() === abrev) {
+            encontrados.push({
+              codigo: m[3], archivo: String(f.name),
+              url: String(f.full_size_url || ''), file_id: String(f.id ?? ''),
+            });
+          }
+        }
+        offset += lote.length;
+        if (!lote.length || offset >= total) break;
+      }
+
+      return json({
+        encontrados,
+        carpeta: { id: idCarpeta, nombre: carpeta.name, archivos: esperados },
+        revisados: offset, total,
+        siguiente: offset < total ? offset : null,
       });
     }
 

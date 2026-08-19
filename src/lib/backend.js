@@ -38,7 +38,7 @@ const FUNCTIONS_TOKEN = import.meta.env.VITE_FUNCTIONS_TOKEN || 'SYNCWASI2026';
  * scripts/publicar-funcion.mjs, que al terminar recuerda actualizar esto.
  */
 export const FUNCIONES = {
-  codigos: 'codigosMensuales2',
+  codigos: 'codigosMensuales6',
   campana: 'mailchimpCampana3',
 };
 

@@ -22,7 +22,7 @@
  *
  * Cuando Base44 arregle el despliegue por nombre, esto se borra.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -45,15 +45,40 @@ if (/\d$/.test(base)) {
   process.exit(1);
 }
 
-// Las copias numeradas que ya se desplegaron alguna vez.
-const previas = readdirSync(RAIZ)
-  .filter((d) => new RegExp(`^${base}\\d+$`).test(d))
-  .sort((a, b) => Number(a.slice(base.length)) - Number(b.slice(base.length)));
+// Los nombres gastados se le preguntan a BASE44, no al repo.
+//
+// Antes se miraban los directorios locales, y este script los borra despues de
+// desplegar: la corrida siguiente no encontraba ninguno, calculaba la version 2
+// y publicaba sobre un nombre que ya existia. Como Base44 sirve el artefacto del
+// primer despliegue, eso no cambiaba nada y aun asi imprimia "deployed". Un
+// despliegue que no despliega y no lo dice es peor que uno que falla.
+// Se leen los DOS flujos: el CLI imprime el listado por stderr, asi que
+// quedarse solo con stdout devolvia una lista vacia y el script concluia que no
+// habia ninguna version desplegada.
+const res = spawnSync('npx',
+  ['--yes', 'base44@0.1.9', '--app-id', APP_ID, 'functions', 'list'],
+  { encoding: 'utf8', shell: process.platform === 'win32' });
+const listado = `${res.stdout || ''}
+${res.stderr || ''}`;
+if (!listado.trim()) {
+  console.error('No se pudo listar las funciones desplegadas. Se aborta para no publicar sobre un nombre usado.');
+  process.exit(1);
+}
 
-const usados = previas.map((d) => Number(d.slice(base.length)));
-// Se empieza en 2: el 1 es el nombre sin sufijo, que ya se gasto.
+const reNombre = new RegExp(`^${base}(\\d*)$`);
+const usados = listado.split('\n')
+  .map((l) => l.trim().match(reNombre))
+  .filter(Boolean)
+  // El nombre sin sufijo cuenta como la version 1.
+  .map((m) => Number(m[1] || 1));
+
 const n = usados.length ? Math.max(...usados) + 1 : 2;
 const nombre = `${base}${n}`;
+
+// Copias locales de intentos anteriores, solo para limpiarlas al final.
+const previas = readdirSync(RAIZ).filter((d) => new RegExp(`^${base}\\d+$`).test(d));
+
+console.log(`  versiones ya desplegadas: ${[...usados].sort((a, b) => a - b).join(', ') || 'ninguna'}`);
 
 console.log(`\n== publicando ${nombre} (clonado de ${base}) ==\n`);
 
