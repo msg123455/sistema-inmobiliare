@@ -1,0 +1,22 @@
+{
+  // Solo drive.file, NO el scope completo de Drive.
+  //
+  // drive.file da acceso unicamente a los archivos que esta app crea, que es
+  // todo lo que hace falta aqui: crear la carpeta del mes, subir la hoja y
+  // volver a encontrarla para actualizarla.
+  //
+  // Ademas es el unico scope de Drive que Google NO clasifica como restringido.
+  // Con https://www.googleapis.com/auth/drive completo, la app entra en revision
+  // de verificacion: pantalla de "app no verificada" y tope de 100 usuarios
+  // hasta pasar auditoria. Para subir una hoja al mes eso no tiene sentido.
+  //
+  // La consecuencia a aceptar: files.list solo devuelve lo que creo la app. Es
+  // una ventaja al buscar la carpeta —no puede chocar con una carpeta del
+  // usuario que se llame igual— y una limitacion si alguien la borra o la mueve
+  // a una unidad compartida, porque entonces se crea otra.
+  "type": "googledrive",
+  "scopes": [
+    "https://www.googleapis.com/auth/drive.file",
+    "email"
+  ]
+}

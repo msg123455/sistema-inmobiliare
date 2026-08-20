@@ -1,12 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { CalendarPlus, Mail, Link, Unlink, CheckCircle2, Loader2 } from 'lucide-react';
+import { CalendarPlus, Mail, HardDrive, Link, Unlink, CheckCircle2, Loader2 } from 'lucide-react';
+import { CONECTORES } from '@/lib/conectores';
 
-const CALENDAR_CONNECTOR_ID = '6a18839dc1f7c1f1c25e5638';
-const GMAIL_CONNECTOR_ID = '6a188355eedd5e30c544330b';
+// Los ids viven en src/lib/conectores.js: estaban repetidos a mano en cada
+// pantalla, y uno copiado mal no da error, da un "no conectado" que parece que
+// el usuario no autorizo.
+const CALENDAR_CONNECTOR_ID = CONECTORES.calendar;
+const GMAIL_CONNECTOR_ID = CONECTORES.gmail;
+const DRIVE_CONNECTOR_ID = CONECTORES.drive;
 
 export default function IntegracionesTab() {
+  // Los intervalos del sondeo del popup se guardan para limpiarlos al
+  // desmontar: si el usuario navega con el popup abierto, quedaban corriendo.
+  const temporizadores = useRef([]);
+  useEffect(() => () => { temporizadores.current.forEach(clearInterval); }, []);
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -16,6 +26,11 @@ export default function IntegracionesTab() {
   const [gmailConnected, setGmailConnected] = useState(false);
   const [gmailEmail, setGmailEmail] = useState('');
   const [gmailLoading, setGmailLoading] = useState(true);
+
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveEmail, setDriveEmail] = useState('');
+  const [driveLoading, setDriveLoading] = useState(true);
+  const [avisoPopup, setAvisoPopup] = useState('');
 
   // Rule 2: reusable fetch — doubles as connection check AND data loader
   const checkCalendar = async () => {
@@ -41,6 +56,18 @@ export default function IntegracionesTab() {
     setGmailLoading(false);
   };
 
+  const checkDrive = async () => {
+    setDriveLoading(true);
+    try {
+      const res = await base44.functions.invoke('checkDriveConnection', {});
+      setDriveConnected(res.data?.connected || false);
+      setDriveEmail(res.data?.email || '');
+    } catch {
+      setDriveConnected(false);
+    }
+    setDriveLoading(false);
+  };
+
   // Rule 1+2: check auth first, then fetch to detect connection status
   useEffect(() => {
     base44.auth.isAuthenticated().then(async (authed) => {
@@ -49,21 +76,33 @@ export default function IntegracionesTab() {
         setUser(me);
         checkCalendar();
         checkGmail();
+        checkDrive();
       }
       setLoading(false);
     });
   }, []);
 
   // Rule 3: open OAuth popup, poll for close, then re-fetch
+  //
+  // Se distingue el popup BLOQUEADO de el popup CERRADO. Antes los dos caian en
+  // la misma rama, asi que con el bloqueador activo la pantalla decia
+  // "no conectado" sin explicar por que y el usuario no tenia como saberlo.
   const handleConnect = async (connectorId, recheckFn) => {
+    setAvisoPopup('');
     const url = await base44.connectors.connectAppUser(connectorId);
     const popup = window.open(url, '_blank');
+    if (!popup) {
+      setAvisoPopup('El navegador bloqueó la ventana emergente. Permítelas para este sitio e inténtalo otra vez.');
+      return;
+    }
     const timer = setInterval(() => {
-      if (!popup || popup.closed) {
+      if (popup.closed) {
         clearInterval(timer);
+        temporizadores.current = temporizadores.current.filter((t) => t !== timer);
         recheckFn();
       }
     }, 500);
+    temporizadores.current.push(timer);
   };
 
   const handleDisconnect = async (connectorId, resetFn) => {
@@ -122,6 +161,26 @@ export default function IntegracionesTab() {
         connectLabel="Conectar Gmail"
         disconnectLabel="Desconectar Gmail"
       />
+
+      {/* Google Drive */}
+      <ConnectorCard
+        icon={HardDrive}
+        iconBg="bg-amber-50 dark:bg-amber-950/30"
+        iconColor="text-amber-600"
+        title="Google Drive"
+        description="Conecta tu cuenta para que los listados de códigos de barras se suban a tu Drive como hoja de cálculo, listos para abrir en Sheets."
+        connected={driveConnected}
+        loading={driveLoading}
+        statusExtra={driveEmail ? `(${driveEmail})` : ''}
+        onConnect={() => handleConnect(DRIVE_CONNECTOR_ID, checkDrive)}
+        onDisconnect={() => handleDisconnect(DRIVE_CONNECTOR_ID, () => { setDriveConnected(false); setDriveEmail(''); })}
+        connectLabel="Conectar Google Drive"
+        disconnectLabel="Desconectar Drive"
+      />
+
+      {avisoPopup && (
+        <p className="text-xs text-amber-700 dark:text-amber-400 px-1">{avisoPopup}</p>
+      )}
     </div>
   );
 }

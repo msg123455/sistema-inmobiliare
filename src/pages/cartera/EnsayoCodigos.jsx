@@ -4,12 +4,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   FileSpreadsheet, Loader2, ShieldCheck, AlertTriangle, PlayCircle, Download, ArrowRight,
+  HardDrive, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parsearCSV, filasAObjetos } from '@/lib/csv';
 import { callFunction, FUNCIONES } from '@/lib/backend';
 import { aCSV, construirDirectorio, rellenarLinks } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
+import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 
 /**
  * Ensayo: subir el listado sin links y recuperarlo con los links puestos.
@@ -40,6 +42,8 @@ export default function EnsayoCodigos() {
   const [corriendo, setCorriendo] = useState(false);
   const [fase, setFase] = useState('');
   const [res, setRes] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const drive = useGoogleDrive();
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
@@ -95,14 +99,43 @@ export default function EnsayoCodigos() {
     } finally { setCorriendo(false); setFase(''); }
   };
 
+  const nombreArchivo = `codigos-${periodo}-con-links`;
+
   const descargar = () => {
     const csv = aCSV(res.out.filas);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `codigos-${periodo}-con-links.csv`;
+    a.download = `${nombreArchivo}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
     toast.success('Descargado');
+  };
+
+  /**
+   * Sube el MISMO CSV que descarga el boton de al lado. El BOM lo quita la
+   * funcion backend: aqui hace falta para que Excel respete los acentos, y solo
+   * estorba al convertir a Sheets.
+   *
+   * El enlace resultante se guarda DENTRO de `res`, no en un estado aparte: hay
+   * cuatro sitios que hacen setRes(null) y olvidar uno dejaria en pantalla un
+   * enlace a la hoja del mes anterior.
+   */
+  const subirADrive = async () => {
+    setSubiendo(true);
+    try {
+      if (!drive.conectado) {
+        const quedo = await drive.conectar();
+        if (!quedo) { toast.error('No quedó conectado. Inténtalo otra vez.'); return; }
+      }
+      const r = await drive.subirCsvComoHoja({ csv: aCSV(res.out.filas), nombre: nombreArchivo });
+      if (!r.ok) { toast.error(r.detalle ? `${r.mensaje} (${r.detalle})` : r.mensaje); return; }
+      setRes((prev) => ({ ...prev, hoja: r }));
+      toast.success(r.creado ? 'Hoja creada en tu Drive' : 'Hoja actualizada en tu Drive');
+    } catch (e) {
+      toast.error(e.message);
+    } finally {
+      setSubiendo(false);
+    }
   };
 
   const r = res?.out;
@@ -192,9 +225,44 @@ export default function EnsayoCodigos() {
                          tono={r.resumen.discrepan ? 'peligro' : 'exito'} />
               </div>
 
-              <Button onClick={descargar} className="rounded-lg gap-1.5">
-                <Download className="w-4 h-4" /> Descargar el listado con los links
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={descargar} variant="outline" className="rounded-lg gap-1.5">
+                  <Download className="w-4 h-4" /> Descargar
+                </Button>
+
+                <Button
+                  onClick={subirADrive}
+                  disabled={subiendo || drive.sesion === false || drive.sesion === null}
+                  className="rounded-lg gap-1.5"
+                >
+                  {subiendo ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
+                  {subiendo ? 'Subiendo…'
+                    : drive.conectado ? 'Subir a Google Drive'
+                      : 'Conectar Drive y subir'}
+                </Button>
+
+                {drive.sesion === false && (
+                  <span className="text-xs text-muted-foreground">
+                    Inicia sesión para subir a tu Drive
+                  </span>
+                )}
+              </div>
+
+              {res.hoja && (
+                <div className="flex items-start gap-2 text-sm bg-primary/10 rounded-lg p-3">
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {res.hoja.creado ? 'Hoja creada' : 'Hoja actualizada'}
+                      {res.hoja.carpeta ? ` en «${res.hoja.carpeta}»` : ' en la raíz de tu Drive'}
+                    </p>
+                    <a href={res.hoja.url} target="_blank" rel="noreferrer noopener"
+                       className="text-primary hover:underline inline-flex items-center gap-1 mt-0.5 presionable">
+                      <ExternalLink className="w-3.5 h-3.5" /> Abrir en Google Sheets
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {res.verif && (
                 <div className={`flex items-start gap-2 text-sm rounded-lg p-3

@@ -6,11 +6,14 @@
 // en el archivo, y un export viejo o cortado dejaba fuera inmuebles vigentes.
 // Un respaldo capaz de corromper el catalogo es peor que no tener respaldo.
 //
-// DOS MODOS:
+// MODOS:
+//   sonda        comprueba la credencial y devuelve el total. No escribe nada.
 //   completa     recorre el catalogo entero por paginas. Para la carga inicial.
 //   incremental  pide ordenado por fecha descendente y para al llegar a lo ya
 //                conocido. Es el de la tarea programada: una corrida diaria
-//                toca ~30 inmuebles en vez de 2712.
+//                toca ~30 inmuebles en vez de 2720.
+//   borrar       vacia Propiedad para reconstruirla. Exige la frase literal
+//                'BORRAR TODO'; no se puede deshacer.
 //
 // LO QUE GANA EL CATALOGO. El CSV no trae alcobas, banios, garajes, fotos,
 // coordenadas, estrato ni descripcion. Sin alcobas el agente no podia responder
@@ -72,6 +75,16 @@ const POR_PAGINA = 30;
 // Cinco es el mismo tope que usa codigosMensuales; subirlo no acelera —el freno
 // pasa a ser SIMI— y empieza a arriesgar limites del otro lado.
 const CONCURRENCIA = 5;
+
+// Frase exacta que exige el borrado del catalogo. Se pide literal para que
+// ninguna llamada mal armada —un body reusado, un reintento automatico— pueda
+// vaciar Propiedad por accidente.
+const FRASE_BORRADO = 'BORRAR TODO';
+
+// Cuantas filas se piden por vuelta al borrar. Con CONCURRENCIA=5 y ~130ms por
+// DELETE, en el presupuesto caben unas 400: pedir de a 200 evita traer una
+// lista enorme que no se va a alcanzar a usar.
+const LOTE_BORRADO = 200;
 
 // Tope duro de la API: por encima de 100 devuelve 10 en silencio.
 const TOPE_API = 100;
@@ -363,6 +376,94 @@ Deno.serve(async (req) => {
     } catch (e) {
       return json({ error: (e as Error).message }, 502);
     }
+  }
+
+  // ── Borrado del catalogo ───────────────────────────────────────────────────
+  //
+  // Vaciar Propiedad para reconstruirla desde cero. Existe porque SIMI es la
+  // unica fuente: si el catalogo queda inconsistente, rehacerlo puede salir mas
+  // barato que reconciliarlo.
+  //
+  // DOS SEGUROS, porque esto no se puede deshacer:
+  //   1. Hay que mandar la frase exacta. `borrar: true` por si solo no hace nada.
+  //   2. Se puede acotar por proveedor, para no arrastrar lo cargado a mano.
+  //
+  // No filtra por estado ni por fecha a proposito: un borrado parcial que se
+  // cree total es peor que no borrar, porque deja el catalogo en un estado que
+  // nadie puede describir.
+  if (body?.borrar === true) {
+    if (txt(body?.confirmar) !== FRASE_BORRADO) {
+      return json({
+        error: `Para borrar hay que mandar confirmar: "${FRASE_BORRADO}". `
+          + 'Sin eso no se toca nada.',
+      }, 400);
+    }
+
+    const t0 = Date.now();
+    const res = { borrados: 0, errores: [] as string[] };
+    // Acota el borrado a un proveedor si se pide. Sin esto se lleva por delante
+    // lo que alguien haya cargado a mano desde la pantalla de Propiedades.
+    const prov = txt(body?.proveedor);
+    const filtro = prov ? `proveedor=${encodeURIComponent(prov)}&` : '';
+
+    while (Date.now() - t0 < PRESUPUESTO_MS) {
+      const rL = await fetch(
+        `${BASE_URL}/api/entities/Propiedad?${filtro}limit=${LOTE_BORRADO}`,
+        { headers: hdrs },
+      );
+      if (!rL.ok) {
+        res.errores.push(`listar: HTTP ${rL.status}`);
+        break;
+      }
+      const filas = await rL.json();
+      if (!Array.isArray(filas) || !filas.length) break;
+
+      const antes = res.errores.length;
+
+      // En tandas, igual que las escrituras: de a una son 130ms de espera cada
+      // vez y no alcanzarian ni 90 filas por llamada.
+      for (let i = 0; i < filas.length && Date.now() - t0 < PRESUPUESTO_MS; i += CONCURRENCIA) {
+        await Promise.all(filas.slice(i, i + CONCURRENCIA).map(async (f: any) => {
+          if (!f?.id) return;
+          try {
+            const d = await fetch(`${BASE_URL}/api/entities/Propiedad/${f.id}`, {
+              method: 'DELETE', headers: hdrs,
+            });
+            if (d.ok) res.borrados++;
+            else res.errores.push(`${f.id}: DELETE ${d.status}`);
+          } catch (err) {
+            res.errores.push(`${f.id}: ${(err as Error).message}`);
+          }
+        }));
+      }
+
+      // Si NINGUNA de las filas de esta vuelta se pudo borrar, la siguiente
+      // pediria exactamente las mismas y giraria en falso hasta agotar el
+      // presupuesto. Se corta y se devuelve el error para que se vea.
+      if (res.errores.length - antes >= filas.length) break;
+    }
+
+    // Se pregunta por lo que queda en vez de deducirlo: si algun DELETE fallo en
+    // silencio, deducir "ya no queda nada" dejaria el catalogo a medio borrar y
+    // la pantalla diria que termino.
+    let quedan: number | null = null;
+    try {
+      const rQ = await fetch(
+        `${BASE_URL}/api/entities/Propiedad?${filtro}limit=${LOTE_BORRADO}`,
+        { headers: hdrs },
+      );
+      const resto = rQ.ok ? await rQ.json() : [];
+      quedan = Array.isArray(resto) ? resto.length : null;
+    } catch { /* si no se puede contar se devuelve null y la pantalla reintenta */ }
+
+    return json({
+      ...res,
+      proveedor: prov || 'todos',
+      quedan,
+      completado: quedan === 0,
+      ms: Date.now() - t0,
+      errores: res.errores.slice(0, 20),
+    });
   }
 
   // ── Incremental: solo lo que cambio desde la ultima corrida ────────────────
