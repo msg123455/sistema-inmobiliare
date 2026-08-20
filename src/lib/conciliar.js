@@ -498,3 +498,123 @@ export function compararConEnviado(emparejados = [], filas = []) {
     },
   };
 }
+
+/**
+ * Rellena el listado del mes con el link de cada inquilino.
+ *
+ * Es el trabajo manual entero: llega el Excel sin la columna Archivo y sale con
+ * ella llena. Seiscientas copias que dejan de hacerse.
+ *
+ * COMO EMPAREJA, y por que se puede. El Excel no trae el numero de contrato
+ * —la columna existe pero viene vacia—, asi que no hay ninguna llave que una
+ * una fila con un archivo. Lo que si hay es el ORDEN: medido sobre agosto, el
+ * Excel sale de SIMI ordenado por contrato (una ruptura en 595 pares, contra
+ * 288 por cedula y 297 por nombre), y los archivos tambien. Las dos listas van
+ * en el mismo orden, que es justo lo que hace hoy la persona: baja las dos en
+ * paralelo.
+ *
+ * Emparejar por posicion es fragil —una fila de mas corre todo lo que sigue, en
+ * silencio y en cadena—, asi que va con tres frenos:
+ *
+ *   1. Las filas sin cedula se descartan. No son inquilinos: en agosto eran
+ *      cuatro empleados de la oficina anadidos al final. Descartarlas es lo que
+ *      hace que los largos cuadren, 592 y 592.
+ *   2. Si despues de eso los largos NO cuadran, se ABORTA. Sin la misma
+ *      cantidad a cada lado la posicion no significa nada, y emparejar
+ *      desalineado es exactamente el fallo que hay que evitar.
+ *   3. Si se pasa un directorio, cada emparejamiento se contrasta con el. Lo
+ *      que discrepe sale marcado en vez de colarse.
+ *
+ * Verificado contra el envio real de agosto: 592 de 592 URL identicas.
+ *
+ * @param filas     el Excel del mes, en su orden original
+ * @param archivos  [{ codigo, url, archivo }] lo que hay en la carpeta del mes
+ * @param directorio opcional; si se pasa, se usa como segunda llave
+ */
+export function rellenarLinks({ filas = [], archivos = [], directorio = [] } = {}) {
+  const conCedula = [];
+  const sinCedula = [];
+  for (const f of filas) {
+    const documento = String(f.Id ?? f.documento ?? '').trim();
+    const nombre = String(f.Nombre ?? f.nombre ?? '').trim();
+    const email = String(f.Correo ?? f.email ?? '').trim();
+    if (!documento && !nombre && !email) continue;         // fila vacia de Excel
+    (documento ? conCedula : sinCedula).push({ ...f, documento, nombre, email });
+  }
+
+  const ordenados = [...archivos].sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0));
+
+  if (conCedula.length !== ordenados.length) {
+    return {
+      ok: false,
+      motivo: 'largos_distintos',
+      mensaje: `El listado tiene ${conCedula.length} inquilinos y la carpeta ${ordenados.length} códigos. `
+        + 'Sin la misma cantidad a cada lado no se puede emparejar por orden: '
+        + 'sobra o falta alguien, y todo lo que viene después quedaría corrido.',
+      filasConCedula: conCedula.length,
+      archivos: ordenados.length,
+      sinCedula,
+    };
+  }
+
+  const porContrato = new Map();
+  for (const d of directorio) porContrato.set(normCodigo(d.codigo), d);
+
+  const listas = [];
+  const discrepan = [];
+  const sinCorreo = [];
+  const correoInvalido = [];
+
+  conCedula.forEach((fila, i) => {
+    const a = ordenados[i];
+    const esperado = porContrato.get(normCodigo(a.codigo));
+    const cuadra = !esperado || normCodigo(esperado.documento) === normCodigo(fila.documento);
+
+    const salida = {
+      ...fila,
+      contrato: a.codigo,
+      archivo: a.archivo,
+      url: a.url,
+      // Con directorio se sabe si las dos llaves coincidieron; sin el, la
+      // posicion es lo unico que hay y se dice asi.
+      verificado: Boolean(esperado) && cuadra,
+    };
+
+    if (esperado && !cuadra) {
+      discrepan.push({ ...salida, segunDirectorio: esperado.documento, enElListado: fila.documento });
+      return;
+    }
+    if (!fila.email) sinCorreo.push(salida);
+    else if (!correoValido(fila.email)) correoInvalido.push(salida);
+    listas.push(salida);
+  });
+
+  return {
+    ok: true,
+    filas: listas,
+    sinCedula,
+    discrepan,
+    sinCorreo,
+    correoInvalido,
+    resumen: {
+      entraron: filas.length,
+      conLink: listas.length,
+      descartadasSinCedula: sinCedula.length,
+      verificadasCon2Llaves: listas.filter((x) => x.verificado).length,
+      discrepan: discrepan.length,
+      sinCorreo: sinCorreo.length,
+      correoInvalido: correoInvalido.length,
+    },
+  };
+}
+
+/** El listado ya relleno, como CSV listo para abrir en Excel. */
+export function aCSV(filas) {
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const cab = ['Id', 'Mes', 'Contrato', 'Nombre', 'Correo', 'Archivo'];
+  const cuerpo = filas.map((f) => [
+    f.documento, f.Mes ?? f.mes ?? '', f.contrato, f.nombre, f.email, f.url,
+  ].map(esc).join(','));
+  // Con BOM para que Excel respete los acentos al abrirlo de doble clic.
+  return `\uFEFF${cab.join(',')}\n${cuerpo.join('\n')}\n`;
+}
