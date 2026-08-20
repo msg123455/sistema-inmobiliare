@@ -166,7 +166,7 @@ Deno.serve(async (req: Request) => {
         // Sirve para saber si un redespliegue llego de verdad. Base44 tiene fama
         // de servir el artefacto del primer despliegue de un nombre; con esto se
         // comprueba en vez de suponerlo.
-        revision: 6,
+        revision: 7,
         mailchimp_key: Boolean(MC_KEY),
         datacenter: dc || null,
         // Que secretos ve la funcion. Booleanos, nunca el valor ni un fragmento:

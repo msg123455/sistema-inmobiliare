@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Send, ExternalLink, AlertTriangle, MailWarning, Users } from 'lucide-react';
+import { Loader2, ExternalLink, AlertTriangle, MailWarning, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { callFunction, FUNCIONES } from '@/lib/backend';
 import { plantillaCorreo } from '@/lib/plantilla-correo';
@@ -21,10 +21,10 @@ import { Metrica } from '@/components/modulo';
  *   audiencia  upsert de los contactos con su URL.
  *   borrador   crea la campana y le pone el contenido.
  *
- * Termina en BORRADOR. No hay boton de enviar aqui ni ruta de codigo que llegue
- * a enviarlo: eso se aprieta en Mailchimp, mirando lo que va a salir. Seiscientos
- * correos con plata de por medio no se disparan desde una pantalla que alguien
- * puede tocar sin querer.
+ * Termina en BORRADOR. En todo el sistema no existe una sola linea capaz de
+ * mandar un correo: se quito incluso el envio de prueba. Seiscientos correos con
+ * plata de por medio no se disparan desde una pantalla que alguien puede tocar
+ * sin querer, y "no existe" es una garantia mas fuerte que "esta bien cerrado".
  */
 export default function PasoCampana({ periodo, campana, multiContrato }) {
   const [audiencias, setAudiencias] = useState(null);
@@ -110,17 +110,6 @@ export default function PasoCampana({ periodo, campana, multiContrato }) {
       setCorriendo(false);
       setFase('');
     }
-  };
-
-  // La prueba NO recibe destinos desde aquí. Salen del secreto
-  // MAILCHIMP_TEST_EMAILS, que solo la oficina controla, y la función rechaza
-  // cualquier otra dirección. Una casilla de texto en pantalla es una forma
-  // demasiado fácil de mandarle un correo a un inquilino sin querer.
-  const enviarPrueba = async () => {
-    try {
-      const r = await callFunction(FUNCIONES.campana, { modo: 'prueba', campana_id: borrador.id });
-      toast.success(`Prueba enviada a ${r.enviada_a} correo(s) de la oficina`);
-    } catch (e) { toast.error(e.message); }
   };
 
   const total = campana.length + multiContrato.length;
@@ -212,18 +201,10 @@ export default function PasoCampana({ periodo, campana, multiContrato }) {
               <span className="text-sm font-medium">La campaña está lista, sin enviar</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              A los inquilinos no les llega nada desde aquí. El envío se aprieta en Mailchimp,
+              A ningún inquilino le llega nada desde aquí: la app no tiene forma de enviar correo.
+              Para revisar cómo queda, usa «Vista previa» en Mailchimp. El envío se aprieta allí,
               viendo lo que va a salir.
             </p>
-
-            <div className="flex gap-2 flex-wrap items-center">
-              <Button size="sm" variant="outline" onClick={enviarPrueba} className="h-8 text-xs gap-1.5">
-                <Send className="w-3.5 h-3.5" /> Enviar prueba a la oficina
-              </Button>
-              <span className="text-[11px] text-muted-foreground">
-                sale solo a los correos de <code className="text-[10px]">MAILCHIMP_TEST_EMAILS</code>
-              </span>
-            </div>
 
             <a href={borrador.url} target="_blank" rel="noreferrer noopener"
                className="text-sm text-primary hover:underline flex items-center gap-1.5 presionable">

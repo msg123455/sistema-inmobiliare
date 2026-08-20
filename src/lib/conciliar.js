@@ -110,7 +110,7 @@ function repetidos(items, clave) {
  * @returns { emparejados, excepciones, bloqueos, senales, resumen }
  *          `bloqueos` no vacio significa que NO se puede enviar.
  */
-export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}) {
+export function conciliar({ archivos = [], directorio = [], listado = null, opciones = {} } = {}) {
   const { mesEsperado = null } = opciones;
 
   const excepciones = {
@@ -120,6 +120,7 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
     inquilinoSinArchivo: [],  // contrato terminado, o SIMI no lo genero
     sinCorreo: [],
     correoInvalido: [],
+    discrepanLasLlaves: [],   // el directorio y la posicion no coinciden
   };
   const bloqueos = [];
 
@@ -182,22 +183,92 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
     }
   }
 
+  // ---------------------------------------------- listado del mes (opcional)
+  //
+  // Cuando se pasa, manda: es la foto de HOY de quien vive donde y con que
+  // correo. El directorio solo aporta el eslabon contrato->documento, que es lo
+  // unico que el listado no trae.
+  //
+  // Ademas habilita la segunda llave. Medido sobre el envio de agosto, el Excel
+  // sale de SIMI ORDENADO POR CONTRATO: una sola ruptura en 595 pares, contra
+  // 288 si estuviera ordenado por cedula y 297 por nombre. Es decir que hoy
+  // nadie busca fila por fila; las dos listas van en el mismo orden y se bajan
+  // en paralelo.
+  //
+  // Eso funciona hasta que deja de funcionar: una fila de mas corre todo lo que
+  // sigue, en silencio y en cadena. Asi que la posicion NO se usa para
+  // emparejar, se usa para COMPROBAR lo que dijo el directorio. Dos llaves
+  // independientes que tienen que coincidir.
+  const filas = (listado || []).map((r, i) => ({
+    posicion: i,
+    documento: String(r.Id ?? r.documento ?? '').trim(),
+    nombre: String(r.Nombre ?? r.nombre ?? '').trim(),
+    email: String(r.Correo ?? r.email ?? '').trim(),
+  })).filter((r) => r.documento || r.nombre || r.email);
+
+  const hayListado = filas.length > 0;
+  const porDocumento = new Map();
+  for (const f of filas) {
+    const d = normCodigo(f.documento);
+    if (d && !porDocumento.has(d)) porDocumento.set(d, f);
+  }
+
+  // Los archivos, en orden de contrato: es el orden con el que se compara.
+  const ordenados = [...leidos].sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0));
+
+  // La comprobacion por posicion solo tiene sentido si las dos listas tienen el
+  // mismo largo. Si no lo tienen, se dice por que en vez de comparar cosas
+  // desalineadas y sembrar alarmas falsas.
+  const posicionUsable = hayListado && filas.length === ordenados.length;
+
   // ------------------------------------------------------------ emparejar
   const emparejados = [];
   const usados = new Set();
+  const filasUsadas = new Set();
 
-  for (const a of leidos) {
+  for (let i = 0; i < ordenados.length; i++) {
+    const a = ordenados[i];
+
+    // Llave 1: el directorio dice de que documento es este contrato.
     const candidatos = indice.get(a.clave);
-    if (!candidatos || !candidatos.length) {
-      excepciones.archivoSinInquilino.push(a);
+    const delDirectorio = candidatos && candidatos.length ? candidatos[0] : null;
+
+    // Llave 2: la posicion en el orden por contrato.
+    const porPosicion = posicionUsable ? ordenados[i] && filas[i] : null;
+
+    // Con listado, el contacto sale de la fila de ESTE mes, no de la del mes
+    // pasado: un inquilino pudo cambiar de correo.
+    let fila = null;
+    let metodo = '';
+    if (hayListado) {
+      const doc = delDirectorio ? normCodigo(delDirectorio.documento) : '';
+      fila = doc ? porDocumento.get(doc) : null;
+      if (fila) metodo = 'directorio';
+      else if (porPosicion) { fila = porPosicion; metodo = 'posicion'; }
+    } else if (delDirectorio) {
+      fila = delDirectorio;
+      metodo = 'directorio';
+    }
+
+    if (!fila) { excepciones.archivoSinInquilino.push(a); continue; }
+
+    // Las dos llaves discrepan: no se elige ninguna.
+    if (metodo === 'directorio' && posicionUsable && porPosicion
+        && normCodigo(fila.documento) !== normCodigo(porPosicion.documento)) {
+      excepciones.discrepanLasLlaves.push({
+        ...a,
+        segunDirectorio: { documento: fila.documento, nombre: fila.nombre },
+        segunPosicion: { documento: porPosicion.documento, nombre: porPosicion.nombre },
+      });
       continue;
     }
-    const inq = candidatos[0];
-    usados.add(a.clave);
 
-    const email = String(inq.email || '').trim();
-    if (!email) excepciones.sinCorreo.push({ ...a, ...inq });
-    else if (!correoValido(email)) excepciones.correoInvalido.push({ ...a, ...inq, email });
+    if (delDirectorio) usados.add(a.clave);
+    if (fila.posicion !== undefined) filasUsadas.add(fila.posicion);
+
+    const email = String(fila.email || '').trim();
+    if (!email) excepciones.sinCorreo.push({ ...a, ...fila });
+    else if (!correoValido(email)) excepciones.correoInvalido.push({ ...a, ...fila, email });
 
     emparejados.push({
       codigo: a.codigo,
@@ -205,15 +276,25 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
       renovacion: a.renovacion,
       archivo: a.archivo,
       url: a.url,
-      nombre: inq.nombre || '',
+      nombre: fila.nombre || '',
       email,
-      documento: inq.documento || '',
+      documento: fila.documento || '',
+      metodo,
+      // Con las dos llaves de acuerdo, la confianza es otra cosa que con una
+      // sola. Se dice, para que la revision humana mire primero lo flojo.
+      confirmado: metodo === 'directorio' && posicionUsable,
       enviable: Boolean(email) && correoValido(email),
     });
   }
 
-  for (const [clave, grupo] of indice) {
-    if (!usados.has(clave)) excepciones.inquilinoSinArchivo.push({ clave, ...grupo[0] });
+  if (hayListado) {
+    for (const f of filas) {
+      if (!filasUsadas.has(f.posicion)) excepciones.inquilinoSinArchivo.push({ ...f });
+    }
+  } else {
+    for (const [clave, grupo] of indice) {
+      if (!usados.has(clave)) excepciones.inquilinoSinArchivo.push({ clave, ...grupo[0] });
+    }
   }
 
   // -------------------------------------- reparto: campana vs correo aparte
@@ -277,6 +358,10 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
   const oficinas = [...new Set(leidos.map((x) => x.oficina))];
 
   const senales = {
+    // Con listado, dice si la segunda llave estuvo disponible y por que no.
+    verificacionPorPosicion: posicionUsable
+      ? 'activa'
+      : (!hayListado ? 'sin listado del mes' : `listas de distinto largo (${filas.length} filas vs ${ordenados.length} archivos)`),
     rupturasDeOrden: rupturas,
     largoModal,
     fueraDeFormaModal: leidos.filter((x) => Math.abs(x.codigo.length - largoModal) > 1).map((x) => x.archivo),
@@ -296,6 +381,7 @@ export function conciliar({ archivos = [], directorio = [], opciones = {} } = {}
       leidos: leidos.length,
       directorio: indice.size,
       emparejados: emparejados.length,
+      confirmadosPorDosLlaves: emparejados.filter((e) => e.confirmado).length,
       enviables: enviables.length,
       campana: campana.length,
       multiContrato: multiContrato.length,
@@ -350,4 +436,65 @@ export function construirDirectorio(filas = []) {
   }
 
   return { entradas, descartadas, conflictos };
+}
+
+
+/**
+ * Compara lo que el sistema emparejo contra lo que de verdad se envio.
+ *
+ * Solo sirve para un mes YA enviado, porque hace falta la respuesta correcta:
+ * el CSV de ese mes, con la columna Archivo llena. Es la prueba que convierte
+ * "deberia funcionar" en "da exactamente lo mismo que hicieron ustedes a mano".
+ *
+ * @param emparejados  lo que devolvio conciliar()
+ * @param filas        el CSV del mes enviado, con Id/Nombre/Correo/Archivo
+ */
+export function compararConEnviado(emparejados = [], filas = []) {
+  // Lo que se envio de verdad, indexado por contrato.
+  const enviado = new Map();
+  for (const f of filas) {
+    const url = String(f.Archivo ?? f.url ?? '').trim();
+    const datos = leerNombreArchivo(url);
+    if (!datos) continue;
+    enviado.set(normCodigo(datos.codigo), {
+      url,
+      email: String(f.Correo ?? f.email ?? '').trim().toLowerCase(),
+      nombre: String(f.Nombre ?? f.nombre ?? '').trim(),
+      documento: String(f.Id ?? f.documento ?? '').trim(),
+    });
+  }
+
+  const iguales = [];
+  const urlDistinta = [];
+  const correoDistinto = [];
+  const soloEnElSistema = [];
+
+  for (const e of emparejados) {
+    const real = enviado.get(e.clave);
+    if (!real) { soloEnElSistema.push(e); continue; }
+    if (real.url !== e.url) { urlDistinta.push({ ...e, urlEnviada: real.url }); continue; }
+    if (real.email && real.email !== e.email.toLowerCase()) {
+      correoDistinto.push({ ...e, correoEnviado: real.email });
+      continue;
+    }
+    iguales.push(e);
+  }
+
+  const vistos = new Set(emparejados.map((e) => e.clave));
+  const soloEnElEnvio = [...enviado.entries()]
+    .filter(([k]) => !vistos.has(k))
+    .map(([clave, v]) => ({ clave, ...v }));
+
+  return {
+    iguales, urlDistinta, correoDistinto, soloEnElSistema, soloEnElEnvio,
+    resumen: {
+      enviadosDeVerdad: enviado.size,
+      emparejadosPorElSistema: emparejados.length,
+      identicos: iguales.length,
+      // Cero en los tres de abajo es el resultado que se busca.
+      conUrlDistinta: urlDistinta.length,
+      conCorreoDistinto: correoDistinto.length,
+      sinCorrespondencia: soloEnElSistema.length + soloEnElEnvio.length,
+    },
+  };
 }

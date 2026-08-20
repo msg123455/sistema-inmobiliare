@@ -35,6 +35,7 @@ import Asistidos from '@/pages/operacion/Asistidos.jsx';
 import Recaudo from '@/pages/cartera/Recaudo.jsx';
 import Envios from '@/pages/cartera/Envios.jsx';
 import CodigosMensuales from '@/pages/cartera/CodigosMensuales.jsx';
+import EnsayoCodigos from '@/pages/cartera/EnsayoCodigos.jsx';
 import Liquidaciones from '@/pages/cartera/Liquidaciones.jsx';
 
 // Equipo
@@ -132,6 +133,7 @@ const AuthenticatedApp = () => {
         <Route path="/cartera/recaudo" element={<Recaudo />} />
         <Route path="/cartera/envios" element={<Envios />} />
         <Route path="/cartera/codigos" element={<CodigosMensuales />} />
+        <Route path="/cartera/codigos/ensayo" element={<EnsayoCodigos />} />
         <Route path="/cartera/liquidaciones" element={<AdminOnly><Liquidaciones /></AdminOnly>} />
 
         {/* Contratos */}
