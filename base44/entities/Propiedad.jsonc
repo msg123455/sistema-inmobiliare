@@ -4,11 +4,11 @@
   "properties": {
     "titulo": {
       "type": "string",
-      "description": "T\u00edtulo del inmueble"
+      "description": "Título del inmueble"
     },
     "descripcion": {
       "type": "string",
-      "description": "Descripci\u00f3n del inmueble"
+      "description": "Descripción del inmueble"
     },
     "tipo": {
       "type": "string",
@@ -27,7 +27,7 @@
     },
     "operacion": {
       "type": "string",
-      "description": "Tipo de operaci\u00f3n",
+      "description": "Tipo de operación",
       "enum": [
         "Venta",
         "Arriendo",
@@ -57,36 +57,36 @@
     },
     "administracion": {
       "type": "number",
-      "description": "Cuota de administraci\u00f3n mensual en COP"
+      "description": "Cuota de administración mensual en COP"
     },
     "comision_pct": {
       "type": "number",
-      "description": "Porcentaje de comisi\u00f3n",
+      "description": "Porcentaje de comisión",
       "default": 3
     },
     "area_m2": {
       "type": "number",
-      "description": "\u00c1rea en metros cuadrados"
+      "description": "Área en metros cuadrados"
     },
     "habitaciones": {
       "type": "number",
-      "description": "N\u00famero de habitaciones"
+      "description": "Número de habitaciones"
     },
     "banos": {
       "type": "number",
-      "description": "N\u00famero de ba\u00f1os"
+      "description": "Número de baños"
     },
     "parqueaderos": {
       "type": "number",
-      "description": "N\u00famero de parqueaderos"
+      "description": "Número de parqueaderos"
     },
     "estrato": {
       "type": "number",
-      "description": "Estrato socioecon\u00f3mico (1-6)"
+      "description": "Estrato socioeconómico (1-6)"
     },
     "piso": {
       "type": "number",
-      "description": "N\u00famero de piso"
+      "description": "Número de piso"
     },
     "ciudad": {
       "type": "string",
@@ -98,7 +98,7 @@
     },
     "direccion": {
       "type": "string",
-      "description": "Direcci\u00f3n completa"
+      "description": "Dirección completa"
     },
     "latitud": {
       "type": "number",
@@ -117,7 +117,7 @@
     },
     "valor_administracion": {
       "type": "number",
-      "description": "Cuota de administraci\u00f3n mensual en COP (columna Administracion de la hoja Inventario)"
+      "description": "Cuota de administración mensual en COP (columna Administracion de la hoja Inventario)"
     },
     "proveedor": {
       "type": "string",
@@ -139,23 +139,23 @@
     },
     "procedencia": {
       "type": "string",
-      "description": "Como lleg\u00f3 el inmueble al portafolio"
+      "description": "Como llegó el inmueble al portafolio"
     },
     "propietario_id": {
       "type": "string",
-      "description": "Due\u00f1o del inmueble"
+      "description": "Dueño del inmueble"
     },
     "contrato_activo_id": {
       "type": "string",
-      "description": "Contrato de arriendo vigente, si est\u00e1 arrendado"
+      "description": "Contrato de arriendo vigente, si está arrendado"
     },
     "duplicado_de": {
       "type": "string",
-      "description": "Si la misma direcci\u00f3n lleg\u00f3 de dos proveedores, apunta al registro maestro. Nunca se borra: los leads referencian su id."
+      "description": "Si la misma dirección llegó de dos proveedores, apunta al registro maestro. Nunca se borra: los leads referencian su id."
     },
     "portales": {
       "type": "object",
-      "description": "Publicaci\u00f3n en portales externos (columnas METROCUADRADO, FINCARAIZ, MERCADOLIBRE de la hoja Inventario)",
+      "description": "Links publicos del inmueble en portales externos. Los pone el detalle de SIMI. Solo se guardan los que traen URL de verdad: la API manda tambien Doomos, Olx, Properati, Idonde, Lamudi, Proppit, GoPlaceIt y La Haus, pero siempre con la url vacia.",
       "properties": {
         "metrocuadrado": {
           "type": "string"
@@ -165,6 +165,14 @@
         },
         "mercadolibre": {
           "type": "string"
+        },
+        "ciencuadras": {
+          "type": "string",
+          "description": "URL de la ficha en CienCuadras. Es el portal de mejor cobertura medida (43 de 45): cuando el agente manda un link, casi siempre es este."
+        },
+        "zonahabitat": {
+          "type": "string",
+          "description": "URL de la ficha en Zona Habitat."
         }
       }
     },
@@ -188,11 +196,44 @@
     },
     "asesor": {
       "type": "string",
-      "description": "Asesor que capt\u00f3 el inmueble"
+      "description": "Asesor que captó el inmueble"
     },
     "fecha_consignado": {
       "type": "string",
-      "description": "Fecha en que se consign\u00f3 el inmueble, formato AAAA-MM-DD"
+      "description": "Fecha en que se consignó el inmueble, formato AAAA-MM-DD"
+    },
+    "caracteristicas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Caracteristicas del inmueble segun SIMI (ascensor, piscina, gimnasio, chimenea, deposito...). Es lo que le permite al agente responder \"tiene ascensor?\" sin escalar."
+    },
+    "asesor_celular": {
+      "type": "string",
+      "description": "Celular del asesor que tiene el inmueble, segun SIMI. Para escalar al humano correcto, no para darselo al cliente."
+    },
+    "asesor_correo": {
+      "type": "string",
+      "description": "Correo del asesor que tiene el inmueble, segun SIMI."
+    },
+    "localidad": {
+      "type": "string",
+      "description": "Localidad de Bogota (Chapinero, Usaquen, Suba...). Mas fina que la zona y mas gruesa que el barrio."
+    },
+    "admon_incluida": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la administracion ya va incluida en el canon. Cambia lo que el cliente paga de verdad al mes: sin esto el agente cotiza de menos o de mas."
+    },
+    "amoblado": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si el inmueble se entrega amoblado. Filtro habitual en arriendo."
+    },
+    "avaluo_catastral": {
+      "type": "number",
+      "description": "Avaluo catastral en COP segun SIMI. Referencia para el agente de avaluos; no sustituye un avaluo firmado por avaluador inscrito en el RAA."
     }
   },
   "required": [

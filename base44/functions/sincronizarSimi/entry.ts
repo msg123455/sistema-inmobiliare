@@ -1,40 +1,66 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // sincronizarSimi — trae el inventario desde la API de SIMI
 //
-// Es la UNICA entrada del inventario. La importacion por CSV se elimino: podia
-// contradecir a la API, porque su barrido daba de baja todo lo que no viniera
-// en el archivo, y un export viejo o cortado dejaba fuera inmuebles vigentes.
-// Un respaldo capaz de corromper el catalogo es peor que no tener respaldo.
+// Es la UNICA entrada del inventario. La importacion por CSV se elimino.
 //
 // MODOS:
 //   sonda        comprueba la credencial y devuelve el total. No escribe nada.
-//   completa     recorre el catalogo entero por paginas. Para la carga inicial.
+//   completa     recorre el catalogo pagina por pagina. Para la carga inicial.
 //   incremental  pide ordenado por fecha descendente y para al llegar a lo ya
 //                conocido. Es el de la tarea programada: una corrida diaria
-//                toca ~30 inmuebles en vez de 2720.
+//                toca ~20 inmuebles en vez de 2720.
 //   borrar       vacia Propiedad para reconstruirla. Exige la frase literal
 //                'BORRAR TODO'; no se puede deshacer.
 //
-// LO QUE GANA EL CATALOGO. El CSV no trae alcobas, banios, garajes, fotos,
-// coordenadas, estrato ni descripcion. Sin alcobas el agente no podia responder
-// "busco algo de tres habitaciones", que es de las primeras cosas que pregunta
-// un cliente. La API si los trae.
+// ── DOS ENDPOINTS, Y HAY QUE USAR LOS DOS ────────────────────────────────────
 //
-// TRES COSAS MEDIDAS CONTRA LA API REAL, no supuestas:
+// filtroInmueble (listado) devuelve 42 campos por inmueble. NO trae direccion,
+// NO trae links de portales y trae UNA sola foto. Sirve para enumerar, no para
+// llenar el catalogo.
 //
-//   1. Es LENTA. Una pagina de 50 tarda 14,6s y Base44 corta a los 15. Hay unos
-//      4s de arranque fijos mas ~0,2s por inmueble. Por eso las paginas son
-//      chicas y el presupuesto se mide por reloj, no por cantidad.
+// /v2/inmueble/codInmueble/{codigo} (detalle) devuelve 78 campos e incluye
+// justo lo que falta: Direccion, el array completo de fotos (media 15, hasta
+// 31), los links publicos en portales, los datos del asesor y las
+// caracteristicas. Comprobado en vivo sobre 71 inmuebles repartidos por todo el
+// inventario: 71/71 con direccion y con al menos un link real.
 //
-//   2. Si se piden mas de 100, devuelve 10 SIN AVISAR. Ni error ni aviso: diez.
-//      Un cursor que avanzara de a 500 confiando en lo pedido se saltaria 490
-//      inmuebles en silencio y el catalogo quedaria con huecos que nadie
-//      atribuiria a esto. Por eso se cuenta SIEMPRE lo que llega.
+// Por eso cada pagina se enumera y se hidrata en la misma llamada. Sin el
+// detalle el agente no puede decirle al cliente donde queda el inmueble ni
+// mandarle un link, que es justo lo que el CSV si daba.
 //
-//   3. Los numeros vienen como texto con COMA de miles ("4,324,250,000") y
-//      punto decimal. El CSV usa exactamente lo contrario. Reutilizar el parser
-//      del CSV guardaria ese lote como 4.324 pesos, sin fallar. De ahi que este
-//      archivo tenga el suyo propio y no comparta el de importarInventario.
+// ── CINCO COSAS MEDIDAS CONTRA LA API REAL, no supuestas ─────────────────────
+//
+//   1. `limite` es el NUMERO DE PAGINA, no la fila donde arrancar. `total` es
+//      el tamano de pagina. Comprobado: limite/1/total/5 y limite/2/total/5 no
+//      comparten ni un codigo, y datosGrales.fin baja de 2720 a 544 al pasar de
+//      total/1 a total/5, o sea cuenta paginas.
+//      Antes se le pasaba un cursor de filas (1, 14, 27…) creyendo que era un
+//      desplazamiento. Con paginas de 30 eso pedia las paginas 1, 14 y 27 —las
+//      filas 1-30, 391-420, 781-810— y daba el catalogo por terminado despues
+//      de tocar unas siete. El resto no se saltaba con un error: no se pedia.
+//
+//   2. El listado es LENTO y casi todo su costo es fijo: 20 tardan 7,8s, 30
+//      tardan 10,2s y 50 tardan 14,2s, con el corte de Base44 en 15. Pedir mas
+//      no sale a cuenta. El detalle, en cambio, tarda 0,2s y va en paralelo sin
+//      penalizacion: 20 detalles simultaneos son 0,9s en total.
+//
+//   3. Si al listado se le piden mas de 100, devuelve 10 SIN AVISAR. Por eso se
+//      cuenta SIEMPRE lo que llega en vez de confiar en lo que se pidio.
+//
+//   4. LOS NUMEROS VIENEN EN TRES FORMATOS DISTINTOS, y dos de ellos se
+//      contradicen dentro de la MISMA respuesta:
+//        ValorVenta      "1600000000"     sin separadores
+//        precio          "1,600,000,000"  coma de miles
+//        Administracion  "1.500.000"      PUNTO de miles
+//        AreaConstruida  "217.57"         punto DECIMAL
+//      Un solo parser se equivoca si o si: el que lee bien "217.57" convierte
+//      "1.500.000" en 1,5. De ahi que haya un parser por tipo de dato y no uno
+//      solo. Y ninguno se comparte con el del CSV, que usaba el formato
+//      colombiano contrario.
+//
+//   5. urlPortal llega sucio: unas veces "", otras " " (un espacio) y otras
+//      null. Hay que exigir que empiece por http, no que "no este vacio", o se
+//      guardan links en blanco que el agente le manda al cliente.
 //
 // Archivo autocontenido, y sin `export` en el nivel superior: un entry de
 // Base44 es un script, no un modulo, y basta un export suelto para que la
@@ -49,31 +75,26 @@ const CRON_TOKEN = Deno.env.get('CRON_TOKEN') || '';
 // Credencial de SIMI. Sin valor por defecto: uno quemado en un repo publico no
 // protege nada y ademas disimula que falta configurarlo.
 const SIMI_TOKEN = Deno.env.get('SIMI_API_TOKEN') || '';
-const SIMI_BASE = Deno.env.get('SIMI_API_URL')
-  || 'http://simi-api.com/ApiSimiweb/response/v2.1.1/filtroInmueble';
 
-// Pagina por defecto.
-//
-// Se queda en 30, y no se sube, porque el cuello de botella es SIMI y no
-// nosotros: traer 30 tarda 9,3s medidos, de los 15 que da Base44. Con 40 serian
-// ~11,1s y quedaria menos de 2s de margen; si se pasa, la llamada muere sin
-// devolver nada y el cursor no avanza, que es peor que ir mas lento.
-//
-// La ganancia real no estaba en pedir mas sino en escribir mejor: antes de
-// esas 30 solo se guardaban 13 y las otras 17 se tiraban. Ver CONCURRENCIA.
-const POR_PAGINA = 30;
+// HTTPS, comprobado que responde igual que HTTP. Importa porque la credencial
+// va en la cabecera Basic: por HTTP viajaba legible en toda la ruta.
+const SIMI_HOST = Deno.env.get('SIMI_API_HOST') || 'https://simi-api.com';
+const SIMI_LISTADO = `${SIMI_HOST}/ApiSimiweb/response/v2.1.1/filtroInmueble`;
+const SIMI_DETALLE = `${SIMI_HOST}/ApiSimiweb/response/v2/inmueble/codInmueble`;
 
-// Escrituras simultaneas contra Base44.
+// Tamano de pagina del listado.
 //
-// Este es el arreglo que importa. Las escrituras iban de a una, esperando cada
-// respuesta: dos llamadas por inmueble a ~130ms son 0,26s, que con 30 inmuebles
-// son casi 8 segundos. Como traerlos ya se habia comido 9,3s de un presupuesto
-// de 11, solo alcanzaban a guardarse 13 y las 17 restantes se descartaban para
-// volver a pedirlas en la siguiente llamada: el 57% del trabajo se repetia.
-//
-// En tandas de cinco esas mismas 30 se guardan en ~1,6s y la pagina entera cabe.
-// Cinco es el mismo tope que usa codigosMensuales; subirlo no acelera —el freno
-// pasa a ser SIMI— y empieza a arriesgar limites del otro lado.
+// 20 tarda 7,8s de forma estable. 30 se va a 10,2s y a veces a 14, que con el
+// corte en 15s deja sin margen para hidratar y escribir. Una llamada que se
+// pasa no devuelve cursor, y eso cuesta mas que ir de a 20.
+const POR_PAGINA = 20;
+
+// Detalles simultaneos. El endpoint aguanta 10 a la vez sin degradarse: 20
+// detalles seguidos son 4s y en paralelo 0,9s.
+const CONCURRENCIA_DETALLE = 10;
+
+// Escrituras simultaneas contra Base44. De a una son ~130ms de espera cada vez.
+// Cinco es el mismo tope que usa codigosMensuales.
 const CONCURRENCIA = 5;
 
 // Frase exacta que exige el borrado del catalogo. Se pide literal para que
@@ -81,16 +102,13 @@ const CONCURRENCIA = 5;
 // vaciar Propiedad por accidente.
 const FRASE_BORRADO = 'BORRAR TODO';
 
-// Cuantas filas se piden por vuelta al borrar. Con CONCURRENCIA=5 y ~130ms por
-// DELETE, en el presupuesto caben unas 400: pedir de a 200 evita traer una
-// lista enorme que no se va a alcanzar a usar.
+// Cuantas filas se piden por vuelta al borrar.
 const LOTE_BORRADO = 200;
 
-// Tope duro de la API: por encima de 100 devuelve 10 en silencio.
+// Tope duro del listado: por encima de 100 devuelve 10 en silencio.
 const TOPE_API = 100;
 
-// Se corta por reloj y no por cantidad porque cada inmueble hace dos llamadas a
-// Base44 (buscar y escribir) y su latencia no es constante.
+// Se corta por reloj y no por cantidad porque la latencia no es constante.
 const PRESUPUESTO_MS = 11_000;
 
 const json = (data: unknown, status = 200) =>
@@ -101,27 +119,56 @@ const json = (data: unknown, status = 200) =>
 const txt = (v: unknown) => String(v ?? '').trim();
 
 /**
- * Numeros como los manda la API de SIMI: coma de miles, punto decimal.
- *
- *   "4,324,250,000" -> 4324250000
- *   "17,297"        -> 17297
- *   "4.8716623"     -> 4.8716623   (coordenada, sin separador de miles)
- *
- * NO es el mismo que el de importarInventario. Ese lee hojas colombianas
- * —punto de miles, coma decimal— que es el formato contrario. Cruzarlos
- * convierte cuatro mil millones en cuatro mil, y no da error al hacerlo.
+ * Numeros del LISTADO: coma de miles, punto decimal.
+ *   "4,324,250,000" -> 4324250000     "17,297" -> 17297
  */
-function numSimi(v: unknown): number {
+function numLista(v: unknown): number {
   if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
-  const s = txt(v).replace(/[^\d.,-]/g, '');
+  const s = txt(v).replace(/[̀-ͯ]/g, '');
   if (!s) return 0;
   const n = parseFloat(s.replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Dinero del DETALLE. Aqui los miles se separan con PUNTO —"1.500.000"— que es
+ * justo lo contrario del listado.
+ *
+ * Se quitan todos los separadores en vez de intentar adivinar cual es decimal:
+ * en pesos colombianos no hay centavos, asi que no hay nada que preservar, y
+ * adivinar mal convierte un millon y medio en 1,5 sin fallar.
+ *   "1.500.000" -> 1500000    "1,600,000,000" -> 1600000000    "$ 0" -> 0
+ */
+function numMoneda(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const s = txt(v).replace(/[^\d-]/g, '');
+  if (!s) return 0;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Medidas del DETALLE: area y coordenadas, donde el punto SI es decimal.
+ *   "217.57" -> 217.57     "-74.04719000000001" -> -74.047190…
+ */
+function numMedida(v: unknown): number {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  const s = txt(v).replace(/,/g, '').replace(/[^\d.-]/g, '');
+  if (!s) return 0;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** "0"/"1", "false"/"true", 0/1 y booleanos, todos a booleano. */
+function bool(v: unknown): boolean {
+  if (typeof v === 'boolean') return v;
+  const s = txt(v).toLowerCase();
+  return s === '1' || s === 'true' || s === 'si' || s === 'sí';
+}
+
 const TIPOS_VALIDOS = ['Apartamento', 'Casa', 'Local', 'Oficina', 'Bodega', 'Lote', 'Finca', 'Otro'];
 
-/** Tipo de inmueble de SIMI -> enum de Propiedad. Misma tabla que el CSV. */
+/** Tipo de inmueble de SIMI -> enum de Propiedad. */
 function tipoInmueble(v: unknown): string {
   const s = txt(v).toLowerCase();
   if (!s) return 'Otro';
@@ -162,15 +209,59 @@ function titulo(tipo: string, barrio: string, ciudad: string, codigo: string): s
   return base && base !== tipo ? base : `${tipo} ${codigo}`.trim();
 }
 
+// ── Portales ─────────────────────────────────────────────────────────────────
+
 /**
- * Un inmueble de la API -> la forma que guarda Propiedad.
+ * Nombre de portal tal como lo manda SIMI -> clave de Propiedad.portales.
  *
- * Solo se devuelven los campos de los que SIMI es autoridad. Lo que se edita
- * dentro de la app —los links de portales que trae el CSV, las fotos que
- * alguien subio a mano— NO va aqui: al escribir se mezcla sobre lo existente,
- * asi que lo que no aparezca en este objeto se conserva.
+ * Se quedan solo los que de verdad publican un link. Doomos, Olx, GoPlaceIt,
+ * Proppit, Idonde, Lamudi, Properati y La Haus aparecen en la respuesta pero
+ * llegan siempre con la url vacia: guardarlos seria guardar el nombre de un
+ * portal sin nada a donde ir.
+ *
+ * Ciencuadras y Zona Habitat son los de mejor cobertura medida (43/45 y 35/41),
+ * por encima de Fincaraiz (21/45), que es el que el CSV traia lleno.
  */
-function desdeApi(inm: Record<string, unknown>) {
+const PORTALES: Record<string, string> = {
+  ciencuadras: 'ciencuadras',
+  mercadolibre: 'mercadolibre',
+  metrocuadrado: 'metrocuadrado',
+  zonahabitat: 'zonahabitat',
+  fincaraiz: 'fincaraiz',
+};
+
+/** "Metro Cuadrado" -> "metrocuadrado", "Fincaraíz" -> "fincaraiz". */
+function clavePortal(nombre: unknown): string {
+  return txt(nombre)
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z]/g, '');
+}
+
+function portalesDe(detalle: Record<string, any>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const data = detalle?.portales?.data;
+  if (!Array.isArray(data)) return out;
+  for (const p of data) {
+    const clave = PORTALES[clavePortal(p?.nombrePortal)];
+    if (!clave) continue;
+    // Exigir http, no "no vacio": la url llega como "", " " o null segun el
+    // portal, y las tres pasarian un chequeo de truthiness.
+    const url = txt(p?.urlPortal);
+    if (url.toLowerCase().startsWith('http')) out[clave] = url;
+  }
+  return out;
+}
+
+// ── Mapeo ────────────────────────────────────────────────────────────────────
+
+/**
+ * Un inmueble del LISTADO -> la forma que guarda Propiedad.
+ *
+ * Es el esqueleto: lo que alcanza para existir y ser buscable. La direccion,
+ * las fotos y los links los pone el detalle justo despues.
+ */
+function desdeLista(inm: Record<string, unknown>) {
   const codigo = txt(inm.Codigo_Inmueble);
   if (!codigo) return null;
 
@@ -180,10 +271,8 @@ function desdeApi(inm: Record<string, unknown>) {
 
   // AreaConstruida es 0 en lotes y fincas; ahi el area que importa es la del
   // lote. Tomar siempre la construida dejaria esos inmuebles sin area.
-  const construida = numSimi(inm.AreaConstruida);
-  const lote = numSimi(inm.AreaLote);
-
-  const foto = txt(inm.foto1);
+  const construida = numLista(inm.AreaConstruida);
+  const lote = numLista(inm.AreaLote);
 
   return {
     codigo_externo: codigo,
@@ -193,24 +282,19 @@ function desdeApi(inm: Record<string, unknown>) {
     operacion: operacion(inm.Gestion),
     estado: estado(inm.estadoInmueble),
 
-    precio_venta: numSimi(inm.Venta),
-    canon_arriendo: numSimi(inm.Canon),
-    // Hay dos campos de administracion en el esquema y el agente lee
-    // valor_administracion primero. Se llenan los dos hasta que se unifiquen,
-    // o el agente leeria vacio lo que si tenemos.
-    administracion: numSimi(inm.Administracion),
-    valor_administracion: numSimi(inm.Administracion),
+    precio_venta: numLista(inm.Venta),
+    canon_arriendo: numLista(inm.Canon),
+    administracion: numLista(inm.Administracion),
+    valor_administracion: numLista(inm.Administracion),
 
-    // Lo que el CSV nunca trajo. Es la razon de usar la API.
-    habitaciones: numSimi(inm.Alcobas),
-    banos: numSimi(inm.banios),
-    parqueaderos: numSimi(inm.garaje),
-    estrato: numSimi(inm.Estrato),
+    habitaciones: numLista(inm.Alcobas),
+    banos: numLista(inm.banios),
+    parqueaderos: numLista(inm.garaje),
+    estrato: numLista(inm.Estrato),
     area_m2: construida > 0 ? construida : lote,
-    latitud: numSimi(inm.latitud),
-    longitud: numSimi(inm.longitud),
+    latitud: numLista(inm.latitud),
+    longitud: numLista(inm.longitud),
     descripcion: txt(inm.descripcionlarga),
-    fotos: foto ? [foto] : [],
 
     barrio,
     ciudad,
@@ -220,32 +304,110 @@ function desdeApi(inm: Record<string, unknown>) {
   };
 }
 
-// ── Llamada a SIMI ───────────────────────────────────────────────────────────
+/**
+ * El DETALLE -> los campos que el listado no trae.
+ *
+ * Devuelve solo lo que SIMI manda de verdad. Un campo vacio no se incluye para
+ * que el merge conserve lo que ya hubiera: si un dia el detalle deja de traer
+ * direccion, es mejor quedarse con la vieja que borrarla.
+ */
+function desdeDetalle(d: Record<string, any>) {
+  // Un codigo inexistente responde HTTP 200 con {status:1} y tres claves. Sin
+  // idInm no hay inmueble, por mas que el HTTP diga 200.
+  if (!d || !txt(d.idInm)) return null;
+
+  const out: Record<string, unknown> = {};
+
+  const dir = txt(d.Direccion);
+  if (dir) out.direccion = dir;
+
+  // Las fotos vienen con su orden en `posi`. Se respeta: la primera es la que
+  // el agente manda como portada.
+  const fotos = Array.isArray(d.fotos)
+    ? d.fotos
+      .filter((f: any) => txt(f?.foto).toLowerCase().startsWith('http'))
+      .sort((a: any, b: any) => numMedida(a?.posi) - numMedida(b?.posi))
+      .map((f: any) => txt(f.foto))
+    : [];
+  if (fotos.length) out.fotos = fotos;
+
+  const portales = portalesDe(d);
+  if (Object.keys(portales).length) out.portales = portales;
+
+  // Caracteristicas: "tiene ascensor?", "tiene piscina?". Vienen en tres
+  // grupos y con espacios de sobra en la descripcion.
+  const caract = ['caracteristicasInternas', 'caracteristicasExternas', 'caracteristicasAlrededores']
+    .flatMap((k) => (Array.isArray(d[k]) ? d[k] : []))
+    .map((c: any) => txt(c?.Descripcion))
+    .filter(Boolean);
+  if (caract.length) out.caracteristicas = Array.from(new Set(caract));
+
+  // El asesor del listado (NombreInmo) llega vacio; el del detalle no.
+  const asesor = Array.isArray(d.asesor) ? d.asesor[0] : null;
+  if (asesor) {
+    const nombre = txt(asesor.ntercero);
+    if (nombre) out.asesor = nombre;
+    const cel = txt(asesor.celular);
+    if (cel) out.asesor_celular = cel;
+    const correo = txt(asesor.correo);
+    if (correo) out.asesor_correo = correo;
+  }
+
+  const otros: Array<[string, string]> = [
+    ['localidad', txt(d.nlocalidad)],
+    ['descripcion', txt(d.descripcionlarga)],
+    ['fecha_consignado', txt(d.FConsignacion)],
+  ];
+  for (const [k, v] of otros) if (v) out[k] = v;
+
+  // La administracion del detalle usa punto de miles; la del listado, coma. El
+  // detalle es el que manda porque es el que trae el valor completo.
+  const admin = numMoneda(d.Administracion);
+  if (admin > 0) {
+    out.administracion = admin;
+    out.valor_administracion = admin;
+  }
+  out.admon_incluida = bool(d.AdmonIncluida);
+  out.amoblado = bool(d.amobladoInmueble);
+
+  const avaluo = numMoneda(d?.othercaracteristicas?.AvaluoCatastral);
+  if (avaluo > 0) out.avaluo_catastral = avaluo;
+
+  const area = numMedida(d.AreaConstruida) || numMedida(d.AreaLote);
+  if (area > 0) out.area_m2 = area;
+
+  const lat = numMedida(d.latitud);
+  const lon = numMedida(d.longitud);
+  if (lat) out.latitud = lat;
+  if (lon) out.longitud = lon;
+
+  return out;
+}
+
+// ── API de SIMI ──────────────────────────────────────────────────────────────
+
+/** Basic con usuario VACIO y el token como contrasena. Las otras cuatro formas devuelven 401. */
+const cabeceras = () => ({
+  Authorization: `Basic ${btoa(`:${SIMI_TOKEN}`)}`,
+  Accept: 'application/json',
+});
 
 /**
- * Los filtros van en la ruta, no en query string. 0 significa "sin filtro".
- *
- * `recientes` ordena por fecha descendente, que es lo que hace viable el modo
- * incremental: los que se movieron hoy vienen primero, asi que se puede parar
- * apenas se llega a lo ya conocido en vez de recorrer los 2712.
+ * `pagina` es el numero de pagina, no la fila. `tam` es el tamano de pagina.
+ * Confundirlos es el error que dejaba el catalogo con huecos.
  */
-function urlPagina(desde: number, cuantos: number, recientes = false): string {
+function urlPagina(pagina: number, tam: number, recientes = false): string {
   const orden = recientes ? 'campo/fecha/order/desc' : 'campo/0/order/0';
-  return `${SIMI_BASE}/limite/${desde}/total/${cuantos}`
+  return `${SIMI_LISTADO}/limite/${pagina}/total/${tam}`
     + '/departamento/0/ciudad/0/zona/0/barrio/0/tipoInm/0/tipOper/0'
     + `/areamin/0/areamax/0/valmin/0/valmax/0/${orden}`
     + '/banios/0/alcobas/0/garajes/0/sede/0/usuario/0';
 }
 
-async function traerPagina(desde: number, cuantos: number, recientes = false) {
-  // Basic con usuario VACIO y el token como contrasena. Comprobado contra la
-  // API: las otras cuatro formas devuelven 401 en el cuerpo con HTTP 200.
-  const auth = btoa(`:${SIMI_TOKEN}`);
-  const r = await fetch(urlPagina(desde, cuantos, recientes), {
-    headers: { Authorization: `Basic ${auth}`, Accept: 'application/json' },
-  });
-
+async function traerPagina(pagina: number, tam: number, recientes = false) {
+  const r = await fetch(urlPagina(pagina, tam, recientes), { headers: cabeceras() });
   const cuerpo = await r.text();
+
   let data: any;
   try {
     data = JSON.parse(cuerpo);
@@ -259,49 +421,78 @@ async function traerPagina(desde: number, cuantos: number, recientes = false) {
   if (data?.status === 401 || /autenticaci/i.test(txt(data?.description))) {
     throw new Error('SIMI rechazo la credencial. Revisa SIMI_API_TOKEN.');
   }
-  if (!Array.isArray(data?.Inmuebles)) {
+
+  // Inmuebles llega unas veces como array y otras como objeto indexado por
+  // string ({"0":{…},"1":{…}}). Object.values cubre los dos casos.
+  const crudo = data?.Inmuebles;
+  const inmuebles: Array<Record<string, unknown>> = Array.isArray(crudo)
+    ? crudo
+    : (crudo && typeof crudo === 'object' ? Object.values(crudo) : []);
+
+  if (!inmuebles.length && !data?.datosGrales) {
     throw new Error(`Respuesta inesperada de SIMI: ${cuerpo.slice(0, 120)}`);
   }
 
   return {
-    inmuebles: data.Inmuebles as Array<Record<string, unknown>>,
+    inmuebles,
     total: Number(data?.datosGrales?.totalInmuebles) || 0,
+    // `fin` es el numero de paginas para el tamano pedido. Es lo que dice
+    // cuando parar, y no hay que calcularlo a mano.
+    paginas: Number(data?.datosGrales?.fin) || 0,
   };
 }
 
-// ── Escritura ────────────────────────────────────────────────────────────────
+/** Detalle de un inmueble. Devuelve null si el codigo no existe. */
+async function traerDetalle(codigo: string): Promise<Record<string, any> | null> {
+  const r = await fetch(`${SIMI_DETALLE}/${encodeURIComponent(codigo)}`, { headers: cabeceras() });
+  const cuerpo = await r.text();
+  try {
+    const d = JSON.parse(cuerpo);
+    return txt(d?.idInm) ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Corre las tareas de a `tope` a la vez, en orden de entrada. */
+async function enTandas<T>(items: T[], tope: number, fn: (x: T) => Promise<void>) {
+  for (let i = 0; i < items.length; i += tope) {
+    await Promise.all(items.slice(i, i + tope).map(fn));
+  }
+}
+
+// ── Base44 ───────────────────────────────────────────────────────────────────
 
 type Resultado = { creados: number; actualizados: number; omitidos: number; errores: string[] };
 
 /**
  * Guarda un inmueble: busca por clave y actualiza, o crea.
  *
- * PUT reemplaza la fila entera, asi que se mezcla sobre lo existente. Sin eso se
- * borrarian los links de portales y todo lo que alguien haya editado dentro de
- * la app: el sync solo es autoridad de los campos que SIMI manda.
+ * PUT reemplaza la fila entera, asi que se mezcla sobre lo existente. Sin eso
+ * se borrarian link_web, link_instagram y todo lo que alguien haya editado
+ * dentro de la app: el sync solo es autoridad de los campos que SIMI manda.
  */
 async function guardar(
   p: Record<string, unknown>,
-  baseUrl: string,
   hdrs: Record<string, string>,
   res: Resultado,
 ) {
   const codigo = String(p.codigo_externo);
   try {
-    const q = `${baseUrl}/api/entities/Propiedad`
+    const q = `${BASE_URL}/api/entities/Propiedad`
       + `?codigo_externo=${encodeURIComponent(codigo)}&proveedor=simi&limit=1`;
     const rBusca = await fetch(q, { headers: hdrs });
     const existentes = rBusca.ok ? await rBusca.json() : [];
     const existente = Array.isArray(existentes) ? existentes[0] : null;
 
     if (existente?.id) {
-      const r = await fetch(`${baseUrl}/api/entities/Propiedad/${existente.id}`, {
+      const r = await fetch(`${BASE_URL}/api/entities/Propiedad/${existente.id}`, {
         method: 'PUT', headers: hdrs, body: JSON.stringify({ ...existente, ...p }),
       });
       if (r.ok) res.actualizados++;
       else res.errores.push(`${codigo}: PUT ${r.status}`);
     } else {
-      const r = await fetch(`${baseUrl}/api/entities/Propiedad`, {
+      const r = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
         method: 'POST', headers: hdrs, body: JSON.stringify(p),
       });
       if (r.ok) res.creados++;
@@ -312,18 +503,41 @@ async function guardar(
   }
 }
 
-/** Guarda en tandas simultaneas. Una por una son 130ms de espera cada vez. */
-async function guardarTodos(
-  items: Array<Record<string, unknown>>,
-  baseUrl: string,
+/**
+ * Enumera una pagina, la hidrata con el detalle y la guarda.
+ *
+ * Los tres pasos van juntos a proposito. Separarlos obligaria a llevar una cola
+ * de "esto ya se enumero pero falta hidratarlo", y un inmueble que se quedara a
+ * medias no se veria: existiria en el catalogo, sin direccion y sin link, y el
+ * agente lo ofreceria igual.
+ */
+async function procesarPagina(
+  inmuebles: Array<Record<string, unknown>>,
   hdrs: Record<string, string>,
   res: Resultado,
+  detalles: { ok: number; fallidos: number },
 ) {
-  for (let i = 0; i < items.length; i += CONCURRENCIA) {
-    await Promise.all(
-      items.slice(i, i + CONCURRENCIA).map((p) => guardar(p, baseUrl, hdrs, res)),
-    );
+  const base: Array<Record<string, unknown>> = [];
+  for (const inm of inmuebles) {
+    const p = desdeLista(inm);
+    if (!p) res.omitidos++;
+    else base.push(p);
   }
+
+  await enTandas(base, CONCURRENCIA_DETALLE, async (p) => {
+    try {
+      const d = await traerDetalle(String(p.codigo_externo));
+      const extra = d ? desdeDetalle(d) : null;
+      if (extra) { Object.assign(p, extra); detalles.ok++; }
+      else detalles.fallidos++;
+    } catch {
+      // Un detalle que falla no tumba el inmueble: se guarda el esqueleto y la
+      // proxima corrida lo completa. Perder la pagina entera seria peor.
+      detalles.fallidos++;
+    }
+  });
+
+  await enTandas(base, CONCURRENCIA, (p) => guardar(p, hdrs, res));
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────────
@@ -362,15 +576,24 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ error: 'BASE44_API_KEY no configurada' }, 500);
   const hdrs = { api_key: apiKey, 'Content-Type': 'application/json' };
 
-  // ── Sonda: comprueba credencial y devuelve el total, sin escribir nada ──────
+  // ── Sonda: comprueba credencial y devuelve el total, sin escribir nada ─────
   if (body?.sonda === true) {
     const t0 = Date.now();
     try {
-      const { inmuebles, total } = await traerPagina(1, 1);
+      const { inmuebles, total, paginas } = await traerPagina(1, 1);
+      const codigo = txt(inmuebles[0]?.Codigo_Inmueble);
+      const d = codigo ? await traerDetalle(codigo) : null;
+      const extra = d ? desdeDetalle(d) : null;
       return json({
         ok: true,
         total_en_simi: total,
-        ejemplo: inmuebles[0] ? desdeApi(inmuebles[0]) : null,
+        paginas_de_1: paginas,
+        // Se prueba tambien el detalle porque es el que decide si el agente
+        // puede mandar direccion y link. Que el listado responda no basta.
+        detalle_ok: !!extra,
+        ejemplo: inmuebles[0]
+          ? { ...desdeLista(inmuebles[0]), ...(extra || {}) }
+          : null,
         ms: Date.now() - t0,
       });
     } catch (e) {
@@ -378,11 +601,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  // ── Borrado del catalogo ───────────────────────────────────────────────────
+  // ── Borrado del catalogo ──────────────────────────────────────────────────
   //
-  // Vaciar Propiedad para reconstruirla desde cero. Existe porque SIMI es la
-  // unica fuente: si el catalogo queda inconsistente, rehacerlo puede salir mas
-  // barato que reconciliarlo.
+  // Vaciar Propiedad para reconstruirla desde cero.
   //
   // DOS SEGUROS, porque esto no se puede deshacer:
   //   1. Hay que mandar la frase exacta. `borrar: true` por si solo no hace nada.
@@ -401,27 +622,17 @@ Deno.serve(async (req) => {
 
     const t0 = Date.now();
     const res = { borrados: 0, errores: [] as string[] };
-    // Acota el borrado a un proveedor si se pide. Sin esto se lleva por delante
-    // lo que alguien haya cargado a mano desde la pantalla de Propiedades.
     const prov = txt(body?.proveedor);
     const filtro = prov ? `proveedor=${encodeURIComponent(prov)}&` : '';
+    const url = `${BASE_URL}/api/entities/Propiedad?${filtro}limit=${LOTE_BORRADO}`;
 
     while (Date.now() - t0 < PRESUPUESTO_MS) {
-      const rL = await fetch(
-        `${BASE_URL}/api/entities/Propiedad?${filtro}limit=${LOTE_BORRADO}`,
-        { headers: hdrs },
-      );
-      if (!rL.ok) {
-        res.errores.push(`listar: HTTP ${rL.status}`);
-        break;
-      }
+      const rL = await fetch(url, { headers: hdrs });
+      if (!rL.ok) { res.errores.push(`listar: HTTP ${rL.status}`); break; }
       const filas = await rL.json();
       if (!Array.isArray(filas) || !filas.length) break;
 
       const antes = res.errores.length;
-
-      // En tandas, igual que las escrituras: de a una son 130ms de espera cada
-      // vez y no alcanzarian ni 90 filas por llamada.
       for (let i = 0; i < filas.length && Date.now() - t0 < PRESUPUESTO_MS; i += CONCURRENCIA) {
         await Promise.all(filas.slice(i, i + CONCURRENCIA).map(async (f: any) => {
           if (!f?.id) return;
@@ -443,15 +654,12 @@ Deno.serve(async (req) => {
       if (res.errores.length - antes >= filas.length) break;
     }
 
-    // Se pregunta por lo que queda en vez de deducirlo: si algun DELETE fallo en
-    // silencio, deducir "ya no queda nada" dejaria el catalogo a medio borrar y
-    // la pantalla diria que termino.
+    // Se pregunta por lo que queda en vez de deducirlo: si algun DELETE fallo
+    // en silencio, dar por terminado el borrado dejaria el catalogo a medias y
+    // la pantalla diria que acabo.
     let quedan: number | null = null;
     try {
-      const rQ = await fetch(
-        `${BASE_URL}/api/entities/Propiedad?${filtro}limit=${LOTE_BORRADO}`,
-        { headers: hdrs },
-      );
+      const rQ = await fetch(url, { headers: hdrs });
       const resto = rQ.ok ? await rQ.json() : [];
       quedan = Array.isArray(resto) ? resto.length : null;
     } catch { /* si no se puede contar se devuelve null y la pantalla reintenta */ }
@@ -466,18 +674,16 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ── Incremental: solo lo que cambio desde la ultima corrida ────────────────
+  // ── Incremental: solo lo que cambio desde la ultima corrida ───────────────
   //
   // Es el modo que usa la tarea programada, y el que hace que esto sea barato.
   // La API ordena por fecha descendente, asi que los que se movieron hoy vienen
   // primero: se avanza mientras haya cambios y se para al llegar a lo ya
-  // conocido. Una corrida diaria toca ~30 inmuebles en vez de 2712.
-  //
-  // Requiere `campo/fecha/order/desc`, que es lo unico que hace posible parar
-  // temprano: sin orden habria que mirarlos todos para saber cuales cambiaron.
+  // conocido. Una corrida diaria toca ~20 inmuebles en vez de 2720.
   if (body?.incremental === true) {
     const t0 = Date.now();
-    const res = { creados: 0, actualizados: 0, omitidos: 0, errores: [] as string[] };
+    const res: Resultado = { creados: 0, actualizados: 0, omitidos: 0, errores: [] };
+    const detalles = { ok: 0, fallidos: 0 };
 
     // Marca de agua: la fecha de modificacion mas nueva que ya se proceso.
     const rCfg = await fetch(`${BASE_URL}/api/entities/SimiConfig?clave=general&limit=1`, { headers: hdrs });
@@ -485,17 +691,11 @@ Deno.serve(async (req) => {
     const cfg = Array.isArray(cfgs) ? cfgs[0] : null;
     const marca = txt(cfg?.ultima_sync);
 
-    let pag = 1;
     let masNueva = marca;
     let alcanzado = false;
-    // Tope de paginas por corrida: si nadie sincroniza en semanas no se puede
-    // recuperar todo en una sola llamada de 15s. Lo que falte entra en la
-    // siguiente, porque la marca solo avanza al terminar.
-    const MAX_PAGINAS = 4;
+    let paginasVistas = 0;
 
-    for (let i = 0; i < MAX_PAGINAS && !alcanzado; i++) {
-      if (Date.now() - t0 > PRESUPUESTO_MS) break;
-
+    for (let pag = 1; !alcanzado && Date.now() - t0 < PRESUPUESTO_MS; pag++) {
       let pagina;
       try {
         pagina = await traerPagina(pag, POR_PAGINA, true);
@@ -503,28 +703,30 @@ Deno.serve(async (req) => {
         return json({ error: (e as Error).message, ...res }, 502);
       }
       if (!pagina.inmuebles.length) break;
+      paginasVistas++;
 
-      // Se separa mirar de escribir, igual que en la completa: primero se decide
-      // que entra —parando en la marca— y luego se escribe todo junto.
-      const listos: Array<Record<string, unknown>> = [];
+      // Se separa mirar de escribir: primero se decide que entra —parando en la
+      // marca— y despues se hidrata y se guarda todo junto.
+      const nuevos: Array<Record<string, unknown>> = [];
       for (const inm of pagina.inmuebles) {
         const mod = txt(inm.fecha_modificacion);
         // Al llegar a algo igual o mas viejo que la marca, lo que sigue tambien
         // lo es: viene ordenado. Se para.
         if (marca && mod && mod <= marca) { alcanzado = true; break; }
         if (mod > masNueva) masNueva = mod;
-
-        const p = desdeApi(inm);
-        if (!p) res.omitidos++;
-        else listos.push(p);
+        nuevos.push(inm);
       }
-      await guardarTodos(listos, BASE_URL, hdrs, res);
-      pag += pagina.inmuebles.length;
+      await procesarPagina(nuevos, hdrs, res, detalles);
+
+      // Sin marca previa no hay donde parar y se recorreria el catalogo entero
+      // creyendo que es un incremental. Se hace una pagina y se deja la marca
+      // puesta; la carga completa es otro modo.
+      if (!marca) break;
     }
 
-    // La marca solo avanza si no hubo errores: si algo fallo, la proxima corrida
-    // tiene que volver a intentarlo. Avanzarla igual dejaria ese inmueble sin
-    // actualizar para siempre, y nadie lo notaria.
+    // La marca solo avanza si no hubo errores: si algo fallo, la proxima
+    // corrida tiene que volver a intentarlo. Avanzarla igual dejaria ese
+    // inmueble sin actualizar para siempre, y nadie lo notaria.
     const avanzar = masNueva && masNueva !== marca && !res.errores.length;
     if (avanzar) {
       if (cfg?.id) {
@@ -542,74 +744,55 @@ Deno.serve(async (req) => {
     return json({
       ...res,
       modo: 'incremental',
+      paginas: paginasVistas,
+      detalles_ok: detalles.ok,
+      detalles_fallidos: detalles.fallidos,
       marca_anterior: marca || null,
       marca_nueva: avanzar ? masNueva : marca || null,
-      // Primera corrida: sin marca no hay donde parar, asi que solo se traen las
-      // paginas del tope. Conviene una sincronizacion completa antes.
       primera_vez: !marca,
       ms: Date.now() - t0,
       errores: res.errores.slice(0, 20),
     });
   }
 
-  // ── Sincronizacion completa, por paginas ───────────────────────────────────
-  const desde = Math.max(1, Number(body?.desde) || 1);
+  // ── Sincronizacion completa, pagina por pagina ────────────────────────────
+  //
+  // `pagina` es el numero de pagina de SIMI. No es una fila ni un desplazamiento.
+  const pagina = Math.max(1, Number(body?.pagina) || 1);
   // Se acepta ajustar el tamano, pero nunca por encima del tope real de la API:
-  // pedir 500 devolveria 10 y el cursor avanzaria 500, saltandose 490.
-  const cuantos = Math.min(Math.max(1, Number(body?.por_pagina) || POR_PAGINA), TOPE_API);
+  // pedir 500 devolveria 10 y se darian por vistos 500.
+  const tam = Math.min(Math.max(1, Number(body?.por_pagina) || POR_PAGINA), TOPE_API);
 
   const t0 = Date.now();
-  const res = {
-    creados: 0,
-    actualizados: 0,
-    omitidos: 0,
-    errores: [] as string[],
-  };
+  const res: Resultado = { creados: 0, actualizados: 0, omitidos: 0, errores: [] };
+  const detalles = { ok: 0, fallidos: 0 };
 
-  let pagina;
+  let datos;
   try {
-    pagina = await traerPagina(desde, cuantos);
+    datos = await traerPagina(pagina, tam);
   } catch (e) {
-    return json({ error: (e as Error).message, desde }, 502);
+    return json({ error: (e as Error).message, pagina }, 502);
   }
 
-  const { inmuebles, total } = pagina;
+  const recibidos = datos.inmuebles.length;
+  await procesarPagina(datos.inmuebles, hdrs, res, detalles);
 
-  // Cuantos llegaron DE VERDAD. Si se pidieron 30 y vinieron 10, el cursor tiene
-  // que avanzar 10: avanzar 30 se saltaria veinte inmuebles sin que nada falle.
-  const recibidos = inmuebles.length;
-
-  // Se mapea toda la pagina primero y se escribe en tandas simultaneas, en vez
-  // de ir inmueble por inmueble esperando cada respuesta. Ya no hay corte por
-  // reloj aqui: la pagina esta dimensionada para caber entera, y cortarla a la
-  // mitad era justamente lo que hacia que se repitiera el trabajo.
-  const listos: Array<Record<string, unknown>> = [];
-  for (const inm of inmuebles) {
-    const p = desdeApi(inm);
-    if (!p) res.omitidos++;
-    else listos.push(p);
-  }
-  await guardarTodos(listos, BASE_URL, hdrs, res);
-
-  const procesados = res.creados + res.actualizados + res.omitidos;
-  // Se avanza por lo PROCESADO y no por lo pedido: si se pidieron 30 y la API
-  // mando 10, avanzar 30 se saltaria veinte inmuebles sin que nada falle.
-  //
-  // Los que dieron error no cuentan como procesados, asi que el cursor se queda
-  // corto y la siguiente pagina se solapa con el final de esta. Es a proposito:
-  // reescribir un inmueble que ya estaba no hace danio —se busca y se mezcla—
-  // mientras que darlo por bueno lo dejaria fuera del catalogo para siempre.
-  const siguiente = procesados > 0 && desde + procesados <= total ? desde + procesados : null;
+  // Se para por lo que dice la API —`fin` es el numero de paginas— y ademas por
+  // pagina vacia. Calcular el tope a mano con totalInmuebles/tam se desalinea
+  // en cuanto entra un inmueble nuevo a mitad de la corrida.
+  const hayMas = recibidos > 0 && (datos.paginas ? pagina < datos.paginas : recibidos === tam);
 
   return json({
     ...res,
-    desde,
-    pedidos: cuantos,
+    pagina,
+    por_pagina: tam,
     recibidos,
-    procesados,
-    total_en_simi: total,
-    siguiente,
-    completado: siguiente === null,
+    detalles_ok: detalles.ok,
+    detalles_fallidos: detalles.fallidos,
+    total_en_simi: datos.total,
+    total_paginas: datos.paginas,
+    siguiente: hayMas ? pagina + 1 : null,
+    completado: !hayMas,
     ms: Date.now() - t0,
     errores: res.errores.slice(0, 20),
   });

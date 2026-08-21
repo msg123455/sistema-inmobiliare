@@ -12,7 +12,7 @@
     "test:agentes": "node scripts/run-agent-tests.mjs",
     "test:conciliacion": "node scripts/test-conciliacion.mjs",
     "auditar:envio": "node scripts/auditar-envio.mjs",
-    "build": "node scripts/check-entries.mjs && node scripts/sync-core.mjs --check && node scripts/empaquetar.mjs --check && node scripts/check-bundles.mjs && tsc -p tsconfig.functions.json && node scripts/check-entidades.mjs && node scripts/run-agent-tests.mjs && node scripts/check-funciones-sueltas.mjs && node scripts/test-conciliacion.mjs && vite build",
+    "build": "node scripts/check-entries.mjs && node scripts/sync-core.mjs --check && node scripts/empaquetar.mjs --check && node scripts/check-bundles.mjs && tsc -p tsconfig.functions.json && node scripts/check-entidades.mjs && node scripts/run-agent-tests.mjs && node scripts/check-funciones-sueltas.mjs && node scripts/test-conciliacion.mjs && node scripts/test-simi-mapeo.mjs && vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
@@ -22,7 +22,8 @@
     "check:entries": "node scripts/check-entries.mjs",
     "check:bundles-al-dia": "node scripts/empaquetar.mjs --check",
     "publicar": "node scripts/publicar-asistente.mjs",
-    "check:sueltas": "node scripts/check-funciones-sueltas.mjs"
+    "check:sueltas": "node scripts/check-funciones-sueltas.mjs",
+    "test:simi": "node scripts/test-simi-mapeo.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.43",

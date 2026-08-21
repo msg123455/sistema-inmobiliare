@@ -1,0 +1,758 @@
+{
+ "90-72965": {
+  "idInm": "90-72965",
+  "codinm": "72965",
+  "IdInmobiliaria": "90",
+  "IdGestion": "5",
+  "NombresGestion": "Venta",
+  "IdTpInm": "1",
+  "tpinmu": "Apartamento",
+  "IdBarrio": "1115181",
+  "NombreB": "La Cabrera",
+  "banos": "5",
+  "alcobas": "3",
+  "garaje": "2",
+  "ValorVenta": "1600000000",
+  "ValorCanon": "0",
+  "Direccion": "CL 86 7 59 AP 104",
+  "codinterno": "",
+  "AreaConstruida": "217.57",
+  "AreaLote": "217.57",
+  "descripcionlarga": "Hermoso Apartamento Dúplex con Terraza  3 Habitaciones, Excelente Ubicación. Se vende amplio y luminoso apartamento dúplex con espectacular terraza privada. La propiedad cuenta con 3 habitaciones, bien iluminadas y ventiladas, ideales para la vida familiar. Sala y comedor independientes, lo que ofrece mayor privacidad y funcionalidad en los espacios sociales. Terraza privada, perfecta para reuniones, barbacoas o simplemente relajarse al final del día. Diseño dúplex, que brinda mayor amplitud, distribución moderna y confort. Excelente ubicación, cerca de todo transporte público, colegios, zonas comerciales y parques.",
+  "descrip": "Hermoso Apartamento Dúplex con Terraza  3 Habitaciones, Excelente Ubicación. Se vende amplio y luminoso apartamento dúplex con espectacular terraza privada. La propiedad cuenta con 3 habitaciones, bien iluminadas y ventiladas, ideales para la vida familiar. Sala y comedor independientes, lo que ofrece mayor privacidad y funcionalidad en los espacios sociales. Terraza privada, perfecta para reuniones, barbacoas o simplemente relajarse al final del día. Diseño dúplex, que brinda mayor amplitud, distribución moderna y confort. Excelente ubicación, cerca de todo transporte público, colegios, zonas comerciales y parques.",
+  "latitud": "4.666632",
+  "longitud": "-74.04719000000001",
+  "IdLocalidad": "17",
+  "nlocalidad": "Chapinero",
+  "IdZona": "2",
+  "NombreZ": "Chapinero",
+  "IdCiudad": "11001",
+  "nciudad": "Bogota",
+  "Estrato": "6",
+  "ValorIva": "0",
+  "Administracion": "1.500.000",
+  "IdDestinacion": "1",
+  "DescDestinacion": "Vivienda",
+  "idEstadoInmueble": "2",
+  "DescEstado": "Disponible",
+  "EdadInmueble": 51,
+  "sede": "0",
+  "IdDepartamento": "11",
+  "ndepto": "Bogota Dc",
+  "FConsignacion": "2025-05-16",
+  "restricciones": "",
+  "AdmonIncluida": "0",
+  "oper": "Venta",
+  "precio": "1,600,000,000",
+  "fecha_modificacion": "2026-02-26 10:57:46",
+  "fecha_modificacion2": "2026-02-26 10:57:52",
+  "esNuevo": "",
+  "Id_depto": "11",
+  "depto": "Bogota Dc",
+  "id_tipo_inmueble": "1",
+  "Tipo_Inmueble": "Apartamento",
+  "id_ciudad": "11001",
+  "ciudad": "Bogota",
+  "id_gestion": "5",
+  "Gestion": "Venta",
+  "id_zona": "2",
+  "zona": "Chapinero",
+  "id_localidad": "17",
+  "localidad": "Chapinero",
+  "id_barrio": "1115181",
+  "barrio": "La Cabrera",
+  "codInterno": "",
+  "descripcionSt": "Hermoso Apartamento Dúplex con Terraza  3 Habitaciones, Excelente Ubicación. Se vende amplio y luminoso apartamento dúplex con espectacular terraza privada. La propiedad cuenta con 3 habitaciones, bien iluminadas y ventiladas, ideales para la vida familiar. Sala y comedor independientes, lo que ofrece mayor privacidad y funcionalidad en los espacios sociales. Terraza privada, perfecta para reuniones, barbacoas o simplemente relajarse al final del día. Diseño dúplex, que brinda mayor amplitud, distribución moderna y confort. Excelente ubicación, cerca de todo transporte público, colegios, zonas comerciales y parques.",
+  "Destinacion": "1",
+  "nombreDestinacion": "Vivienda",
+  "portales": {
+   "status": "Ok",
+   "data": [
+    {
+     "nombrePortal": "Fincaraiz",
+     "codigoPortal": "193190886",
+     "urlPortal": "https://www.fincaraiz.com.co/detalle/193190886"
+    },
+    {
+     "nombrePortal": "Metro Cuadrado",
+     "codigoPortal": "34-M5763133",
+     "urlPortal": "https://www.metrocuadrado.com/inmueble/url-seo/34-M5763133"
+    },
+    {
+     "nombrePortal": "Proppit",
+     "codigoPortal": "Publicado",
+     "urlPortal": ""
+    },
+    {
+     "nombrePortal": "CienCuadras",
+     "codigoPortal": "338539-9072965",
+     "urlPortal": "https://www.ciencuadras.com/inmueble/3348955"
+    },
+    {
+     "nombrePortal": "Zona Habitat",
+     "codigoPortal": "ZH57007106",
+     "urlPortal": "https://zonahabitat.com/busqueda/inmueble/ZH57007106"
+    }
+   ]
+  },
+  "caracteristicasInternas": [
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": "0",
+    "Descripcion": " Baño Privado",
+    "grupo": null,
+    "idcaracteristica": "3889",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Baño Social",
+    "grupo": null,
+    "idcaracteristica": "1416",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Chimenea",
+    "grupo": null,
+    "idcaracteristica": "86",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": "0",
+    "Descripcion": " Closet",
+    "grupo": null,
+    "idcaracteristica": "872",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Calentador A Gas",
+    "grupo": null,
+    "idcaracteristica": "1437",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Cocina ElÉctrica",
+    "grupo": "Cocina",
+    "idcaracteristica": "25",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Gas Natural",
+    "grupo": "Cocina",
+    "idcaracteristica": "23",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Cocina Integral",
+    "grupo": "Cocina",
+    "idcaracteristica": "20",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " LavanderÍa",
+    "grupo": "Cocina",
+    "idcaracteristica": "28",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Comedor",
+    "grupo": "Cocina",
+    "idcaracteristica": "6",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Estado Del Inmueble Bueno",
+    "grupo": "Estado Del Inmueble",
+    "idcaracteristica": "2265",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Servicios PÚblicos",
+    "grupo": "Estado Del Inmueble",
+    "idcaracteristica": "2964",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Todos Los Servicios",
+    "grupo": "Estado Del Inmueble",
+    "idcaracteristica": "3111",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Pisos Madera Laminada",
+    "grupo": "Pisos",
+    "idcaracteristica": "788",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Sala ",
+    "grupo": "Pisos",
+    "idcaracteristica": "510",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Terraza",
+    "grupo": "Pisos",
+    "idcaracteristica": "17",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Uso Del Lote Residencial",
+    "grupo": "Uso Del Lote",
+    "idcaracteristica": "1104",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Ventilacion Natural ",
+    "grupo": "Ventilacion",
+    "idcaracteristica": "511",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Vigilancia 24 Horas",
+    "grupo": "Vigilancia",
+    "idcaracteristica": "60",
+    "idTipoInmueble": "1"
+   }
+  ],
+  "caracteristicasExternas": [
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Depósito",
+    "grupo": null,
+    "idcaracteristica": "49",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "1",
+    "cantidad": "0 1",
+    "Descripcion": " Nro Apartamento",
+    "grupo": null,
+    "idcaracteristica": "2414",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Parqueaderos Cubierto",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "56",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "1",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": "Parqueaderos Independientes",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "54",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Unidad Cerrada",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "4970",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Seguridad",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "3567",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Vigilancia 7 X 24",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "3432",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Gimnasio",
+    "grupo": "Parqueaderos",
+    "idcaracteristica": "79",
+    "idTipoInmueble": "1"
+   }
+  ],
+  "caracteristicasAlrededores": [
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Bombas De Gasolina",
+    "grupo": null,
+    "idcaracteristica": "3541",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Cerca A Colegios-universidades",
+    "grupo": null,
+    "idcaracteristica": "2055",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Cerca A Sector Comercial",
+    "grupo": null,
+    "idcaracteristica": "3182",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Cerca A Supermercados",
+    "grupo": null,
+    "idcaracteristica": "2745",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Comodas Vias De Acceso ",
+    "grupo": null,
+    "idcaracteristica": "2571",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Parques Cercanos",
+    "grupo": null,
+    "idcaracteristica": "2733",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Restaurantes",
+    "grupo": null,
+    "idcaracteristica": "3528",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Trans. Público Cercano",
+    "grupo": null,
+    "idcaracteristica": "2059",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Cerca A Sector Comercial",
+    "grupo": null,
+    "idcaracteristica": "2558",
+    "idTipoInmueble": "1"
+   },
+   {
+    "mostrargrupo": "0",
+    "obser_det": "",
+    "cantidad": 0,
+    "Descripcion": " Zona Residencial",
+    "grupo": null,
+    "idcaracteristica": "2545",
+    "idTipoInmueble": "1"
+   }
+  ],
+  "asesor": [
+   {
+    "rol_tr": "3",
+    "iduser_tr": "4539519",
+    "nrol": "Promotor",
+    "ntercero": "Catalina Cubides Pinto",
+    "celular": "3107871782",
+    "fijo": "",
+    "correo": "ccubides@inmobiliarelatam.com",
+    "Direccion": "",
+    "cedtercero": "52416703",
+    "tDoctercero": "0",
+    "vip": "No",
+    "FotoAsesor": "https://fotos-crm.storage.googleapis.com/FotosProfile/52416703.png",
+    "NomtDoctercero": ""
+   }
+  ],
+  "captador": [
+   {
+    "rol_tr": "4",
+    "iduser_tr": "4539519",
+    "nrol": "Captador",
+    "ntercero": "Catalina Cubides Pinto",
+    "celular": "3107871782",
+    "fijo": "",
+    "correo": "ccubides@inmobiliarelatam.com",
+    "Direccion": "",
+    "cedtercero": "52416703",
+    "tDoctercero": "0",
+    "vip": "No",
+    "FotoAsesor": "https://fotos-crm.storage.googleapis.com/FotosProfile/52416703.png",
+    "NomtDoctercero": ""
+   }
+  ],
+  "othercaracteristicas": {
+   "destinacion": "",
+   "procedencia": "",
+   "AvaluoCatastral": "$ 0",
+   "EdadInmueble": "0"
+  },
+  "inmobiliaria": {
+   "telefono": "4853000",
+   "correo": "comecial@inmobiliarelatam.com",
+   "logo": "https://simicrm.app/logosNew/90.png"
+  },
+  "fotos": [
+   {
+    "foto": "https://lh3.googleusercontent.com/bmcpDZJ7SNLZiXII6hDPmZX-EG2noRbseVQA79RThFZhQbqTCMj2rTLZZZ9ON_ktmjLJ-F3fOUQNt8TJAnb8aGsxJInJNPz3Eb_9lfWLEnh9=s1200",
+    "posi": 1
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/F4Ky31v_oxeOy4DFW-P-ckuTcr8uV0ewzbYNJEqAFXAaTbEsqS7FXKFUOhsRdFWkg5PFSi9vd4NW6JScpfUBID9x0iSVrWyWYq2MlqZRkYtm=s1200",
+    "posi": 2
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/JAP821k5nUTWXkX1eZPUO2BF5OjsvmuZFbOc-BaiRdRq72US_Bjrwt4lo5eKOLDBpH7CL-A0pVhPel19n18Zaz-K8zFQ-UxUnG-kuwFrVwc=s1200",
+    "posi": 3
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/n82_VtjLlzxbKJizzJTRvQeH-Tt0LHmTqDyPNs0BFHUGpwaADAunJR0_Nw5D9o_pQe3tNBnmx1PWOQn7n2Od42r9Hw50R4-Ms6LnNfiqAbKzAg=s1200",
+    "posi": 4
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/EGLZ9UQf-4tr57fx_kBaDehGUaCfKFW1N2fMDAXUnGA0_yBcXovXbU6CkQb9MgeD43Od4wpM62rDThgiXjvYRjD7GO7smtRlth3mZG_TxO7_MQ=s1200",
+    "posi": 5
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/de_hFpSVWLhiXrReBl69304XHFKw2i2Grk8uMDX2Q6iYmW3DwkuzJliuhdvx9Sx-sfeI2vwmRnj5BsUHc_IhyGtlhsmmlX0OpV24cDAG81uI=s1200",
+    "posi": 6
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/fDGansDdKN4KTFIm92vQOwZi5DK-pRV3riALsOZ0uIerNBJzRy46a1YTz8yNp8jPy-kSHCQl_77vaGIjwcjEYG17XsLubss_7QPesKS9d1WT=s1200",
+    "posi": 7
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/yqwt6GindUrbYWJl1S8cLeNWbT_Ui31bVv2E_VOhBnWIelC1EFrVDOAE3tbxeYwKfram5gpnAFgeGqccFTICWGR9w9unnSNV4Fiahz_9uS2a=s1200",
+    "posi": 8
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/H6p6o4puNb7OWLQdZESAIyn5kiLxvSJDbunEJQGE6Yfpp6D4nGqxKzScwmLCxieK9dLcXMrw-yYKTMejx4gp0HzUqETVXWUWA9EFt21ER0za8Q=s1200",
+    "posi": 9
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/PQDUcSb0dV4i4bn2twygor5oTDv-aHEEz8NK-oC6a7u5W3fKriAQaUMv6spEXg4cw6n9spJeLDbpX0326s3xiVe5SRyvU5moMGONnq87Tw=s1200",
+    "posi": 10
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/NVy5rTtHVlIdeH4Lut2xFJ2tW_h43F_lP2FWjy2ObwJNEVhtUVPJJHx7EF3rSXMcjTmQoYNyATi0IpYxBRnuCnlWcXtRr5AkGN3MakpefYXD=s1200",
+    "posi": 11
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/SMmrlTl6zC37DQFaM1J2IHpKMgjdQalTWjtHr2DzL7XPc3v8EInh94MlfHW90opmmNEVQLnSeWXVBFaxO97oEdV20v9OBITkdEywHzj5gEMd=s1200",
+    "posi": 12
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/5Bm-CoB1CIlsANS614GLqRUkEb6EVLP0J5xFdC-9cKz-POts72LJP7ylH21FbepAq1Qz_1CwcItPdYXw5kriNqQipmfxqtr1oDMT7ieOyq8=s1200",
+    "posi": 13
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/Jnv7SqQe8g6cbxiStfxylUGM3_8Ty_qdID4N1S87Po-d2yBjOgbpXptgYV1p2rxukS9esVjZq-x0IJOYhja2fgKGfVsl6xcMxK2XO5nRnQoHkA=s1200",
+    "posi": 14
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/OTGH3igFPR3XWLzwzvUiOBvB9a2lf4iBI7AW-WOpvOGLBf-VQfpj7pFOX2pvVHVeYbs01u89efM1ECJYiScntgdxmXayr0xCa97DlOg154c=s1200",
+    "posi": 15
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/RYnJV2juZJgH7r6nxJgt3zy593ym634W3-EXmfXptbqc8gvxpR-O0hMFUIesf1yH1wYyFud8lhN7MU5vfCkF0N_x-1S-3ytrgKK_FrYL1iQ=s1200",
+    "posi": 16
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/j_9s8Tgs2vxpvXN2zpxicoo-_AFlxHawAmTZaMjcj-eif3I6P_kbs8O9MK7s49gw2A2oUvRBrwIjeyxDm6hCKvwdBeF898ptS8A351KGQy4Y=s1200",
+    "posi": 17
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/45VrNxr5Jc8cYL1owkINj9YBB-XD3i02Qe204sVo6SkIOwo-yGnvHl2QeKGAfdmX2Bxp3vPu1S4NBeVN6suTlBMVQFyHFzs7HZMk3Prtd50=s1200",
+    "posi": 18
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/WTOpAlEO_puZZQtnNUfkGvyHlvfOVlGxJWTKThq2IPMrOWiZHSi-HMwf8_fDHYt9oenrXypXCqTI0_xkVXfdC_eU8gxs9DZYlj8sw3QBK-Yj=s1200",
+    "posi": 19
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/7yotvTJSlmUtE9OfdxofpfWpyDwRsTzu-seE5b-RQHuM-71t5SWb5JMMwzHq8-UTyNO7m_nj9ZBRC8mCtDAeRmuGNv2Kl8yCcdbQaR576y4=s1200",
+    "posi": 20
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/avghv9k2z5iGtVgBvdblse8D4ysNwXYVTlI-jV_JeE_0UZXtn_U8VaJGPqQz3_rVkVspVdbRMX3BAqzLEJsKboDVAWYePfx6z_yeXWY1upkYbA=s1200",
+    "posi": 21
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/62flpbYpsYMD4n723VDCFCmaUiUcByI_yhtWjbMnwimnRIxWmd7kf3BY12E2Qy0hgyHfSUanNCzvvdG306p9pek5ArCgAlrMBmB5gXk5WGPJ=s1200",
+    "posi": 22
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/X425CoZP4dK1BelzUhfPYrO4Eln89H_V7YzxVzRtTxbqXz9GEo5P3kTZAwBKb4iKDv7wvn3RgW8zqqBBdtK3yF4kyo-9mFyroRaSa3_Z1upbgw=s1200",
+    "posi": 23
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/15ivkipcHvdphtcc-HUCESYiczZl9DZUzDP4EOYssC4uVSsvs-ga8DrYqnLLiTxRsEPo_efsJoVmh9rSKZM65AGYI2_8thYodxxsJjucjmhgiA=s1200",
+    "posi": 24
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/jUAyb0UpMFdd9QU6bGRnQJXKXFrrIMKJgg02byfGqLPxTIo-LRl03PBg-3V51J2pEe9IqP68f8NUFrtZly7bCxY1HQ5CgDP7_140VnEVktuL_w=s1200",
+    "posi": 25
+   },
+   {
+    "foto": "https://lh3.googleusercontent.com/4AhQSG6gBbRlHcRznaeGPPP9HIcCMyeafdfFvVE_2WlC8_85wcFl2CwaqjKKUP7xL0QOTpaT1sH9CTDJRbYzAaeYDUroXc7R3V4xeYRRxCU=s1200",
+    "posi": 26
+   }
+  ],
+  "fotos360": [],
+  "amobladoInmueble": false,
+  "video360": null,
+  "video": null
+ },
+ "90-636": {
+  "idInm": "90-636",
+  "codinm": "636",
+  "IdInmobiliaria": "90",
+  "IdGestion": "5",
+  "NombresGestion": "Venta",
+  "IdTpInm": "7",
+  "tpinmu": "Lote",
+  "IdBarrio": "2626",
+  "NombreB": "Tenjo",
+  "banos": "0",
+  "alcobas": "0",
+  "garaje": "0",
+  "ValorVenta": "4324250000",
+  "ValorCanon": "0",
+  "Direccion": "CL 1 2 22 ",
+  "codinterno": "",
+  "AreaConstruida": "17297.00",
+  "AreaLote": "17297.00",
+  "descripcionlarga": "Excelente lote industrial de mediano impacto, ideal para desarrollar actividades industriales, logísticas y comerciales, de acuerdo con los usos permitidos en la zona.",
+  "descrip": "Excelente lote industrial de mediano impacto, ideal para desarrollar actividades industriales, logísticas y comerciales, de acuerdo con los usos permitidos en la zona.",
+  "latitud": "4.8716623",
+  "longitud": "-74.14687049999999",
+  "IdLocalidad": "46",
+  "nlocalidad": "Tenjo",
+  "IdZona": "5",
+  "NombreZ": "Norte",
+  "IdCiudad": "25911",
+  "nciudad": "Tenjo",
+  "Estrato": "4",
+  "ValorIva": "0",
+  "Administracion": "0",
+  "IdDestinacion": "1",
+  "DescDestinacion": "Vivienda",
+  "idEstadoInmueble": "2",
+  "DescEstado": "Disponible",
+  "EdadInmueble": 46,
+  "sede": "0",
+  "IdDepartamento": "25",
+  "ndepto": "Cundinamarca",
+  "FConsignacion": "2010-05-20",
+  "restricciones": ".",
+  "AdmonIncluida": "0",
+  "oper": "Venta",
+  "precio": "4,324,250,000",
+  "fecha_modificacion": "2026-08-20 14:03:15",
+  "fecha_modificacion2": "2026-08-20 14:03:19",
+  "esNuevo": "",
+  "Id_depto": "25",
+  "depto": "Cundinamarca",
+  "id_tipo_inmueble": "7",
+  "Tipo_Inmueble": "Lote",
+  "id_ciudad": "25911",
+  "ciudad": "Tenjo",
+  "id_gestion": "5",
+  "Gestion": "Venta",
+  "id_zona": "5",
+  "zona": "Norte",
+  "id_localidad": "46",
+  "localidad": "Tenjo",
+  "id_barrio": "2626",
+  "barrio": "Tenjo",
+  "codInterno": "",
+  "descripcionSt": "Excelente lote industrial de mediano impacto, ideal para desarrollar actividades industriales, logísticas y comerciales, de acuerdo con los usos permitidos en la zona.",
+  "Destinacion": "1",
+  "nombreDestinacion": "Vivienda",
+  "portales": {
+   "status": "Ok",
+   "data": [
+    {
+     "nombrePortal": "Doomos",
+     "codigoPortal": "Publicado",
+     "urlPortal": ""
+    },
+    {
+     "nombrePortal": "Mercado Libre",
+     "codigoPortal": "MCO4170609912",
+     "urlPortal": "http://lote-casalote.mercadolibre.com.co/MCO-4170609912-lotes-en-venta-tenjo-90-636-_JM"
+    },
+    {
+     "nombrePortal": "Fincaraiz",
+     "codigoPortal": "193207413",
+     "urlPortal": " "
+    },
+    {
+     "nombrePortal": "Metro Cuadrado",
+     "codigoPortal": "34-M5750998",
+     "urlPortal": "https://www.metrocuadrado.com/inmueble/url-seo/34-M5750998"
+    },
+    {
+     "nombrePortal": "Properati",
+     "codigoPortal": "2fa2z_venta_lote_tenjo_julio-corredor",
+     "urlPortal": " "
+    },
+    {
+     "nombrePortal": "Idonde",
+     "codigoPortal": "3381-90-636",
+     "urlPortal": " "
+    },
+    {
+     "nombrePortal": "Zona Habitat",
+     "codigoPortal": "ZH56998857",
+     "urlPortal": "https://zonahabitat.com/busqueda/inmueble/ZH56998857"
+    }
+   ]
+  },
+  "caracteristicasInternas": [],
+  "caracteristicasExternas": [],
+  "caracteristicasAlrededores": [],
+  "asesor": [
+   {
+    "rol_tr": "3",
+    "iduser_tr": "2274367",
+    "nrol": "Promotor",
+    "ntercero": "Luz Myriam Herrera Gaitan",
+    "celular": "3105673007",
+    "fijo": "4853000",
+    "correo": "coordinadorventas@inmobiliarelatam.com",
+    "Direccion": "CL 81 8 95",
+    "cedtercero": "51744274",
+    "tDoctercero": "1",
+    "vip": "No",
+    "FotoAsesor": "https://fotos-crm.storage.googleapis.com/FotosProfile/51744274.png",
+    "NomtDoctercero": "Cedula"
+   }
+  ],
+  "captador": [
+   {
+    "rol_tr": "4",
+    "iduser_tr": "2274368",
+    "nrol": "Captador",
+    "ntercero": "Daniela Cruz Reina",
+    "celular": "3182152607",
+    "fijo": "4853000",
+    "correo": "comercial@inmobiliarelatam.com",
+    "Direccion": "CL 81 8 95",
+    "cedtercero": "52175947",
+    "tDoctercero": "1",
+    "vip": "No",
+    "FotoAsesor": "https://fotos-crm.storage.googleapis.com/FotosProfile/52175947.png",
+    "NomtDoctercero": "Cedula"
+   }
+  ],
+  "othercaracteristicas": {
+   "destinacion": "",
+   "procedencia": "",
+   "AvaluoCatastral": "$ 0",
+   "EdadInmueble": "0"
+  },
+  "inmobiliaria": {
+   "telefono": "4853000",
+   "correo": "comecial@inmobiliarelatam.com",
+   "logo": "https://simicrm.app/logosNew/90.png"
+  },
+  "fotos": [
+   {
+    "foto": "https://lh3.googleusercontent.com/G3rBI_yINwcOGlQrerV2555igPk7PFyo5GEmPm-mqx_jGZ-ujXrzJS_WqXUdQTjMi6yeqe1t_y2-N1FClDlT-SYPYtzbHw=s1200",
+    "posi": 1
+   }
+  ],
+  "fotos360": [],
+  "amobladoInmueble": false,
+  "video360": null,
+  "video": null
+ }
+}
