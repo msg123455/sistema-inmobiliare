@@ -5,6 +5,8 @@
 //
 // MODOS:
 //   sonda        comprueba la credencial y devuelve el total. No escribe nada.
+//   diagnostico  escribe una fila de mentira y la relee para ver que campos
+//                acepta Base44 de verdad. La borra siempre.
 //   completa     recorre el catalogo pagina por pagina. Para la carga inicial.
 //   incremental  pide ordenado por fecha descendente y para al llegar a lo ya
 //                conocido. Es el de la tarea programada: una corrida diaria
@@ -598,6 +600,97 @@ Deno.serve(async (req) => {
       });
     } catch (e) {
       return json({ error: (e as Error).message }, 502);
+    }
+  }
+
+  // ── Diagnostico del esquema ───────────────────────────────────────────────
+  //
+  // Base44 acepta el POST y descarta en silencio lo que no esta declarado. Un
+  // campo que falte no da error: el dato simplemente no se guarda, y se nota
+  // semanas despues cuando alguien ve la columna vacia.
+  //
+  // La comprobacion es escribir una fila de mentira, releerla y borrarla. NO
+  // vale mirar una fila existente: Base44 guarda documentos, asi que una fila
+  // vieja no tiene los campos nuevos aunque el esquema si los declare. Esa
+  // lectura da un falso negativo y hace pedir campos que ya estaban.
+  //
+  // Los portales van aparte porque son un objeto anidado: el esquema puede
+  // aceptar `portales` y aun asi tirar las claves que no conoce.
+  if (body?.diagnostico === true) {
+    const t0 = Date.now();
+
+    // Valor de sonda por campo, con su forma de comprobar. Se usa un valor
+    // distinto de vacio en cada uno para que un default del esquema no se
+    // confunda con el dato que se escribio.
+    const SONDA: Record<string, { valor: unknown; ok: (v: unknown) => boolean }> = {
+      direccion: { valor: '__sonda__', ok: (v) => v === '__sonda__' },
+      fotos: { valor: ['https://ejemplo/1.jpg'], ok: (v) => Array.isArray(v) && v.length === 1 },
+      caracteristicas: { valor: ['__sonda__'], ok: (v) => Array.isArray(v) && v.length === 1 },
+      asesor_celular: { valor: '3000000000', ok: (v) => v === '3000000000' },
+      asesor_correo: { valor: 'sonda@ejemplo.com', ok: (v) => v === 'sonda@ejemplo.com' },
+      localidad: { valor: '__sonda__', ok: (v) => v === '__sonda__' },
+      admon_incluida: { valor: true, ok: (v) => v === true },
+      amoblado: { valor: true, ok: (v) => v === true },
+      avaluo_catastral: { valor: 123456789, ok: (v) => Number(v) === 123456789 },
+    };
+    const PORTALES_SONDA: Record<string, string> = {
+      metrocuadrado: 'https://ejemplo/mc',
+      fincaraiz: 'https://ejemplo/fr',
+      mercadolibre: 'https://ejemplo/ml',
+      ciencuadras: 'https://ejemplo/cc',
+      zonahabitat: 'https://ejemplo/zh',
+    };
+
+    const fila: Record<string, unknown> = {
+      // titulo y ciudad son obligatorios en Propiedad.
+      titulo: '__SONDA__ borrar si aparece',
+      ciudad: '__sonda__',
+      proveedor: 'manual',
+      codigo_externo: '__SONDA__',
+      portales: PORTALES_SONDA,
+    };
+    for (const [k, v] of Object.entries(SONDA)) fila[k] = v.valor;
+
+    let creada: any = null;
+    try {
+      const rPost = await fetch(`${BASE_URL}/api/entities/Propiedad`, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(fila),
+      });
+      if (!rPost.ok) {
+        return json({
+          error: `No se pudo escribir la sonda: HTTP ${rPost.status} ${(await rPost.text()).slice(0, 200)}`,
+        }, 502);
+      }
+      creada = await rPost.json();
+
+      const faltan = Object.entries(SONDA)
+        .filter(([k, v]) => !v.ok(creada?.[k]))
+        .map(([k]) => k);
+      const portalesGuardados = (creada?.portales || {}) as Record<string, unknown>;
+      const faltanPortales = Object.keys(PORTALES_SONDA)
+        .filter((k) => portalesGuardados[k] !== PORTALES_SONDA[k]);
+
+      const listo = !faltan.length && !faltanPortales.length;
+      return json({
+        listo,
+        faltan,
+        faltan_portales: faltanPortales,
+        mensaje: listo
+          ? 'Propiedad tiene todos los campos. La sincronizacion los va a guardar.'
+          : 'Base44 descarto estos campos porque no existen en Propiedad. '
+            + 'Creelos en Datos > Propiedad; los de portales van DENTRO del objeto portales, como texto.',
+        ms: Date.now() - t0,
+      });
+    } catch (e) {
+      return json({ error: `No se pudo revisar Propiedad: ${(e as Error).message}` }, 502);
+    } finally {
+      // Se borra siempre, aunque la comprobacion haya fallado: dejar la sonda
+      // suelta en el catalogo seria peor que no haberla escrito, porque el
+      // agente puede ofrecerla.
+      if (creada?.id) {
+        await fetch(`${BASE_URL}/api/entities/Propiedad/${creada.id}`, { method: 'DELETE', headers: hdrs })
+          .catch((e: Error) => console.error('no se pudo borrar la sonda:', e.message));
+      }
     }
   }
 

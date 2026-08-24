@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { RefreshCw, AlertTriangle, CheckCircle2, Loader2, Radio, Trash2 } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, Loader2, Radio, Trash2, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { callFunction } from '@/lib/backend';
 
@@ -24,6 +24,7 @@ export default function SincronizarSimi() {
   const [corriendo, setCorriendo] = useState(false);
   const [confirmacion, setConfirmacion] = useState('');
   const [borrando, setBorrando] = useState(null);
+  const [esquema, setEsquema] = useState(null);
 
   const probar = async () => {
     setCorriendo(true);
@@ -34,6 +35,24 @@ export default function SincronizarSimi() {
       toast.success(`SIMI responde: ${r.total_en_simi} inmuebles`);
     } catch (err) {
       setSonda({ error: err.message });
+      toast.error(err.message);
+    } finally {
+      setCorriendo(false);
+    }
+  };
+
+  // Escribe una fila de mentira, la relee y la borra. Es la unica forma de
+  // saber que campos acepta Base44: mirar una fila existente da falso negativo
+  // porque las filas viejas no tienen los campos nuevos aunque el esquema si.
+  const revisarEsquema = async () => {
+    setCorriendo(true);
+    try {
+      const r = await callFunction('sincronizarSimi', { diagnostico: true });
+      setEsquema(r);
+      if (r.listo) toast.success('Propiedad tiene todos los campos');
+      else toast.error(`Faltan ${(r.faltan?.length || 0) + (r.faltan_portales?.length || 0)} campos`);
+    } catch (err) {
+      setEsquema({ error: err.message });
       toast.error(err.message);
     } finally {
       setCorriendo(false);
@@ -136,11 +155,53 @@ export default function SincronizarSimi() {
                 Pide un inmueble y su detalle. No escribe nada.
               </p>
             </div>
-            <Button variant="outline" onClick={probar} disabled={corriendo}>
-              {corriendo && !progreso && !borrando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
-              Probar
-            </Button>
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" onClick={revisarEsquema} disabled={corriendo}>
+                <ClipboardCheck className="w-4 h-4" />
+                Revisar campos
+              </Button>
+              <Button variant="outline" onClick={probar} disabled={corriendo}>
+                {corriendo && !progreso && !borrando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+                Probar
+              </Button>
+            </div>
           </div>
+
+          {/* El resultado de la sonda de esquema. Se muestra el nombre exacto
+              de cada campo que falta para poder copiarlo tal cual en Base44. */}
+          {esquema && (
+            <div className={`text-sm rounded-xl p-4 space-y-1 ${esquema.listo ? 'bg-muted/40' : 'bg-destructive/10'}`}>
+              {esquema.error ? (
+                <p className="text-muted-foreground break-words">{esquema.error}</p>
+              ) : esquema.listo ? (
+                <p className="font-medium flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  Propiedad tiene todos los campos.
+                </p>
+              ) : (
+                <>
+                  <p className="font-medium text-destructive">
+                    Base44 descartó estos campos porque no existen en Propiedad
+                  </p>
+                  {!!esquema.faltan?.length && (
+                    <p className="text-muted-foreground">
+                      Sueltos: <span className="font-mono text-xs">{esquema.faltan.join(', ')}</span>
+                    </p>
+                  )}
+                  {!!esquema.faltan_portales?.length && (
+                    <p className="text-muted-foreground">
+                      Dentro de <span className="font-mono text-xs">portales</span>:{' '}
+                      <span className="font-mono text-xs">{esquema.faltan_portales.join(', ')}</span>
+                    </p>
+                  )}
+                  <p className="text-muted-foreground text-xs">
+                    Créalos en Datos &gt; Propiedad y vuelve a revisar. Mientras falten, esos
+                    datos se pierden al sincronizar sin que aparezca ningún error.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
 
           {sonda?.error && (
             <div className="text-sm bg-destructive/10 rounded-xl p-4">
