@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { RefreshCw, AlertTriangle, CheckCircle2, Loader2, Radio, Trash2, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { callFunction } from '@/lib/backend';
+import { callFunction, FUNCIONES } from '@/lib/backend';
 
 // Tamano de pagina. El listado de SIMI tarda 7,8s con 20 y 14,2s con 50, y
 // Base44 corta la funcion a los 15: con 50 no queda margen para traer el
@@ -30,7 +30,7 @@ export default function SincronizarSimi() {
     setCorriendo(true);
     setResultado(null);
     try {
-      const r = await callFunction('sincronizarSimi', { sonda: true });
+      const r = await callFunction(FUNCIONES.simi, { sonda: true });
       setSonda(r);
       toast.success(`SIMI responde: ${r.total_en_simi} inmuebles`);
     } catch (err) {
@@ -47,7 +47,7 @@ export default function SincronizarSimi() {
   const revisarEsquema = async () => {
     setCorriendo(true);
     try {
-      const r = await callFunction('sincronizarSimi', { diagnostico: true });
+      const r = await callFunction(FUNCIONES.simi, { diagnostico: true });
       setEsquema(r);
       if (r.listo) toast.success('Propiedad tiene todos los campos');
       else toast.error(`Faltan ${(r.faltan?.length || 0) + (r.faltan_portales?.length || 0)} campos`);
@@ -70,7 +70,7 @@ export default function SincronizarSimi() {
 
     try {
       while (pagina !== null) {
-        const r = await callFunction('sincronizarSimi', { pagina, por_pagina: POR_PAGINA });
+        const r = await callFunction(FUNCIONES.simi, { pagina, por_pagina: POR_PAGINA });
         acum.creados += r.creados || 0;
         acum.actualizados += r.actualizados || 0;
         acum.omitidos += r.omitidos || 0;
@@ -110,7 +110,7 @@ export default function SincronizarSimi() {
     try {
       let borrados = 0;
       for (;;) {
-        const r = await callFunction('sincronizarSimi', { borrar: true, confirmar: FRASE });
+        const r = await callFunction(FUNCIONES.simi, { borrar: true, confirmar: FRASE });
         borrados += r.borrados || 0;
         setBorrando({ borrados });
         if (r.error) throw new Error(r.error);

@@ -40,6 +40,9 @@ const FUNCTIONS_TOKEN = import.meta.env.VITE_FUNCTIONS_TOKEN || 'SYNCWASI2026';
 export const FUNCIONES = {
   codigos: 'codigosMensuales6',
   campana: 'campanaCodigos',
+  // Sube a sincronizarSimi3, 4… cada vez que se publique. Mientras esto no se
+  // toque, la pantalla sigue llamando al artefacto viejo aunque el repo cambie.
+  simi: 'sincronizarSimi2',
 };
 
 /**
