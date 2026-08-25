@@ -67,6 +67,25 @@ export async function callFunction(nombre, payload = {}) {
     body: JSON.stringify({ token: FUNCTIONS_TOKEN, ...payload }),
   });
   const res = await r.json().catch(() => ({}));
-  if (!r.ok || res?.error) throw new Error(res?.error || `Error ${r.status}`);
+
+  if (!r.ok || res?.error) {
+    // Base44 BLOQUEA las funciones desde el dominio del editor: la Vista Previa
+    // corre la app dentro de app.base44.com, y desde ahi cualquier llamada al
+    // backend responde "App not found for this domain" o "Backend functions
+    // cannot be accessed from the platform domain".
+    //
+    // Ese cuerpo trae `message` y no `error`, asi que antes se degradaba a un
+    // "Error 404" pelado que parecia un fallo del servicio al que se estaba
+    // llamando. Se perdio una tarde buscando en Mailchimp algo que estaba aqui.
+    const msg = String(res?.message || res?.detail || '');
+    if (/platform domain|App not found for this domain/i.test(msg)) {
+      throw new Error(
+        'Esta pantalla no funciona desde la Vista Previa de Base44: la plataforma no deja '
+        + 'llamar a las funciones desde su propio dominio. Abre la app en su dirección '
+        + `propia (${BACKEND_URL.includes('base44.app') ? BACKEND_URL : 'tu-app.base44.app'}) y vuelve a intentarlo.`,
+      );
+    }
+    throw new Error(res?.error || msg || `Error ${r.status}`);
+  }
   return res;
 }
