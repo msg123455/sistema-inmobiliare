@@ -1,0 +1,47 @@
+{
+  // El mapa de zonas donde la casa tiene inventario. Una fila por barrio.
+  //
+  // POR QUE EXISTE. El cliente dice "rosales" y la base dice "Los Rosales". El
+  // filtro del backend es por igualdad, asi que sin traducir esa palabra la
+  // consulta devuelve cero y el agente concluye que no hay nada. Eso ya paso con
+  // un cliente real: pidio arriendo en Rosales, habia 11, y Diana le dijo dos
+  // veces que solo habia 2 y que "no hay ninguno mas".
+  //
+  // Y hay un problema peor que la traduccion: la ambiguedad. "El Chico" puede
+  // ser Chico (126 inmuebles), Chico Norte (115), Chico Alto, Chico Reservado,
+  // Chico Navarra, Rincon del Chico... diecinueve barrios distintos contienen esa
+  // palabra. Adivinar cual es equivocarse el 90% de las veces; con esta tabla el
+  // agente PREGUNTA cual, porque los ve todos.
+  //
+  // SOLO NOMBRES, NO CONTEOS. La tentacion es guardar aqui cuantos hay en cada
+  // zona para responder "cuantos tienes en Rosales" sin consultar. No se hace: un
+  // conteo guardado se desactualiza en cuanto entra o sale un inmueble, y un
+  // numero viejo dicho con seguridad es exactamente el fallo que esta tabla viene
+  // a arreglar. El conteo real sale siempre de la consulta.
+  //
+  // Se regenera con scripts/indexar-zonas.mjs cuando cambie el inventario. Si una
+  // zona nueva no esta aqui todavia, la busqueda por su nombre exacto sigue
+  // funcionando: lo unico que se pierde es que el agente la sugiera.
+  "name": "ZonaInmueble",
+  "type": "object",
+  "properties": {
+    "nombre": {
+      "type": "string",
+      "description": "El barrio tal como esta escrito en Propiedad.barrio. Es el valor EXACTO que se le pasa al filtro, con sus mayusculas y sus tildes."
+    },
+    "normalizado": {
+      "type": "string",
+      "description": "El mismo nombre en minusculas, sin tildes y sin los articulos iniciales (los, las, el, la). 'Los Rosales' queda 'rosales'. Es por donde se busca lo que dicta el cliente."
+    },
+    "ciudad": {
+      "type": "string",
+      "description": "Ciudad a la que pertenece la zona. Hay barrios homonimos entre ciudades."
+    },
+    "activo": {
+      "type": "boolean",
+      "default": true,
+      "description": "Se apaga en vez de borrarse cuando una zona deja de tener inventario, para no perder el historico de busquedas."
+    }
+  },
+  "required": ["nombre", "normalizado"]
+}

@@ -7,7 +7,7 @@ import { IDENTIDAD_MARCA, PROMPTS } from '../base44/functions/_core/prompts.ts';
 import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
 import { enviarLinkDocumentos } from '../base44/functions/_core/tools/matricula.ts';
 import {
-  buscarInmuebles, calificarLead, enviarFicha, fmtCOP,
+  agendarVisita, buscarInmuebles, buscarPorCodigo, calificarLead, enviarFicha, fmtCOP,
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
@@ -37,53 +37,289 @@ assert.match(PROMPTS.ventas, /guardar_dato/);
 
 assert.equal(fmtCOP(2_500_000), '$2.500.000');
 
-/**
- * Base falsa: solo igualdad, como la de Base44. Las tools ya no reciben un
- * catalogo precargado —consultan— asi que el test tiene que simular la consulta
- * y no el resultado. Si aceptara filtros que Base44 no soporta, el test pasaria
- * y produccion fallaria.
- */
-const dbFalsa = (filas) => ({
-  list: async (entidad, filtro = {}) => {
-    if (entidad !== 'Propiedad') return [];
-    return filas.filter((p) =>
-      Object.entries(filtro).every(([k, v]) =>
-        k === 'limit' || String(p[k] ?? '') === String(v)));
-  },
-});
-
-const catalogoDemo = [
+// ── El inventario de Los Rosales, a escala ──────────────────────────────────
+//
+// Reproduce la forma del caso real: 11 en arriendo repartidos en 8 apartamentos,
+// 2 oficinas y 1 casa, mas 2 en venta. Los numeros importan: son los que
+// distinguen "te mando 5 de 11" de "solo esos dos que ya te mande".
+const rosalesArriendo = [
+  ...Array.from({ length: 8 }, (_, i) => ({
+    id: `ros-apto-${i}`, codigo_externo: `90-100${i}`, titulo: `Apartamento ${i} en Los Rosales`,
+    operacion: 'Arriendo', estado: 'Disponible', barrio: 'Los Rosales', tipo: 'Apartamento',
+    habitaciones: 3, canon_arriendo: 4_000_000 + i * 500_000,
+    portales: { metrocuadrado: `https://www.metrocuadrado.com/ficha-${i}` },
+  })),
+  // Las oficinas tienen habitaciones 0 y NO es un dato que falte: es que no
+  // aplica. Filtrarlas por cuartos las borraria del inventario.
+  ...Array.from({ length: 2 }, (_, i) => ({
+    id: `ros-ofi-${i}`, codigo_externo: `90-200${i}`, titulo: `Oficina ${i} en Los Rosales`,
+    operacion: 'Arriendo', estado: 'Disponible', barrio: 'Los Rosales', tipo: 'Oficina',
+    habitaciones: 0, canon_arriendo: 9_000_000,
+  })),
   {
-    id: 'chapi-25', titulo: 'Apartamento en Chapinero', operacion: 'Arriendo',
-    barrio: 'Chapinero', tipo: 'Apartamento', canon_arriendo: 2_500_000,
-    portales: { metrocuadrado: 'https://www.metrocuadrado.com/ficha-real' },
-  },
-  {
-    id: 'suba-20', titulo: 'Apartamento en Suba', operacion: 'Arriendo',
-    barrio: 'Suba', tipo: 'Apartamento', canon_arriendo: 2_000_000,
-  },
-  {
-    id: 'chapi-40', titulo: 'Apartamento en Chapinero', operacion: 'Arriendo',
-    barrio: 'Chapinero', tipo: 'Apartamento', canon_arriendo: 4_000_000,
+    id: 'ros-casa-0', codigo_externo: '90-3000', titulo: 'Casa en Los Rosales',
+    operacion: 'Arriendo', estado: 'Disponible', barrio: 'Los Rosales', tipo: 'Casa',
+    habitaciones: 5, canon_arriendo: 20_000_000,
   },
 ];
-// Las tools ya no reciben el catalogo: lo consultan. El test simula la consulta
-// para probar lo que de verdad va a pasar en produccion.
-const ctxBusqueda = {
-  db: dbFalsa(catalogoDemo.map((p) => ({ ...p, estado: 'Disponible' }))),
+const catalogoDemo = [
+  ...rosalesArriendo,
+  {
+    id: 'ros-venta-0', codigo_externo: '90-4000', titulo: 'Apartamento en venta en Los Rosales',
+    operacion: 'Venta', estado: 'Disponible', barrio: 'Los Rosales', tipo: 'Apartamento',
+    habitaciones: 3, precio_venta: 1_200_000_000,
+  },
+  // Sin precio cargado. El importador guarda 0 cuando la celda venia vacia: no
+  // se puede prometer que cabe en un presupuesto, pero tampoco desaparece.
+  {
+    id: 'ros-venta-1', codigo_externo: '90-4001', titulo: 'Casa en venta en Los Rosales',
+    operacion: 'Venta', estado: 'Disponible', barrio: 'Los Rosales', tipo: 'Casa',
+    habitaciones: 4, precio_venta: 0,
+  },
+  {
+    id: 'chapi-25', titulo: 'Apartamento en Chapinero', operacion: 'Arriendo',
+    estado: 'Disponible', barrio: 'Chapinero', tipo: 'Apartamento', canon_arriendo: 2_500_000,
+    portales: { metrocuadrado: 'https://www.metrocuadrado.com/ficha-real' },
+  },
+];
+
+// La busqueda ya no filtra un catalogo precargado: consulta la base filtrando
+// por zona. El doble responde como Base44, por igualdad exacta de barrio, y
+// distingue el fallo del vacio igual que `consultar`.
+const dbInmuebles = (props, zonas, cae = false) => ({
+  list: async (entidad) => (entidad === 'ZonaInmueble' ? zonas : []),
+  consultar: async (entidad, filtro = {}) => {
+    if (cae) return { ok: false, motivo: 'http', detalle: '500' };
+    if (entidad !== 'Propiedad') return { ok: true, filas: [] };
+    return {
+      ok: true,
+      filas: props.filter((p) => (!filtro.barrio || p.barrio === filtro.barrio)
+        && (!filtro.estado || p.estado === filtro.estado)
+        && (!filtro.id || p.id === filtro.id)
+        && (!filtro.codigo_externo || p.codigo_externo === filtro.codigo_externo)),
+    };
+  },
+});
+const ZONAS = [
+  { nombre: 'Chapinero', normalizado: 'chapinero', activo: true },
+  { nombre: 'Chapinero Alto', normalizado: 'chapinero alto', activo: true },
+  { nombre: 'Los Rosales', normalizado: 'rosales', activo: true },
+];
+const nuevoCtx = (cae = false) => ({
+  db: dbInmuebles(catalogoDemo, ZONAS, cae),
   ctxAgente: {},
   salida: { globos: [], finTurno: false },
-};
-const busqueda = await buscarInmuebles.ejecutar({
-  operacion: 'arriendo', barrio: 'Chapinero', tipo: 'apartamento',
-  presupuesto_max: 3_000_000, habitaciones_min: null,
-}, ctxBusqueda);
-assert.equal(busqueda.encontrados, 1);
-assert.equal(busqueda.inmuebles[0].id, 'chapi-25');
-assert.equal(busqueda.inmuebles[0].precio, '$2.500.000 al mes');
-assert.equal(busqueda.inmuebles[0].ficha, 'https://www.metrocuadrado.com/ficha-real');
-assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctxBusqueda)).ok, true);
-assert.equal(ctxBusqueda.salida.globos.at(-1), 'https://www.metrocuadrado.com/ficha-real');
+  efectos: { transferir: null, escalado: null, notificar: [] },
+});
+const buscar = (input, ctx) => buscarInmuebles.ejecutar({
+  operacion: 'arriendo', barrio: null, tipo: null,
+  presupuesto_max: null, habitaciones_min: null, ...input,
+}, ctx);
+
+// ── El fallo que rompio la confianza de un cliente real ─────────────────────
+//
+// Pidio arriendo en Rosales. Habia 11. Diana le dijo "solo esos dos" y despues
+// "revise de nuevo, no hay ninguno mas en Rosales". Las dos veces era falso: el
+// agente veia 100 inmuebles de 2737 y afirmaba sobre los otros 2637.
+//
+// Cada bloque de aqui abajo es una de las piezas de esa mentira.
+{
+  // 1. "rosales" tiene que llegar a "Los Rosales". El filtro del backend es por
+  //    igualdad: sin traducir devuelve cero, y cero se leia como "no hay".
+  //    Con 11 en arriendo repartidos en tres tipos, lo primero que hace la
+  //    herramienta es dar el total REAL y preguntar el tipo con el desglose en
+  //    la mano. Eso es a la vez el conteo verdadero y la pregunta que pidio la
+  //    casa, en un solo mensaje.
+  const ctx = nuevoCtx();
+  const primera = await buscar({ barrio: 'rosales' }, ctx);
+  assert.equal(primera.resultado, 'falta_tipo');
+  assert.equal(primera.zona, 'Los Rosales');
+  assert.equal(primera.en_la_zona, 11, 'el total real de la zona, no los que caben en un mensaje');
+  assert.deepEqual(primera.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
+  assert.match(primera.instruccion, /11: 8 apartamentos, 2 oficinas, 1 casa/);
+  assert.match(primera.instruccion, /UNA sola pregunta/);
+
+  // 2. El cliente contesta "apartamento". Ahora si se muestran, y el total que
+  //    viaja es 8: los que ENCAJAN, no los que caben en el mensaje. `mostrados`
+  //    y `total` van separados a proposito — antes solo existia `encontrados`,
+  //    que se calculaba DESPUES de cortar a cinco. De ahi salio, literal,
+  //    "solo esos dos que ya te mande".
+  const conTipo = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  assert.equal(conTipo.resultado, 'hay');
+  assert.equal(conTipo.total, 8);
+  assert.equal(conTipo.mostrados, 5);
+  assert.equal(conTipo.hay_mas, true);
+  assert.equal(conTipo.en_la_zona, 11);
+  assert.match(conTipo.nota, /el numero es 8, no 5/);
+  // Orden estable y explicable: el mas barato primero. Un orden arbitrario es
+  // lo que hacia que "revise de nuevo" pudiera devolver otra cosa sin que nada
+  // hubiera cambiado.
+  assert.equal(conTipo.inmuebles[0].id, 'ros-apto-0');
+  assert.equal(conTipo.inmuebles[0].precio, '$4.000.000 al mes');
+
+  // 3. El tipo NO se pregunta dos veces. Si el cliente no lo contesta y el
+  //    modelo vuelve a buscar, se le muestra lo que hay: insistir con la misma
+  //    pregunta es exactamente como suena un formulario.
+  const otraVez = await buscar({ barrio: 'rosales' }, ctx);
+  assert.equal(otraVez.resultado, 'hay');
+  assert.equal(otraVez.total, 11, 'sin tipo, encajan los 11');
+
+  // 4. Y si en la zona solo hay de un tipo, no se pregunta: seria teatro.
+  const soloUno = await buscar({ barrio: 'Chapinero' }, nuevoCtx());
+  assert.equal(soloUno.resultado, 'hay');
+  assert.equal(soloUno.total, 1);
+}
+
+// ── Un filtro que no encaja NO es un inventario vacio ───────────────────────
+//
+// Es la rama que mas importa. Con 11 en la zona, "no hay nada" es mentira: lo
+// que no hay es nada BAJO ESE FILTRO.
+{
+  const caro = await buscar({
+    barrio: 'rosales', tipo: 'Apartamento', presupuesto_max: 1_000,
+  }, nuevoCtx());
+  assert.equal(caro.resultado, 'cero_bajo_el_filtro');
+  assert.equal(caro.en_la_zona, 11, 'sabe que en la zona SI hay, aunque ninguno pase el filtro');
+  assert.deepEqual(caro.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
+  assert.match(caro.instruccion, /PROHIBIDO decir "no hay nada"/);
+  assert.match(caro.instruccion, /SI tenemos 11/);
+
+  // El plural o el sinonimo NO pueden vaciar el inventario. Antes el filtro
+  // comparaba al reves —exigia que el valor guardado contuviera la palabra del
+  // cliente— asi que 'apartamento'.includes('apartamentos') daba false y un
+  // simple plural descartaba las 2737 filas.
+  for (const dicho of ['apartamentos', 'apto', 'apartaestudio', 'penthouse', 'Apartamento']) {
+    const r = await buscar({ barrio: 'rosales', tipo: dicho }, nuevoCtx());
+    assert.equal(r.resultado, 'hay', `"${dicho}" no puede dar cero`);
+    assert.equal(r.total, 8);
+  }
+
+  // Un tipo que no se entiende tampoco vacia nada: se ignora el filtro.
+  const raro = await buscar({ barrio: 'rosales', tipo: 'iglu' }, nuevoCtx());
+  assert.equal(raro.resultado, 'falta_tipo', 'un tipo ilegible se trata como "todavia no lo se"');
+
+  // habitaciones_min solo aplica donde significa algo. Las 2 oficinas tienen
+  // habitaciones 0 legitimamente: pedir 2 cuartos no puede borrarlas.
+  const conCuartos = await buscar({ barrio: 'rosales', habitaciones_min: 2 }, nuevoCtx());
+  assert.equal(conCuartos.resultado, 'falta_tipo');
+  const cuartosYTipo = await buscar({
+    barrio: 'rosales', tipo: 'Oficina', habitaciones_min: 2,
+  }, nuevoCtx());
+  assert.equal(cuartosYTipo.total, 2, 'una oficina no se descarta por no tener cuartos');
+
+  // Un precio en 0 es un dato que falta, no un inmueble gratis. Se descarta del
+  // presupuesto pero se CUENTA y se dice, en vez de desaparecer en silencio.
+  const enVenta = await buscar({
+    operacion: 'venta', barrio: 'rosales', tipo: 'Casa', presupuesto_max: 2_000_000_000,
+  }, nuevoCtx());
+  assert.equal(enVenta.resultado, 'cero_bajo_el_filtro');
+  assert.equal(enVenta.sin_precio_publicado, 1);
+  assert.match(enVenta.instruccion, /sin precio cargado/);
+}
+
+// ── Las cuatro formas de NO poder afirmar una ausencia ──────────────────────
+{
+  // Sin zona no se busca: es lo que obligaba a traerse el inventario entero.
+  const sinZona = await buscar({ tipo: 'Apartamento', presupuesto_max: 3_000_000 }, nuevoCtx());
+  assert.equal(sinZona.resultado, 'falta_zona');
+
+  // Zona ambigua: se pregunta, no se adivina. "el chico" cae en diecinueve
+  // barrios del inventario real y elegir uno es equivocarse casi siempre.
+  const ambigua = await buscar({ barrio: 'chapiner' }, nuevoCtx());
+  assert.equal(ambigua.resultado, 'zona_ambigua');
+  assert.deepEqual(ambigua.sugerencias, ['Chapinero', 'Chapinero Alto']);
+  assert.match(ambigua.instruccion, /NO digas que no hay nada/);
+
+  // Zona que no se ubica: PROHIBIDO decir que no tenemos alli.
+  const rara = await buscar({ barrio: 'Villavicencio' }, nuevoCtx());
+  assert.equal(rara.resultado, 'zona_desconocida');
+  assert.match(rara.instruccion, /PROHIBIDO afirmar que no tenemos/);
+
+  // Y el modo de fallo que producia la negacion sin ningun sintoma visible: la
+  // consulta se cae y el agente lo cuenta como inventario vacio.
+  const ctxCaido = nuevoCtx(true);
+  const caida = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctxCaido);
+  assert.equal(caida.resultado, 'no_pude_consultar');
+  assert.match(caida.instruccion, /PROHIBIDO decirle que no hay inmuebles/);
+  assert.ok(ctxCaido.efectos.escalado, 'un fallo de la base deja avisado a un humano');
+
+  // La UNICA negacion permitida: se consulto, la zona existe y no hay nada de
+  // esa operacion. Va acotada a esa zona y esa operacion.
+  const vacia = await buscar({ operacion: 'venta', barrio: 'Chapinero' }, nuevoCtx());
+  assert.equal(vacia.resultado, 'cero_en_la_zona');
+  assert.match(vacia.instruccion, /Esto SI lo puedes afirmar/);
+  assert.match(vacia.instruccion, /registrar_interes/);
+}
+
+// ── enviar_ficha resuelve contra lo que se mostro, y nunca improvisa ────────
+{
+  const ctx = nuevoCtx();
+  const res = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  assert.equal(res.inmuebles[0].ficha, 'https://www.metrocuadrado.com/ficha-0');
+  assert.equal(ctx.ctxAgente.mostrados.length, 5, 'queda lo mostrado, para el turno siguiente');
+  // Cuatro campos, no la fila entera: esto persiste en MemoriaChat y meter
+  // propiedades completas ahi es lo que reventaba la escritura del estado.
+  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ['id', 'codigo', 'titulo', 'ficha']);
+  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 2_000);
+
+  assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctx)).ok, true);
+  assert.equal(ctx.salida.globos.at(-1), 'https://www.metrocuadrado.com/ficha-0');
+
+  // Un id que no se mostro se busca en la base antes de decir nada. Y si no
+  // aparece, la respuesta NUNCA es "ese ya no lo tengo": era la unica tool de
+  // ventas que devolvia un error crudo y el modelo lo improvisaba.
+  const fantasma = await enviarFicha.ejecutar({ inmueble_id: 'no-existe' }, ctx);
+  assert.equal(fantasma.ok, false);
+  assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
+
+  // Un inmueble que existe pero no se mostro: se resuelve por id contra la base.
+  assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctx)).ok, true);
+
+  // Si la base se cae, tampoco se niega.
+  const ctxCaido = nuevoCtx(true);
+  const sinBase = await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctxCaido);
+  assert.equal(sinBase.error, 'no_pude_consultar');
+  assert.match(sinBase.instruccion, /NO digas que no existe/);
+
+  // agendar_visita no agenda sobre un id que no pudo ubicar: el asesor se
+  // encontraba citas para inmuebles que no existen.
+  const visitaFalsa = await agendarVisita.ejecutar(
+    { inmueble_id: 'no-existe', preferencia: 'el sabado' },
+    { ...ctx, estado: estadoVacio(), db: { ...ctx.db, crear: async () => { throw new Error('no debe crear'); } } },
+  );
+  assert.equal(visitaFalsa.ok, false);
+  assert.match(visitaFalsa.instruccion, /NO quedo agendada/);
+}
+
+// ── buscar_por_codigo consulta la BASE, no una ventana ──────────────────────
+{
+  const ctx = nuevoCtx();
+  // El cliente lo dicta como lo ve. Antes se mandaba el texto crudo y
+  // "cod 90-1001" no encontraba nada, con la tool ordenando decir que no existe.
+  for (const dicho of ['90-1001', 'cod 90-1001', '90 1001']) {
+    const r = await buscarPorCodigo.ejecutar({ codigo: dicho }, ctx);
+    assert.equal(r.ok, true, `"${dicho}" tiene que encontrar el inmueble`);
+    assert.equal(r.inmueble.codigo, '90-1001');
+  }
+  // Consultado y no aparece: eso SI se puede decir.
+  const noExiste = await buscarPorCodigo.ejecutar({ codigo: '99-9999' }, ctx);
+  assert.equal(noExiste.error, 'no_encontrado');
+  assert.match(noExiste.instruccion, /Consultado/);
+  // Si no se pudo consultar, no se puede decir que no existe.
+  const caido = await buscarPorCodigo.ejecutar({ codigo: '99-9999' }, nuevoCtx(true));
+  assert.equal(caido.error, 'no_pude_consultar');
+  assert.match(caido.instruccion, /PROHIBIDO decirle que no existe/);
+}
+
+// ── El prompt tiene la regla simetrica de la ausencia ───────────────────────
+//
+// Sin esto, arreglar la herramienta solo cambia de sitio la mentira: el modelo
+// no estaba alucinando, estaba obedeciendo a tres capas que le ordenaban negar
+// sin rodeos y ninguna le concedia el derecho a decir "no lo se".
+assert.match(IDENTIDAD_MARCA, /tampoco puedes afirmar que algo NO existe/);
+assert.doesNotMatch(PROMPTS.ventas, /Si no hay opciones, dilo sin rodeos/);
+assert.match(PROMPTS.ventas, /cero_bajo_el_filtro/);
+assert.match(PROMPTS.ventas, /tipo de inmueble/);
 
 const estadoLead = estadoVacio();
 estadoLead.compartido.contacto_id = 'contacto-1';
@@ -324,7 +560,8 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
 // agente prometia "te aviso cuando entre algo" y no quedaba registrado.
 {
   const ctx = {
-    db: dbFalsa([]), ctxAgente: {}, estado: estadoVacio(), entrada: entrada('busco algo'),
+    db: dbInmuebles([], [{ nombre: 'Chapinero', normalizado: 'chapinero', activo: true }]),
+    ctxAgente: {}, estado: estadoVacio(), entrada: entrada('busco algo'),
     salida: { globos: [], finTurno: false },
     efectos: { transferir: null, escalado: null, notificar: [] },
   };
@@ -334,38 +571,9 @@ assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada('buenas tardes
     { operacion: 'arriendo', barrio: 'Chapinero', tipo: null, presupuesto_max: null, habitaciones_min: null },
     ctx,
   );
-  assert.equal(r.encontrados, 0);
+  assert.equal(r.resultado, 'cero_en_la_zona');
   assert.ok(r.instruccion, 'el caso sin resultados trae guia, no una lista vacia pelada');
   assert.ok(r.instruccion.includes('registrar_interes'), 'apunta a la tool que si existe');
-}
-
-// ── Gate de discovery ────────────────────────────────────────────────────────
-// El unico parametro obligatorio era `operacion`. Con todo lo demas en null el
-// filtro no descartaba nada y salian cinco inmuebles ARBITRARIOS en el primer
-// mensaje: un broker no abre con un listado.
-{
-  const ctx = {
-    db: dbFalsa([{ id: 'p1', estado: 'Disponible', operacion: 'Arriendo', barrio: 'Chico', tipo: 'Apartamento', canon_arriendo: 3e6, habitaciones: 2 }]),
-    ctxAgente: {},
-    estado: estadoVacio(), entrada: entrada('busco algo'),
-    salida: { globos: [], finTurno: false },
-    efectos: { transferir: null, escalado: null, notificar: [] },
-  };
-  const sinNada = await buscarInmuebles.ejecutar(
-    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: null, habitaciones_min: null }, ctx);
-  assert.equal(sinNada.falta_discovery, true, 'sin zona ni presupuesto no se muestra inventario');
-  assert.equal(sinNada.inmuebles, undefined, 'no devuelve inmuebles');
-
-  // Con zona ya puede buscar.
-  const conZona = await buscarInmuebles.ejecutar(
-    { operacion: 'arriendo', barrio: 'Chico', tipo: null, presupuesto_max: null, habitaciones_min: null }, ctx);
-  assert.ok(conZona.falta_discovery === undefined, 'con zona si busca');
-  assert.equal(conZona.encontrados, 1);
-
-  // Con presupuesto tambien.
-  const conTope = await buscarInmuebles.ejecutar(
-    { operacion: 'arriendo', barrio: null, tipo: null, presupuesto_max: 4e6, habitaciones_min: null }, ctx);
-  assert.ok(conTope.falta_discovery === undefined, 'con presupuesto si busca');
 }
 
 // ── Horario del equipo ───────────────────────────────────────────────────────

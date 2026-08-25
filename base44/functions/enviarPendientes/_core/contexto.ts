@@ -222,35 +222,38 @@ type Cargador = (db: Db, estado: Estado, entrada: Entrada) => Promise<Record<str
 const CARGADORES: Record<Agente, Cargador> = {
   recepcion: async () => ({}),
 
-  // Ventas NO precarga el catalogo.
+  // Ventas YA NO PRECARGA EL CATALOGO.
   //
-  // Cargaba 100 inmuebles al abrir la conversacion —los primeros que devolviera
-  // la base, sin criterio— y buscar_inmuebles filtraba sobre esos. Con 2714 en
-  // el catalogo el agente veia el 4%, y si los 100 cargados eran de La Calera
-  // respondia "no tengo nada en Chapinero" teniendo 624 alli.
+  // Antes traia 100 inmuebles cualesquiera (los mas recientes) y buscar_inmuebles
+  // filtraba esos 100. Con 2737 en inventario eso dejaba al agente ciego al 96%,
+  // y como el filtro devolvia vacio, terminaba afirmando que no habia nada. Un
+  // cliente pidio Rosales, habia 66, y se le dijo que solo habia 2.
   //
-  // Ahora buscar_inmuebles consulta la base con lo que el cliente pidio, que es
-  // lo que hace un asesor: no se memoriza el inventario, lo consulta. De paso
-  // cada turno arranca mas liviano.
+  // Ademas ese catalogo era el que reventaba la escritura del estado: 100 filas
+  // completas son unos 440 KB, muy por encima de lo que Base44 acepta en un
+  // campo. Se arreglaba borrandolo antes de guardar (olvidarTransitorios), que
+  // era curar el sintoma.
   //
-  // Se conserva el resumen del portafolio porque ubica al agente —cuanto hay y
-  // donde— sin cargar las fichas. Sale de un conteo, no de traer los inmuebles.
+  // Ahora la busqueda consulta la base filtrando por zona (ver buscar_inmuebles).
+  // Lo unico que se precarga es el DICCIONARIO de zonas, que es lo que traduce
+  // "rosales" a "Los Rosales" y sin lo cual la consulta por igualdad devuelve
+  // cero. Va aqui y no dentro de la tool porque este cargador corre en paralelo
+  // con el resto del turno: asi la traduccion sale gratis en tiempo. Son unos
+  // 300 nombres cortos (~35 KB) contra los ~440 KB del catalogo que reemplaza.
   ventas: async (db, estado) => {
-    const [muestra, campanas] = await Promise.all([
-      // Solo para el resumen: zonas y proporcion. No es el catalogo de busqueda.
-      db.list('Propiedad', { estado: 'Disponible', limit: 300 }),
+    const [zonas, campanas] = await Promise.all([
+      db.list('ZonaInmueble', { activo: true, limit: 800 }),
       estado.compartido.campana_id
         ? db.list('CampanaAds', { id: String(estado.compartido.campana_id), limit: 1 })
         : Promise.resolve([]),
     ]);
-    const barrios = [...new Set(muestra.map((p: any) => p.barrio).filter(Boolean))].slice(0, 25);
     return {
       campana: campanas[0] || null,
-      resumen_portafolio: muestra.length
-        ? 'Tenemos inventario en venta y en arriendo.'
-          + (barrios.length ? ` Algunas zonas con disponibilidad: ${barrios.join(', ')}.` : '')
-          + ' Para saber que hay de verdad usa buscar_inmuebles: consulta el catalogo completo.'
-        : '',
+      // Nombre y normalizado, nada mas. NINGUN conteo: un conteo guardado se
+      // desactualiza en cuanto entra o sale un inmueble, y un numero viejo dicho
+      // con seguridad es exactamente el fallo que esto viene a arreglar. El
+      // conteo real sale siempre de la consulta, en el momento.
+      zonas: zonas.map((z: any) => ({ nombre: String(z.nombre), normalizado: String(z.normalizado) })),
     };
   },
 
@@ -335,7 +338,25 @@ export function armarSystem(
     `Identidad verificada: ${i.verificado && i.expira && new Date(i.expira) > new Date() ? 'SI' : 'NO'}`,
     i.bloqueado_hasta && new Date(i.bloqueado_hasta) > new Date() ? 'ATENCION: bloqueado por intentos fallidos de verificacion.' : '',
     Object.keys(ctxAgente.datos || {}).length ? `Datos que ya tienes: ${JSON.stringify(ctxAgente.datos)}` : '',
-    ctxAgente.resumen_portafolio ? `\n${ctxAgente.resumen_portafolio}` : '',
+    // AQUI YA NO SE HABLA DE INVENTARIO, Y ES DELIBERADO.
+    //
+    // Iba "Hoy hay N inmuebles activos: X en arriendo y Y en venta. Zonas con
+    // disponibilidad: ...", contado sobre los 100 inmuebles precargados. Las dos
+    // mitades eran falsas: N valia siempre 100 porque 100 era el limit, no el
+    // total, y la lista de zonas salia de esas mismas 100 filas arbitrarias.
+    //
+    // Lo grave era donde estaba: dentro de === ESTADO DE ESTA CONVERSACION ===,
+    // o sea con autoridad de hecho del sistema y no de resultado de herramienta.
+    // Si "Los Rosales" no caia entre esas 20 zonas, el prompt le estaba diciendo
+    // al modelo que Rosales no tiene disponibilidad ANTES de que el cliente
+    // preguntara. De ahi salio "no hay ninguno mas en Rosales": el agente no lo
+    // improviso, lo leyo.
+    //
+    // Tampoco se sustituye por la lista completa de zonas. Son ~300 nombres, y
+    // una lista en el prompt es una afirmacion sobre el mundo que envejece sin
+    // avisar. El diccionario vive en el ctx y lo usa buscar_inmuebles, que es la
+    // unica que debe hablar de inventario: si la zona no existe lo dice, y si es
+    // ambigua devuelve las candidatas para que el agente pregunte.
     ctxAgente.nombre_registrado ? `En el sistema figura como: ${ctxAgente.nombre_registrado}` : '',
   ].filter(Boolean).join('\n');
   partes.push(estadoTxt);

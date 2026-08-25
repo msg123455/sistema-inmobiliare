@@ -6,6 +6,22 @@
 
 export type Filtro = Record<string, string | number | boolean | undefined | null>;
 
+/**
+ * Resultado de una lectura que SI distingue "no hay nada" de "no pude mirar".
+ *
+ * POR QUE EXISTE. `list` devuelve [] en los dos casos, y esa ambiguedad le costo
+ * la confianza a un cliente real: la busqueda de inmuebles leia la lista vacia y
+ * el agente le decia "en Rosales no tenemos nada" cuando lo que habia pasado era
+ * que la consulta no respondio. Una negacion es una afirmacion sobre el mundo y
+ * no se puede sacar de un fallo de red.
+ *
+ * `list` se queda tal cual para los ~35 sitios que ya conviven con el [] mudo.
+ * Lo que no puede es heredarlo el codigo nuevo.
+ */
+export type Consulta<T> =
+  | { ok: true; filas: T[] }
+  | { ok: false; motivo: 'filtro_vacio' | 'http' | 'red' | 'formato'; detalle: string };
+
 export function crearDb(apiKey: string, baseUrl?: string) {
   const base = (baseUrl || Deno.env.get('BASE44_APP_URL') || '').replace(/\/+$/, '');
   if (!base) throw new Error('BASE44_APP_URL no configurada');
@@ -17,24 +33,75 @@ export function crearDb(apiKey: string, baseUrl?: string) {
   // expone con ?diag=1 para poder ver la causa real sin adivinar.
   const fallos: string[] = [];
 
+  const vacio = (v: unknown) =>
+    v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+
   const qs = (f?: Filtro) => {
     if (!f) return '';
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) {
-      if (v !== undefined && v !== null && v !== '') p.set(k, String(v));
-    }
+    for (const [k, v] of Object.entries(f)) p.set(k, String(v));
     const s = p.toString();
     return s ? `?${s}` : '';
   };
 
-  async function list<T = any>(entidad: string, filtro?: Filtro): Promise<T[]> {
-    const r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
-    if (!r.ok) {
-      console.error(`db.list ${entidad} ${r.status}`, (await r.text()).slice(0, 200));
-      return [];
+  /**
+   * Lectura que reporta el fallo en vez de disfrazarlo de lista vacia.
+   *
+   * FILTRO VACIO = LA CONSULTA NO SE HACE. Antes, una clave con valor '' o null
+   * se CAIA del query string y la consulta salia SIN ESE FILTRO, o sea mas ancha
+   * de lo que pidio quien llamaba. Eso no es un detalle: en produccion
+   * `Reparacion { arrendatario_id: '' , limit: 10 }` se convertia en
+   * "las 10 reparaciones mas recientes de CUALQUIER arrendatario" y el agente se
+   * las presentaba al cliente como suyas. Un filtro vacio nunca es la intencion:
+   * es un id que no se resolvio. Se falla cerrado.
+   */
+  async function consultar<T = any>(entidad: string, filtro?: Filtro): Promise<Consulta<T>> {
+    if (filtro) {
+      const claveVacia = Object.entries(filtro).find(([, v]) => vacio(v))?.[0];
+      if (claveVacia) {
+        const detalle = `${entidad}: la clave "${claveVacia}" llego vacia`;
+        console.error(`db.consultar filtro vacio — ${detalle}`);
+        fallos.push(`consultar ${detalle}`);
+        return { ok: false, motivo: 'filtro_vacio', detalle };
+      }
     }
-    const j = await r.json();
-    return Array.isArray(j) ? j : [];
+
+    let r: Response;
+    try {
+      r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
+    } catch (err) {
+      const detalle = (err as Error).message;
+      console.error(`db.consultar ${entidad} red:`, detalle);
+      fallos.push(`consultar ${entidad} red: ${detalle}`);
+      return { ok: false, motivo: 'red', detalle };
+    }
+
+    if (!r.ok) {
+      const detalle = (await r.text()).slice(0, 200);
+      console.error(`db.consultar ${entidad} ${r.status}`, detalle);
+      fallos.push(`consultar ${entidad} ${r.status}: ${detalle}`);
+      return { ok: false, motivo: 'http', detalle: `${r.status} ${detalle}` };
+    }
+
+    try {
+      const j = await r.json();
+      if (!Array.isArray(j)) {
+        return { ok: false, motivo: 'formato', detalle: `${entidad} no devolvio una lista` };
+      }
+      return { ok: true, filas: j as T[] };
+    } catch (err) {
+      const detalle = (err as Error).message;
+      fallos.push(`consultar ${entidad} formato: ${detalle}`);
+      return { ok: false, motivo: 'formato', detalle };
+    }
+  }
+
+  // La forma comoda, para quien no necesita distinguir el fallo del vacio.
+  // Sigue devolviendo [] pase lo que pase, pero ahora el fallo queda anotado en
+  // `fallos` y ?diag=1 lo ve; antes solo iba a console.error.
+  async function list<T = any>(entidad: string, filtro?: Filtro): Promise<T[]> {
+    const r = await consultar<T>(entidad, filtro);
+    return r.ok ? r.filas : [];
   }
 
   async function uno<T = any>(entidad: string, filtro?: Filtro): Promise<T | null> {
@@ -120,7 +187,7 @@ export function crearDb(apiKey: string, baseUrl?: string) {
     return (res as any)?.id ?? id ?? null;
   }
 
-  return { base, list, uno, crear, actualizar, guardar, fallos };
+  return { base, consultar, list, uno, crear, actualizar, guardar, fallos };
 }
 
 export type Db = ReturnType<typeof crearDb>;

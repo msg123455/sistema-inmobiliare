@@ -196,4 +196,14 @@ export const num = (description: string) => ({ type: 'number', description });
 export const numOpc = (description: string) => ({ type: ['number', 'null'], description });
 export const bool = (description: string) => ({ type: 'boolean', description });
 export const enumStr = (description: string, valores: string[]) => ({ type: 'string', description, enum: valores });
+// Enum que ademas admite null ("todavia no lo se").
+//
+// POR QUE NO BASTA strOpc. El tipo de inmueble se declaraba como texto libre y
+// el modelo mandaba "apartamentos" en plural, o "apartaestudio". El filtro
+// comparaba contra el enum cerrado de la base y descartaba el inventario
+// entero, lo que el agente leia como "no hay nada" y le decia al cliente. Con
+// el enum en el ESQUEMA esa clase de fallo deja de ser posible, en vez de
+// depender de que el modelo escriba bien.
+export const enumStrOpc = (description: string, valores: string[]) =>
+  ({ type: ['string', 'null'], description, enum: [...valores, null] });
 export const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });

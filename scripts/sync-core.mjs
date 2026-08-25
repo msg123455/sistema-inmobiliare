@@ -28,7 +28,23 @@ const CONSUMIDORAS = [
   { nombre: 'enviarPendientes' },
   { nombre: 'seedAgentes', archivos: ['prompts.ts'] },
   { nombre: 'configurarDemoVentas', archivos: ['prompts.ts'] },
+  // Los asistenteN se descubren solos, mas abajo.
 ];
+
+// El asistente desplegado NO estaba en la lista, y esa omision es capaz de
+// tragarse un arreglo entero.
+//
+// publicar-asistente.mjs crea asistenteN clonando agenteInbound con su _core al
+// dia, asi que el que se despliega sale bien. Pero mientras ese asistenteN sigue
+// en el repo, su _core se queda congelado: se puede arreglar _core, correr
+// sync:core y empaquetar, y ver `check-bundles ok` con la funcion que atiende de
+// verdad apuntando a codigo viejo. El bundle se regenera desde la copia rancia,
+// asi que es coherente consigo mismo y CI pasa en verde.
+//
+// Se descubren por nombre para que no haya que acordarse de anadirlos.
+for (const dir of readdirSync(RAIZ, { withFileTypes: true })) {
+  if (dir.isDirectory() && /^asistente\d*$/.test(dir.name)) CONSUMIDORAS.push({ nombre: dir.name });
+}
 
 const soloCheck = process.argv.includes('--check');
 

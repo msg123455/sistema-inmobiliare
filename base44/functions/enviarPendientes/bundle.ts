@@ -15,23 +15,54 @@ function crearDb(apiKey, baseUrl) {
   if (!base) throw new Error("BASE44_APP_URL no configurada");
   const hdrs = { api_key: apiKey, "Content-Type": "application/json" };
   const fallos = [];
+  const vacio = (v) => v === void 0 || v === null || typeof v === "string" && v.trim() === "";
   const qs = (f) => {
     if (!f) return "";
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) {
-      if (v !== void 0 && v !== null && v !== "") p.set(k, String(v));
-    }
+    for (const [k, v] of Object.entries(f)) p.set(k, String(v));
     const s = p.toString();
     return s ? `?${s}` : "";
   };
-  async function list(entidad, filtro) {
-    const r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
-    if (!r.ok) {
-      console.error(`db.list ${entidad} ${r.status}`, (await r.text()).slice(0, 200));
-      return [];
+  async function consultar(entidad, filtro) {
+    if (filtro) {
+      const claveVacia = Object.entries(filtro).find(([, v]) => vacio(v))?.[0];
+      if (claveVacia) {
+        const detalle = `${entidad}: la clave "${claveVacia}" llego vacia`;
+        console.error(`db.consultar filtro vacio — ${detalle}`);
+        fallos.push(`consultar ${detalle}`);
+        return { ok: false, motivo: "filtro_vacio", detalle };
+      }
     }
-    const j = await r.json();
-    return Array.isArray(j) ? j : [];
+    let r;
+    try {
+      r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
+    } catch (err) {
+      const detalle = err.message;
+      console.error(`db.consultar ${entidad} red:`, detalle);
+      fallos.push(`consultar ${entidad} red: ${detalle}`);
+      return { ok: false, motivo: "red", detalle };
+    }
+    if (!r.ok) {
+      const detalle = (await r.text()).slice(0, 200);
+      console.error(`db.consultar ${entidad} ${r.status}`, detalle);
+      fallos.push(`consultar ${entidad} ${r.status}: ${detalle}`);
+      return { ok: false, motivo: "http", detalle: `${r.status} ${detalle}` };
+    }
+    try {
+      const j = await r.json();
+      if (!Array.isArray(j)) {
+        return { ok: false, motivo: "formato", detalle: `${entidad} no devolvio una lista` };
+      }
+      return { ok: true, filas: j };
+    } catch (err) {
+      const detalle = err.message;
+      fallos.push(`consultar ${entidad} formato: ${detalle}`);
+      return { ok: false, motivo: "formato", detalle };
+    }
+  }
+  async function list(entidad, filtro) {
+    const r = await consultar(entidad, filtro);
+    return r.ok ? r.filas : [];
   }
   async function uno(entidad, filtro) {
     const arr = await list(entidad, { ...filtro, limit: 1 });
@@ -82,7 +113,7 @@ function crearDb(apiKey, baseUrl) {
     if (!res) return null;
     return res?.id ?? id ?? null;
   }
-  return { base, list, uno, crear, actualizar, guardar, fallos };
+  return { base, consultar, list, uno, crear, actualizar, guardar, fallos };
 }
 
 // base44/functions/enviarPendientes/_core/protocol.ts

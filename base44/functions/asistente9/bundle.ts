@@ -15,29 +15,60 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// base44/functions/asistente8/_core/db.ts
+// base44/functions/asistente9/_core/db.ts
 function crearDb(apiKey, baseUrl) {
   const base = (baseUrl || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
   if (!base) throw new Error("BASE44_APP_URL no configurada");
   const hdrs = { api_key: apiKey, "Content-Type": "application/json" };
   const fallos = [];
+  const vacio = (v) => v === void 0 || v === null || typeof v === "string" && v.trim() === "";
   const qs = (f) => {
     if (!f) return "";
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) {
-      if (v !== void 0 && v !== null && v !== "") p.set(k, String(v));
-    }
+    for (const [k, v] of Object.entries(f)) p.set(k, String(v));
     const s = p.toString();
     return s ? `?${s}` : "";
   };
-  async function list(entidad, filtro) {
-    const r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
-    if (!r.ok) {
-      console.error(`db.list ${entidad} ${r.status}`, (await r.text()).slice(0, 200));
-      return [];
+  async function consultar(entidad, filtro) {
+    if (filtro) {
+      const claveVacia = Object.entries(filtro).find(([, v]) => vacio(v))?.[0];
+      if (claveVacia) {
+        const detalle = `${entidad}: la clave "${claveVacia}" llego vacia`;
+        console.error(`db.consultar filtro vacio — ${detalle}`);
+        fallos.push(`consultar ${detalle}`);
+        return { ok: false, motivo: "filtro_vacio", detalle };
+      }
     }
-    const j = await r.json();
-    return Array.isArray(j) ? j : [];
+    let r;
+    try {
+      r = await fetch(`${base}/api/entities/${entidad}${qs(filtro)}`, { headers: hdrs });
+    } catch (err) {
+      const detalle = err.message;
+      console.error(`db.consultar ${entidad} red:`, detalle);
+      fallos.push(`consultar ${entidad} red: ${detalle}`);
+      return { ok: false, motivo: "red", detalle };
+    }
+    if (!r.ok) {
+      const detalle = (await r.text()).slice(0, 200);
+      console.error(`db.consultar ${entidad} ${r.status}`, detalle);
+      fallos.push(`consultar ${entidad} ${r.status}: ${detalle}`);
+      return { ok: false, motivo: "http", detalle: `${r.status} ${detalle}` };
+    }
+    try {
+      const j = await r.json();
+      if (!Array.isArray(j)) {
+        return { ok: false, motivo: "formato", detalle: `${entidad} no devolvio una lista` };
+      }
+      return { ok: true, filas: j };
+    } catch (err) {
+      const detalle = err.message;
+      fallos.push(`consultar ${entidad} formato: ${detalle}`);
+      return { ok: false, motivo: "formato", detalle };
+    }
+  }
+  async function list(entidad, filtro) {
+    const r = await consultar(entidad, filtro);
+    return r.ok ? r.filas : [];
   }
   async function uno(entidad, filtro) {
     const arr = await list(entidad, { ...filtro, limit: 1 });
@@ -88,10 +119,10 @@ function crearDb(apiKey, baseUrl) {
     if (!res) return null;
     return res?.id ?? id ?? null;
   }
-  return { base, list, uno, crear, actualizar, guardar, fallos };
+  return { base, consultar, list, uno, crear, actualizar, guardar, fallos };
 }
 
-// base44/functions/asistente8/_core/cola.ts
+// base44/functions/asistente9/_core/cola.ts
 async function entregarYa(db, item, env, canales, tokenTelegram) {
   if (!item?.id) return false;
   const globos = Array.isArray(item.globos) ? item.globos : [];
@@ -180,7 +211,7 @@ async function notificarEquipo(config, telCliente, mensajes) {
   }
 }
 
-// base44/functions/asistente8/_core/prompts.ts
+// base44/functions/asistente9/_core/prompts.ts
 var TELEFONO_CONTINGENCIA = "3102109308";
 var IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -216,6 +247,14 @@ LA REGLA QUE MANDA SOBRE TODAS
 Solo puedes afirmar datos que vengan del contexto, del conocimiento aprobado o del
 resultado de una herramienta. Inventar una cifra, una fecha, una direccion, un plazo o
 un dato de la empresa es la falta mas grave. Si no lo tienes, di que debes confirmarlo.
+
+Y VALE IGUAL AL REVES: tampoco puedes afirmar que algo NO existe, que no hay, que no
+queda o que no tenemos si ninguna herramienta te lo dijo. Una ausencia es una afirmacion
+sobre el mundo y se sostiene igual que una presencia: con un resultado en la mano. Que no
+lo hayas visto no significa que no este. Si una herramienta fallo, si no llegaste a
+consultar, o si lo que viste era una parte, entonces NO SABES: dilo asi, y no como si no
+hubiera nada. Una negacion falsa le cuesta a la casa un cliente que no vuelve, porque el
+cliente sabe que ese inmueble existe.
 
 REGLAS DE NEGOCIO PENDIENTES
 Si el conocimiento aprobado no contiene una politica, tarifa, porcentaje, documento o
@@ -261,7 +300,8 @@ QUE TIENES QUE CONSEGUIR, conversando y sin apurar:
 1. nombre
 2. operacion: arriendo o compra
 3. zona o barrio de interes
-4. presupuesto
+4. tipo de inmueble: apartamento, casa, oficina, local, bodega, lote o finca
+5. presupuesto
 
 Cada vez que el cliente diga su nombre o un criterio nuevo, llama a guardar_dato antes
 de responder. En especial, el nombre debe quedar guardado para no volver a pedirlo.
@@ -281,14 +321,41 @@ Muchos escriben despues de ver una ficha en la pagina web y traen el codigo (por
 que NO le preguntes zona ni presupuesto primero. Eso viene despues, si hace falta.
 
 BUSCAR INMUEBLES
+Sin ZONA no se puede buscar: es lo primero que pides. Pasale a la herramienta el barrio
+tal como lo dijo el cliente, ella lo traduce al nombre real ("rosales" -> "Los Rosales").
+El TIPO no lo tienes que pedir por adelantado: llama igual, y si hace falta preguntarlo
+la herramienta te lo dice con el desglose ya hecho.
+
 Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exactos de
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
 enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
 
+LEE 'resultado' ANTES DE CONTESTAR. Decide que puedes afirmar:
+- hay ................. muestra los inmuebles. El total real es 'total', no cuantos le
+                        mandaste: si le muestras 5 de 11, cuando pregunte son 11.
+- falta_tipo .......... dile cuantos hay y de que tipo son, y cierra preguntando cual
+                        busca. UNA pregunta. No listes inmuebles todavia.
+- cero_bajo_el_filtro . NO es "no hay nada". Hay 'en_la_zona' inmuebles ahi y es TU
+                        filtro el que los deja fuera. Di las dos partes y ofrece soltar
+                        el criterio que mas aprieta.
+- cero_en_la_zona ..... esto SI lo puedes negar, y solo esto: acotado a esa zona y esa
+                        operacion. Ofrece registrar_interes y un sector vecino.
+- zona_ambigua ........ pregunta a cual de las zonas que te devuelve se refiere.
+- zona_desconocida .... no ubicas el nombre. PROHIBIDO decir que no tenemos alli.
+- no_pude_consultar ... la consulta fallo. PROHIBIDO negar: no lo sabes. Di que se te
+                        trabo el sistema y que se lo confirmas.
+
+CUANTOS HAY
+Si pregunta cuantos tienes en una zona, el numero sale de la herramienta: 'total' para lo
+que encaja con lo que pidio, 'en_la_zona' para todo lo de esa zona en esa operacion. Nunca
+cuentes los que le mandaste. Y si 'total_es_exacto' viene en false, la consulta pudo venir
+recortada: di "mas de" antes del numero o no des numero.
+
 No pidas datos accesorios antes de calificar.
 
-Si no hay opciones, dilo sin rodeos y ofrecele registrar el interes para avisarle cuando
-entre algo. Si acepta, llama a registrar_interes: prometerselo en el mensaje no guarda nada.
+Cuando la herramienta confirme que no hay nada que encaje, ofrecele registrar el interes
+para avisarle cuando entre algo. Si acepta, llama a registrar_interes: prometerselo en el
+mensaje no guarda nada.
 
 NUNCA cierres la conversacion en el aire. Antes de despedirte deja algo concreto: una visita
 agendada, una ficha enviada, el interes registrado o el lead entregado a un asesor. Si de
@@ -457,7 +524,7 @@ certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni ab
 solicitud: transfiere a recepcion.`
 };
 
-// base44/functions/asistente8/_core/habiles.ts
+// base44/functions/asistente9/_core/habiles.ts
 function pascua(anio) {
   const a = anio % 19;
   const b = Math.floor(anio / 100);
@@ -551,7 +618,7 @@ function sumarHabiles(desde, dias) {
   return new Date(f.getTime() + dia - 1e3);
 }
 
-// base44/functions/asistente8/_core/horario.ts
+// base44/functions/asistente9/_core/horario.ts
 var OFFSET_BOGOTA_H = -5;
 var HORARIO_DEFECTO = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
 function horarioDe(config) {
@@ -588,7 +655,7 @@ function instruccionHorario(ahora, config = {}) {
   return `FUERA DE HORARIO. El equipo atiende de lunes a viernes, de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. Agenda la visita o la llamada con la herramienta que corresponda, registra lo que haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo contacta el siguiente dia habil. Nunca uses eso como primera salida.`;
 }
 
-// base44/functions/asistente8/_core/protocol.ts
+// base44/functions/asistente9/_core/protocol.ts
 var AGENTES = [
   "recepcion",
   "ventas",
@@ -633,9 +700,10 @@ var strOpc = (description) => ({ type: ["string", "null"], description });
 var numOpc = (description) => ({ type: ["number", "null"], description });
 var bool = (description) => ({ type: "boolean", description });
 var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
+var enumStrOpc = (description, valores) => ({ type: ["string", "null"], description, enum: [...valores, null] });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
-// base44/functions/asistente8/_core/state.ts
+// base44/functions/asistente9/_core/state.ts
 var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
 function identidadVacia() {
   return {
@@ -803,7 +871,7 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   return null;
 }
 
-// base44/functions/asistente8/_core/identidad.ts
+// base44/functions/asistente9/_core/identidad.ts
 var HORAS_VIGENCIA = 24;
 var MAX_INTENTOS = 3;
 var BLOQUEO_MIN = 60;
@@ -979,7 +1047,7 @@ async function crearSesionPortal(db, entrada, estado, tipo) {
   return `${app}/portal/entrar?t=${token}`;
 }
 
-// base44/functions/asistente8/_core/contexto.ts
+// base44/functions/asistente9/_core/contexto.ts
 var MAX_RAG_CHARS = 18e3;
 function destinosDe(ch) {
   return String(ch.agentes || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1066,18 +1134,36 @@ async function titularDelMensaje(db, entrada) {
 }
 var CARGADORES = {
   recepcion: async () => ({}),
+  // Ventas YA NO PRECARGA EL CATALOGO.
+  //
+  // Antes traia 100 inmuebles cualesquiera (los mas recientes) y buscar_inmuebles
+  // filtraba esos 100. Con 2737 en inventario eso dejaba al agente ciego al 96%,
+  // y como el filtro devolvia vacio, terminaba afirmando que no habia nada. Un
+  // cliente pidio Rosales, habia 66, y se le dijo que solo habia 2.
+  //
+  // Ademas ese catalogo era el que reventaba la escritura del estado: 100 filas
+  // completas son unos 440 KB, muy por encima de lo que Base44 acepta en un
+  // campo. Se arreglaba borrandolo antes de guardar (olvidarTransitorios), que
+  // era curar el sintoma.
+  //
+  // Ahora la busqueda consulta la base filtrando por zona (ver buscar_inmuebles).
+  // Lo unico que se precarga es el DICCIONARIO de zonas, que es lo que traduce
+  // "rosales" a "Los Rosales" y sin lo cual la consulta por igualdad devuelve
+  // cero. Va aqui y no dentro de la tool porque este cargador corre en paralelo
+  // con el resto del turno: asi la traduccion sale gratis en tiempo. Son unos
+  // 300 nombres cortos (~35 KB) contra los ~440 KB del catalogo que reemplaza.
   ventas: async (db, estado) => {
-    const [catalogo, campanas] = await Promise.all([
-      db.list("Propiedad", { estado: "Disponible", limit: 100 }),
+    const [zonas, campanas] = await Promise.all([
+      db.list("ZonaInmueble", { activo: true, limit: 800 }),
       estado.compartido.campana_id ? db.list("CampanaAds", { id: String(estado.compartido.campana_id), limit: 1 }) : Promise.resolve([])
     ]);
-    const arr = catalogo.filter((p) => String(p.operacion || "").includes("Arriendo")).length;
-    const ven = catalogo.filter((p) => String(p.operacion || "").includes("Venta")).length;
-    const barrios = [...new Set(catalogo.map((p) => p.barrio).filter(Boolean))].slice(0, 20);
     return {
-      catalogo,
       campana: campanas[0] || null,
-      resumen_portafolio: catalogo.length ? `Hoy hay ${catalogo.length} inmuebles activos: ${arr} en arriendo y ${ven} en venta.` + (barrios.length ? ` Zonas con disponibilidad: ${barrios.join(", ")}.` : "") : ""
+      // Nombre y normalizado, nada mas. NINGUN conteo: un conteo guardado se
+      // desactualiza en cuanto entra o sale un inmueble, y un numero viejo dicho
+      // con seguridad es exactamente el fallo que esto viene a arreglar. El
+      // conteo real sale siempre de la consulta, en el momento.
+      zonas: zonas.map((z) => ({ nombre: String(z.nombre), normalizado: String(z.normalizado) }))
     };
   },
   // Cartera carga UN contrato y UN extracto. No carga inventario.
@@ -1140,8 +1226,25 @@ ${instruccionHorario(/* @__PURE__ */ new Date(), base.config || {})}`);
     `Identidad verificada: ${i.verificado && i.expira && new Date(i.expira) > /* @__PURE__ */ new Date() ? "SI" : "NO"}`,
     i.bloqueado_hasta && new Date(i.bloqueado_hasta) > /* @__PURE__ */ new Date() ? "ATENCION: bloqueado por intentos fallidos de verificacion." : "",
     Object.keys(ctxAgente.datos || {}).length ? `Datos que ya tienes: ${JSON.stringify(ctxAgente.datos)}` : "",
-    ctxAgente.resumen_portafolio ? `
-${ctxAgente.resumen_portafolio}` : "",
+    // AQUI YA NO SE HABLA DE INVENTARIO, Y ES DELIBERADO.
+    //
+    // Iba "Hoy hay N inmuebles activos: X en arriendo y Y en venta. Zonas con
+    // disponibilidad: ...", contado sobre los 100 inmuebles precargados. Las dos
+    // mitades eran falsas: N valia siempre 100 porque 100 era el limit, no el
+    // total, y la lista de zonas salia de esas mismas 100 filas arbitrarias.
+    //
+    // Lo grave era donde estaba: dentro de === ESTADO DE ESTA CONVERSACION ===,
+    // o sea con autoridad de hecho del sistema y no de resultado de herramienta.
+    // Si "Los Rosales" no caia entre esas 20 zonas, el prompt le estaba diciendo
+    // al modelo que Rosales no tiene disponibilidad ANTES de que el cliente
+    // preguntara. De ahi salio "no hay ninguno mas en Rosales": el agente no lo
+    // improviso, lo leyo.
+    //
+    // Tampoco se sustituye por la lista completa de zonas. Son ~300 nombres, y
+    // una lista en el prompt es una afirmacion sobre el mundo que envejece sin
+    // avisar. El diccionario vive en el ctx y lo usa buscar_inmuebles, que es la
+    // unica que debe hablar de inventario: si la zona no existe lo dice, y si es
+    // ambigua devuelve las candidatas para que el agente pregunte.
     ctxAgente.nombre_registrado ? `En el sistema figura como: ${ctxAgente.nombre_registrado}` : ""
   ].filter(Boolean).join("\n");
   partes.push(estadoTxt);
@@ -1175,7 +1278,7 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
   return partes.join("\n\n");
 }
 
-// base44/functions/asistente8/_core/diagnostico.ts
+// base44/functions/asistente9/_core/diagnostico.ts
 var miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function informeChunks(d) {
   if (!d) {
@@ -1212,7 +1315,7 @@ function informeChunks(d) {
   return l.join("\n");
 }
 
-// base44/functions/asistente8/_core/llm.ts
+// base44/functions/asistente9/_core/llm.ts
 var API = "https://api.anthropic.com/v1/messages";
 function paramsModelo(modelo, effort) {
   if (/haiku/.test(modelo)) return {};
@@ -1345,7 +1448,7 @@ async function correrAgente(opts) {
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
 }
 
-// base44/functions/asistente8/_core/router.ts
+// base44/functions/asistente9/_core/router.ts
 var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 var POR_BOTON = {
   "flujo:consignacion": "consignacion",
@@ -1463,7 +1566,7 @@ ${entrada.texto.slice(0, 600)}`
   };
 }
 
-// base44/functions/asistente8/_core/tools/asistidos.ts
+// base44/functions/asistente9/_core/tools/asistidos.ts
 var PRIORIDAD = {
   baja: "Baja",
   media: "Media",
@@ -1540,7 +1643,7 @@ var ASISTIDOS = {
   consultar_historial_solicitudes: consultarHistorialSolicitudes
 };
 
-// base44/functions/asistente8/_core/brief.ts
+// base44/functions/asistente9/_core/brief.ts
 var ETIQUETAS = {
   operacion: "Operacion",
   tipo_prop: "Tipo de inmueble",
@@ -1601,7 +1704,7 @@ function briefLead(estado, tel, canal, extra = []) {
   return lineas.join("\n");
 }
 
-// base44/functions/asistente8/_core/tools/comunes.ts
+// base44/functions/asistente9/_core/tools/comunes.ts
 var COMPARTIDOS = /* @__PURE__ */ new Set(["nombre", "email", "documento", "direccion_inmueble"]);
 var NUMERICOS = /* @__PURE__ */ new Set(["presupuesto", "canon_esperado", "valor_esperado", "area_m2", "habitaciones", "nps_score"]);
 var responder = {
@@ -1742,7 +1845,7 @@ var enviarMenu = {
   }
 };
 
-// base44/functions/asistente8/_core/tools/identificacion.ts
+// base44/functions/asistente9/_core/tools/identificacion.ts
 var identificarTitular = {
   ...definirTool(
     "identificar_titular",
@@ -1790,7 +1893,7 @@ var identificarTitular = {
   }
 };
 
-// base44/functions/asistente8/_core/scoring.ts
+// base44/functions/asistente9/_core/scoring.ts
 var ETAPA = {
   Lead: 10,
   Visita_Agendada: 35,
@@ -1843,11 +1946,12 @@ function calificar(s) {
   };
 }
 
-// base44/functions/asistente8/_core/tools/ventas.ts
+// base44/functions/asistente9/_core/tools/ventas.ts
+var normalizarZona = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^(los|las|el|la)\s+/, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 async function asignarAsesor(db, criterios) {
   const activos = await db.list("Asesor", { estado: "Activo", limit: 100 });
   if (!activos.length) return null;
-  const zona = String(criterios.zona || "").toLowerCase();
+  const zona = normalizarZona(criterios.zona);
   const quiereArriendo = String(criterios.operacion || "").startsWith("arr");
   const porTipo = activos.filter((a) => {
     const t = String(a.tipo || "Ambos");
@@ -1856,7 +1960,10 @@ async function asignarAsesor(db, criterios) {
   });
   let cand = porTipo.length ? porTipo : activos;
   if (zona) {
-    const porZona = cand.filter((a) => Array.isArray(a.zonas) && a.zonas.some((z) => zona.includes(String(z).toLowerCase())));
+    const porZona = cand.filter((a) => Array.isArray(a.zonas) && a.zonas.some((z) => {
+      const suya = normalizarZona(z);
+      return Boolean(suya) && (zona.includes(suya) || suya.includes(zona));
+    }));
     if (porZona.length) cand = porZona;
   }
   const cargas = await Promise.all(cand.map(async (a) => ({
@@ -1874,6 +1981,9 @@ var fmtCOP = (n) => new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0
 }).format(Math.round(n)).replace(/\s+/g, "");
+var linkFicha = (p) => String(
+  p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
+).trim();
 function resumirProp(p, esArriendo) {
   return {
     id: p.id,
@@ -1891,86 +2001,239 @@ function resumirProp(p, esArriendo) {
     video: p.link_instagram || null
   };
 }
-var linkFicha = (p) => String(
-  p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
-).trim();
+var TIPOS = ["Apartamento", "Casa", "Local", "Oficina", "Bodega", "Lote", "Finca", "Otro"];
+var TIPOS_OFRECIBLES = TIPOS.filter((t) => t !== "Otro");
+var CON_HABITACIONES = /* @__PURE__ */ new Set(["Apartamento", "Casa", "Finca"]);
+function normalizarTipo(v) {
+  const s = normalizarZona(v);
+  if (!s) return "";
+  const exacto = TIPOS.find((t) => normalizarZona(t) === s);
+  if (exacto) return exacto;
+  if (/apartaestudio|aparta estudio|penthouse|pent house|duplex|apartamento|apto/.test(s)) return "Apartamento";
+  if (/consultorio|oficina/.test(s)) return "Oficina";
+  if (/bodega/.test(s)) return "Bodega";
+  if (/local/.test(s)) return "Local";
+  if (/finca/.test(s)) return "Finca";
+  if (/casa/.test(s)) return "Casa";
+  if (/lote|terreno/.test(s)) return "Lote";
+  return "";
+}
+async function resolverZona(db, loQueDijo, zonasPrecargadas) {
+  const q = normalizarZona(loQueDijo);
+  if (!q) return { nombre: "", parecidas: [] };
+  const zonas = zonasPrecargadas?.length ? zonasPrecargadas : await db.list("ZonaInmueble", { activo: true, limit: 800 });
+  if (!zonas.length) return { nombre: String(loQueDijo), parecidas: [] };
+  const exacta = zonas.find((z) => String(z.normalizado) === q);
+  if (exacta) return { nombre: String(exacta.nombre), parecidas: [] };
+  const empiezan = zonas.filter((z) => String(z.normalizado).startsWith(q));
+  const contienen = zonas.filter((z) => String(z.normalizado).includes(q));
+  const cand = (empiezan.length ? empiezan : contienen).map((z) => String(z.nombre));
+  if (cand.length === 1) return { nombre: cand[0], parecidas: [] };
+  return { nombre: "", parecidas: cand.slice(0, 6) };
+}
+var MOSTRAR = 5;
+var LIMITE_CONSULTA = 200;
+var TOPES_DE_PAGINA = /* @__PURE__ */ new Set([50, 100, LIMITE_CONSULTA]);
+var precioDe = (p, esArr) => Number(esArr ? p.canon_arriendo : p.precio_venta) || 0;
+function contarPorTipo(props) {
+  const out = {};
+  for (const p of props) {
+    const t = normalizarTipo(p.tipo) || "Otro";
+    out[t] = (out[t] || 0) + 1;
+  }
+  return out;
+}
+var enPalabras = (porTipo) => Object.entries(porTipo).sort((a, b) => b[1] - a[1]).map(([t, n]) => {
+  const palabra = t.toLowerCase();
+  if (n === 1) return `1 ${palabra}`;
+  return `${n} ${palabra}${/[aeiou]$/.test(palabra) ? "s" : "es"}`;
+}).join(", ");
 var buscarInmuebles = {
   ...definirTool(
     "buscar_inmuebles",
-    "Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui.",
+    "Busca en el inventario real inmuebles que encajen con lo que pide el cliente. Devuelve solo lo que existe: NUNCA menciones un inmueble, precio o direccion que no venga de aqui. Mira el campo `resultado` antes de contestar: es lo que decide que puedes y que NO puedes afirmar.",
     {
       operacion: enumStr("Que busca", ["venta", "arriendo"]),
-      barrio: strOpc("Barrio o zona. null si no lo ha dicho."),
-      tipo: strOpc("apartamento, casa, oficina, local, bodega, lote. null si no lo ha dicho."),
+      barrio: strOpc("Barrio o zona, tal como lo dijo el cliente. La herramienta lo traduce al nombre real. null si no lo ha dicho."),
+      tipo: enumStrOpc(
+        "Tipo de inmueble. Apartaestudio, penthouse y duplex van como Apartamento; consultorio va como Oficina. null si el cliente todavia no lo ha dicho.",
+        TIPOS_OFRECIBLES
+      ),
       presupuesto_max: numOpc("Tope en pesos. null si no lo ha dicho."),
       habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica.")
     },
     { retorna: true }
   ),
   ejecutar: async (input, c) => {
-    const props = c.ctxAgente.catalogo || [];
     const esArr = input.operacion === "arriendo";
-    const barrio = String(input.barrio || "").toLowerCase();
-    const tipo = String(input.tipo || "").toLowerCase();
+    const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
-    if (!barrio && !tope) {
+    if (!String(input.barrio || "").trim()) {
       return {
-        falta_discovery: true,
-        instruccion: "Todavia no tienes con que buscar. Antes de mostrar inmuebles necesitas al menos la zona o el presupuesto. Preguntale UNA de las dos, la que fluya mejor en la conversacion, y vuelve a llamarme cuando la tengas. No muestres inventario ni digas que estas buscando."
+        resultado: "falta_zona",
+        instruccion: "Todavia no tienes zona, y sin zona no puedo buscar. Preguntale en que barrio o sector lo quiere. Si ya te dijo el presupuesto o el tipo, no los repitas: pide solo la zona. No muestres inventario ni digas que estas buscando."
       };
     }
-    const puntuados = props.filter((p) => {
+    const zona = await resolverZona(c.db, String(input.barrio), c.ctxAgente.zonas);
+    if (!zona.nombre) {
+      return {
+        resultado: zona.parecidas.length ? "zona_ambigua" : "zona_desconocida",
+        sugerencias: zona.parecidas,
+        instruccion: zona.parecidas.length ? `"${input.barrio}" encaja con varias zonas nuestras: ${zona.parecidas.join(", ")}. Preguntale a cual se refiere, nombrandoselas. NO elijas tu: son barrios distintos y acertar por azar seria equivocarse la mayoria de las veces. NO digas que no hay nada.` : `No ubicas la zona "${input.barrio}". Preguntale por el barrio o el sector con otras palabras, o pidele un punto de referencia. PROHIBIDO afirmar que no tenemos inmuebles alli: no lo has comprobado, lo que pasa es que no reconoces ese nombre.`
+      };
+    }
+    const r = await c.db.consultar("Propiedad", {
+      barrio: zona.nombre,
+      estado: "Disponible",
+      limit: LIMITE_CONSULTA
+    });
+    if (r.ok === false) {
+      c.efectos.escalado = c.efectos.escalado || {
+        motivo: `no se pudo consultar el inventario de ${zona.nombre} (${r.motivo})`,
+        prioridad: "media"
+      };
+      return {
+        resultado: "no_pude_consultar",
+        instruccion: `La consulta del inventario de ${zona.nombre} no respondio. PROHIBIDO decirle que no hay inmuebles: no lo sabes. Dile que se te trabo el sistema un momento y que se lo confirmas enseguida. Sigue la conversacion recogiendo lo que falte; ya hay un asesor avisado.`
+      };
+    }
+    const enLaZona = r.filas.filter((p) => {
       const op = String(p.operacion || "");
-      if (!(op === "Venta_y_Arriendo" || (esArr ? op === "Arriendo" : op === "Venta"))) return false;
-      const barrioPropiedad = String(p.barrio || "").toLowerCase();
-      const zonaPropiedad = [p.barrio, p.zona, p.ciudad].map((valor) => String(valor || "").toLowerCase()).join(" ");
-      const coincideZona = zonaPropiedad.includes(barrio) || Boolean(barrioPropiedad && barrio.includes(barrioPropiedad));
-      if (barrio && !coincideZona) {
-        return false;
-      }
-      if (tipo && !String(p.tipo || "").toLowerCase().includes(tipo)) return false;
-      const precio = esArr ? Number(p.canon_arriendo) || 0 : Number(p.precio_venta) || 0;
-      if (tope && (!precio || precio > tope)) return false;
-      if (habs && (!Number(p.habitaciones) || Number(p.habitaciones) < habs)) return false;
-      return true;
-    }).map((p) => {
-      let s = 0;
-      const pb = String(p.barrio || "").toLowerCase();
-      if (barrio && pb && (pb.includes(barrio) || barrio.includes(pb))) s += 3;
-      if (tipo && String(p.tipo || "").toLowerCase().includes(tipo)) s += 2;
-      if (habs && Number(p.habitaciones) >= habs) s += 2;
-      const precio = esArr ? Number(p.canon_arriendo) || 0 : Number(p.precio_venta) || 0;
-      if (tope && precio && precio <= tope * 1.15) s += 2;
-      return { p, s };
-    }).sort((a, b) => b.s - a.s).slice(0, 5);
-    if (!puntuados.length) {
+      return op === "Venta_y_Arriendo" || op === (esArr ? "Arriendo" : "Venta");
+    });
+    const dudoso = TOPES_DE_PAGINA.has(r.filas.length);
+    const operacionTxt = esArr ? "arriendo" : "venta";
+    if (!enLaZona.length) {
       return {
-        encontrados: 0,
-        inmuebles: [],
-        instruccion: "Hoy no hay nada que encaje. Dilo sin rodeos, NO ofrezcas alternativas que no viste aqui, y ofrecele registrar el interes para avisarle cuando entre algo: para eso llama a registrar_interes. Si el cliente acepta, esa llamada es obligatoria, no basta con prometerselo."
+        resultado: "cero_en_la_zona",
+        zona: zona.nombre,
+        revisados: r.filas.length,
+        instruccion: `Comprobado: en ${zona.nombre} no tenemos nada en ${operacionTxt} ahora mismo. Esto SI lo puedes afirmar porque acabas de mirarlo, pero dilo acotado a esa zona y esa operacion, nunca como "no tenemos nada". Ofrecele registrar el interes con registrar_interes, que es la unica forma de que ese aviso quede guardado, y ofrecele tambien mirar un sector vecino.`
       };
     }
+    const porTipo = contarPorTipo(enLaZona);
+    if (!tipo && Object.keys(porTipo).length > 1 && !c.ctxAgente.tipo_preguntado) {
+      c.ctxAgente.tipo_preguntado = true;
+      return {
+        resultado: "falta_tipo",
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        total_es_exacto: !dudoso,
+        por_tipo: porTipo,
+        instruccion: `En ${zona.nombre} en ${operacionTxt} tenemos ${dudoso ? "mas de " : ""}${enLaZona.length}: ${enPalabras(porTipo)}. Dilo asi de corto y cierra preguntandole que tipo busca. UNA sola pregunta, y no listes inmuebles todavia: acabas de darle un dato real, no le estas haciendo un cuestionario.`
+      };
+    }
+    let sinPrecioPublicado = 0;
+    const encajan = enLaZona.filter((p) => {
+      const suTipo = normalizarTipo(p.tipo);
+      if (tipo && suTipo !== tipo) return false;
+      if (habs && CON_HABITACIONES.has(suTipo) && Number(p.habitaciones || 0) < habs) return false;
+      if (tope) {
+        const precio = precioDe(p, esArr);
+        if (!precio) {
+          sinPrecioPublicado++;
+          return false;
+        }
+        if (precio > tope) return false;
+      }
+      return true;
+    });
+    const otrosSinClasificar = tipo ? porTipo.Otro || 0 : 0;
+    const filtros = [
+      tipo ? `tipo ${tipo.toLowerCase()}` : "",
+      tope ? `hasta ${fmtCOP(tope)}` : "",
+      habs ? `${habs} o mas habitaciones` : ""
+    ].filter(Boolean);
+    if (!encajan.length) {
+      return {
+        resultado: "cero_bajo_el_filtro",
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        por_tipo: porTipo,
+        filtros_aplicados: filtros,
+        sin_precio_publicado: sinPrecioPublicado,
+        otros_sin_clasificar: otrosSinClasificar,
+        instruccion: `OJO: en ${zona.nombre} SI tenemos ${enLaZona.length} en ${operacionTxt} (${enPalabras(porTipo)}). Ninguno cumple ${filtros.join(" y ")}. Dilo con esas dos partes: cuantos hay en la zona y cual de tus criterios los deja fuera. Ofrecele soltar el que mas aprieta. PROHIBIDO decir "no hay nada" o "no tenemos": si los hay.` + (sinPrecioPublicado ? ` Ademas hay ${sinPrecioPublicado} sin precio cargado que pueden servirle: el asesor se lo confirma.` : "")
+      };
+    }
+    const orden = [...encajan].sort((a, b) => {
+      const pa = precioDe(a, esArr);
+      const pb = precioDe(b, esArr);
+      return (pa ? 0 : 1) - (pb ? 0 : 1) || pa - pb;
+    });
+    const visibles = orden.slice(0, MOSTRAR);
+    const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
+    const nuevos = visibles.map((p) => ({
+      id: p.id,
+      codigo: p.codigo_externo || "",
+      titulo: p.titulo || "",
+      ficha: linkFicha(p)
+    }));
+    const vistos = new Set(nuevos.map((m) => m.id));
+    c.ctxAgente.mostrados = [...nuevos, ...antes.filter((m) => !vistos.has(m.id))].slice(0, 10);
     return {
-      encontrados: puntuados.length,
-      inmuebles: puntuados.map(({ p }) => resumirProp(p, esArr)),
-      nota: "Solo puedes afirmar los datos que aparecen aqui. Si un campo viene en null, ese dato NO lo tienes: dile al cliente que se lo confirma el asesor."
+      resultado: "hay",
+      zona: zona.nombre,
+      // Cuantos hay DE VERDAD bajo lo que pidio, y cuantos le estas mostrando.
+      // Antes solo existia `encontrados`, que se calculaba DESPUES de cortar a
+      // cinco: era un tope disfrazado de conteo, y de ahi salio literal "solo
+      // esos dos que ya te mande".
+      total: encajan.length,
+      mostrados: visibles.length,
+      hay_mas: encajan.length > visibles.length,
+      en_la_zona: enLaZona.length,
+      total_es_exacto: !dudoso,
+      por_tipo: porTipo,
+      sin_precio_publicado: sinPrecioPublicado,
+      otros_sin_clasificar: otrosSinClasificar,
+      inmuebles: visibles.map((p) => resumirProp(p, esArr)),
+      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes: dile que se lo confirma el asesor, no lo completes."
     };
   }
 };
+async function resolverInmueble(c, id) {
+  const guardado = (c.ctxAgente.mostrados || []).find((m) => m.id === id);
+  if (guardado) return { ok: true, mostrado: guardado };
+  if (!String(id || "").trim()) return { ok: false, motivo: "no_mostrado" };
+  const r = await c.db.consultar("Propiedad", { id: String(id), limit: 1 });
+  if (r.ok === false) return { ok: false, motivo: "no_pude_consultar" };
+  const p = r.filas[0];
+  if (!p) return { ok: false, motivo: "no_mostrado" };
+  if (String(p.estado || "") !== "Disponible") return { ok: false, motivo: "no_disponible" };
+  return {
+    ok: true,
+    mostrado: { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) }
+  };
+}
 var enviarFicha = {
   ...definirTool(
     "enviar_ficha",
     "Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.",
     { inmueble_id: str("El id que devolvio buscar_inmuebles") }
   ),
-  ejecutar: (input, c) => {
-    const p = (c.ctxAgente.catalogo || []).find((x) => x.id === input.inmueble_id);
-    if (!p) return { ok: false, error: "inmueble no encontrado" };
-    const ficha = linkFicha(p);
-    if (!ficha) return { ok: false, error: "sin_ficha", nota: "Dile que el asesor se la comparte. No inventes el link." };
+  ejecutar: async (input, c) => {
+    const res = await resolverInmueble(c, String(input.inmueble_id || ""));
+    if (!res.ok) {
+      return res.motivo === "no_pude_consultar" ? {
+        ok: false,
+        error: "no_pude_consultar",
+        instruccion: "No pudiste consultar ese inmueble. NO digas que no existe ni que ya no esta disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas."
+      } : {
+        ok: false,
+        error: "no_mostrado",
+        instruccion: "Ese id no salio en tu busqueda. NO inventes la ficha y NO le digas que el inmueble ya no esta: vuelve a buscar con buscar_inmuebles y manda una de las que devuelva."
+      };
+    }
+    if (!res.mostrado.ficha) {
+      return {
+        ok: false,
+        error: "sin_ficha",
+        instruccion: "Ese inmueble no tiene ficha publicada. Dile que el asesor se la comparte. PROHIBIDO inventar el link."
+      };
+    }
     c.salida.globos.push("Te dejo la ficha con las fotos y todos los detalles:");
-    c.salida.globos.push(ficha);
+    c.salida.globos.push(res.mostrado.ficha);
     return { ok: true };
   }
 };
@@ -1981,7 +2244,7 @@ var registrarInteres = {
     {
       operacion: enumStr("Que busca", ["venta", "arriendo"]),
       zona: strOpc("Barrio o zona. null si no la dio."),
-      tipo_inmueble: strOpc("Tipo de inmueble. null si no lo dijo."),
+      tipo_inmueble: enumStrOpc("Tipo de inmueble. null si no lo dijo.", TIPOS_OFRECIBLES),
       presupuesto_max: numOpc("Tope en pesos. null si no lo dio."),
       habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica."),
       notas: strOpc("Algo mas que deba saber quien le avise. null si no hay nada.")
@@ -2023,26 +2286,44 @@ var buscarPorCodigo = {
     { retorna: true }
   ),
   ejecutar: async (input, c) => {
-    const norm = (v) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const buscado = norm(input.codigo);
-    if (!buscado) return { ok: false, error: "sin_codigo" };
-    const props = c.ctxAgente.catalogo || [];
-    let p = props.find((x) => norm(x.codigo_externo) === buscado);
-    if (!p) {
-      const fuera = await c.db.list("Propiedad", { codigo_externo: String(input.codigo).trim(), limit: 1 });
-      if (fuera?.[0]) {
+    const crudo = String(input.codigo || "").trim();
+    if (!crudo) return { ok: false, error: "sin_codigo" };
+    const partes = crudo.match(/(\d{1,4})\s*[-–—_]?\s*(\d{3,8})/);
+    const candidatos = [...new Set([partes ? `${partes[1]}-${partes[2]}` : "", crudo].filter(Boolean))];
+    let p = null;
+    for (const cand of candidatos) {
+      const r = await c.db.consultar("Propiedad", { codigo_externo: cand, limit: 1 });
+      if (r.ok === false) {
         return {
           ok: false,
-          error: "no_disponible",
-          instruccion: "Ese inmueble existe pero ya no esta disponible. Dilo sin rodeos y ofrecele buscar algo parecido. No des sus datos ni su precio."
+          error: "no_pude_consultar",
+          instruccion: "No pudiste consultar ese codigo. PROHIBIDO decirle que no existe: no lo comprobaste. Dile que se te trabo el sistema y que se lo confirmas enseguida."
         };
       }
+      if (r.filas[0]) {
+        p = r.filas[0];
+        break;
+      }
+    }
+    if (!p) {
       return {
         ok: false,
         error: "no_encontrado",
-        instruccion: "No hay ningun inmueble con ese codigo. Pidele que lo confirme (puede estar incompleto) o que te cuente que busca y lo ubicas por zona. No inventes un inmueble."
+        instruccion: "Consultado: no hay ningun inmueble con ese codigo. Pidele que lo confirme (puede estar incompleto) o que te cuente que busca y lo ubicas por zona. No inventes un inmueble."
       };
     }
+    if (String(p.estado || "") !== "Disponible") {
+      return {
+        ok: false,
+        error: "no_disponible",
+        instruccion: "Ese inmueble existe pero ya no esta disponible. Dilo sin rodeos y ofrecele buscar algo parecido con buscar_inmuebles. No des sus datos ni su precio."
+      };
+    }
+    const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
+    c.ctxAgente.mostrados = [
+      { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) },
+      ...antes.filter((m) => m.id !== p.id)
+    ].slice(0, 10);
     return {
       ok: true,
       inmueble: resumirProp(p, !p.precio_venta && !!p.canon_arriendo),
@@ -2058,7 +2339,7 @@ var calificarLead = {
       nombre: str("Nombre que dio el cliente. No lo inventes."),
       operacion: enumStr("Que busca", ["venta", "arriendo"]),
       zona: strOpc("Barrio o zona de interes. null si no la dio."),
-      tipo_inmueble: strOpc("Tipo de inmueble. null si no lo dijo."),
+      tipo_inmueble: enumStrOpc("Tipo de inmueble. null si no lo dijo.", TIPOS_OFRECIBLES),
       presupuesto: numOpc("Cifra en pesos. null si es un inversionista flexible o no quiso darla."),
       observaciones: strOpc("Lo que el asesor deberia saber antes de llamar. null si no hay nada.")
     },
@@ -2158,9 +2439,17 @@ var agendarVisita = {
     { cierra: true }
   ),
   ejecutar: async (input, c) => {
+    const res = await resolverInmueble(c, String(input.inmueble_id || ""));
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: res.motivo,
+        instruccion: "No pudiste ubicar ese inmueble, asi que la visita NO quedo agendada. No le digas que si. Vuelve a buscar con buscar_inmuebles, confirma con el cual es y agenda sobre ese."
+      };
+    }
     await c.db.crear("Visita", {
       contacto_id: String(c.estado.compartido.contacto_id || ""),
-      propiedad_id: String(input.inmueble_id || ""),
+      propiedad_id: res.mostrado.id,
       // Solicitada, no Programada: el agente recogio una preferencia, no acordo
       // una hora. Quien confirma es el equipo.
       estado: "Solicitada",
@@ -2180,7 +2469,7 @@ var VENTAS = {
   agendar_visita: agendarVisita
 };
 
-// base44/functions/asistente8/_core/tools/cartera.ts
+// base44/functions/asistente9/_core/tools/cartera.ts
 var verificarIdentidad = {
   ...definirTool(
     "verificar_identidad",
@@ -2383,7 +2672,7 @@ var CARTERA = {
   enviar_certificado_propietario: enviarCertificadoPropietario
 };
 
-// base44/functions/asistente8/_core/tools/mantenimiento.ts
+// base44/functions/asistente9/_core/tools/mantenimiento.ts
 var registrarReparacion = {
   ...definirTool(
     "registrar_reparacion",
@@ -2495,7 +2784,7 @@ var MANTENIMIENTO = {
   consultar_estado_reparacion: consultarEstadoReparacion
 };
 
-// base44/functions/asistente8/_core/tools/consignacion.ts
+// base44/functions/asistente9/_core/tools/consignacion.ts
 var registrarConsignacion = {
   ...definirTool(
     "registrar_consignacion",
@@ -2586,7 +2875,7 @@ var CONSIGNACION = {
   agendar_avaluo_previo: agendarAvaluoPrevio
 };
 
-// base44/functions/asistente8/_core/tools/avaluos.ts
+// base44/functions/asistente9/_core/tools/avaluos.ts
 var registrarSolicitudAvaluo = {
   ...definirTool(
     "registrar_solicitud_avaluo",
@@ -2656,7 +2945,7 @@ var AVALUOS = {
   cotizar_avaluo: cotizarAvaluo
 };
 
-// base44/functions/asistente8/_core/tools/pqr.ts
+// base44/functions/asistente9/_core/tools/pqr.ts
 var LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
 var DIAS_DEFECTO = {
   Peticion: 15,
@@ -2761,7 +3050,7 @@ var PQR = {
   consultar_estado_pqr: consultarEstadoPqr
 };
 
-// base44/functions/asistente8/_core/tools/matricula.ts
+// base44/functions/asistente9/_core/tools/matricula.ts
 var iniciarMatricula = {
   ...definirTool(
     "iniciar_matricula",
@@ -2893,7 +3182,7 @@ var MATRICULA = {
   enviar_link_portal: enviarLinkDocumentos
 };
 
-// base44/functions/asistente8/_core/tools/index.ts
+// base44/functions/asistente9/_core/tools/index.ts
 var IDENT = { identificar_titular: identificarTitular };
 var HIST = ASISTIDOS;
 var EXTRA = {
@@ -2913,7 +3202,7 @@ function toolsDe(agente, habilitadas) {
   return Object.fromEntries(Object.entries(todas).filter(([n]) => permitidas.has(n)));
 }
 
-// base44/functions/asistente8/_core/canales/whatsapp.ts
+// base44/functions/asistente9/_core/canales/whatsapp.ts
 var whatsapp_exports = {};
 __export(whatsapp_exports, {
   enviar: () => enviar,
@@ -2922,7 +3211,7 @@ __export(whatsapp_exports, {
   normalizar: () => normalizar2
 });
 
-// base44/functions/asistente8/_core/canales/media.ts
+// base44/functions/asistente9/_core/canales/media.ts
 async function transcribir(buf, mimeType, openaiKey) {
   const fd = new FormData();
   fd.append("file", new Blob([buf], { type: mimeType }), "audio.ogg");
@@ -2970,7 +3259,7 @@ async function describirImagen(buf, mimeType, openaiKey, caption) {
   return ((await r.json()).choices?.[0]?.message?.content || "").trim() || null;
 }
 
-// base44/functions/asistente8/_core/canales/whatsapp.ts
+// base44/functions/asistente9/_core/canales/whatsapp.ts
 var GRAPH = "https://graph.facebook.com/v19.0";
 var esWhatsApp = (body) => !!body?.entry?.[0]?.changes;
 var conIndicativo = (t) => {
@@ -3062,7 +3351,7 @@ async function marcarEscribiendo(msgId, env) {
   }
 }
 
-// base44/functions/asistente8/_core/canales/telegram.ts
+// base44/functions/asistente9/_core/canales/telegram.ts
 var telegram_exports = {};
 __export(telegram_exports, {
   enviar: () => enviar2,
@@ -3152,7 +3441,7 @@ async function marcarEscribiendo2(destino, env) {
   }
 }
 
-// base44/functions/asistente8/_core/canales/bots.ts
+// base44/functions/asistente9/_core/canales/bots.ts
 var VAR_POR_AGENTE = {
   recepcion: "TELEGRAM_BOT_RECEPCION",
   ventas: "TELEGRAM_BOT_VENTAS",
@@ -3173,7 +3462,7 @@ function agenteDeUrl(url) {
   return v && esAgente(v) ? v : null;
 }
 
-// base44/functions/asistente8/_core/webhook.ts
+// base44/functions/asistente9/_core/webhook.ts
 async function firmaMetaValida(rawBody, header, secret) {
   if (!header?.startsWith("sha256=") || !secret) return false;
   const hex = header.slice("sha256=".length);
@@ -3206,7 +3495,7 @@ function secretoIgual(recibido, esperado) {
   return diferencia === 0;
 }
 
-// base44/functions/asistente8/entry.ts
+// base44/functions/asistente9/entry.ts
 var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
 var MODELO_PRIMARIO = "claude-sonnet-5";
 var MODELO_FALLBACK = "claude-haiku-4-5-20251001";

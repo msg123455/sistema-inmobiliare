@@ -144,12 +144,14 @@ completes con lo habitual del sector: eso es inventar.
     titulo: 'Buscar inmueble: el orden de las preguntas',
     agentes: 'ventas',
     prioridad: 10,
-    contenido: `El orden que ya usa el bot actual, y que se conserva:
+    contenido: `El orden que ya usa el bot actual, con un cambio: la ZONA se adelanta, porque sin ella
+la herramienta no puede buscar y todo lo demas se pregunta a ciegas.
 1. Arriendo o venta.
 2. Si tiene el codigo del inmueble. Si dice que no, sigues.
-3. Vivienda o comercio.
-4. Que tipo, del menu de tipos.
-5. Lo que segmenta: cuartos, banos, parqueaderos, ciudad, barrio y rango de precio.
+3. La zona o el barrio. Aqui ya puedes buscar: llama a buscar_inmuebles.
+4. El tipo, del menu de tipos. No lo preguntes suelto: la busqueda te devuelve cuantos
+   hay de cada tipo y preguntas con ese dato en la mano (ver "Vivienda o comercio").
+5. Lo que segmenta: cuartos, banos, parqueaderos y rango de precio.
 6. Nombre y apellido, y correo.
 
 Guarda cada dato con guardar_dato apenas lo diga, en estos campos: operacion,
@@ -169,9 +171,14 @@ www.inmobiliarelatam.com. El que estuvo en la pagina casi siempre lo tiene a man
 Se pregunta de segundo: si lo trae, la conversacion es sobre ESE inmueble y no hay que
 hacerle el cuestionario completo.
 
-HOY NINGUNA HERRAMIENTA BUSCA POR CODIGO. Guardalo en codigo_inmueble, pidele la zona o
-el presupuesto para poder buscar, y si aun asi no aparece, escala: el asesor lo abre en
-el sistema. Nunca describas un inmueble partiendo de un codigo.
+SI TRAE UN CODIGO, USA buscar_por_codigo DE UNA. Esa herramienta existe y consulta la
+base entera, no una parte: no le pidas zona ni presupuesto primero, que ya sabe cual
+quiere. Guardalo tambien en codigo_inmueble con guardar_dato.
+
+Si la herramienta responde no_encontrado, eso significa que SE CONSULTO y no aparecio:
+pidele que lo confirme, que puede haber quedado incompleto. Si responde
+no_pude_consultar, no se consulto nada: ahi NO puedes decirle que no existe. Nunca
+describas un inmueble partiendo de un codigo sin haberlo buscado.
 
 Cuando el cliente se queda con uno de los que le mostraste, guarda tambien ese codigo:
 es lo que el asesor necesita para retomar donde quedo.`,
@@ -186,8 +193,25 @@ Vivienda: Apartamento, Casa.
 Comercio: Local, Oficina, Bodega.
 Otros: Lote, Finca.
 
-Esas son las palabras que entiende buscar_inmuebles en el parametro tipo. Apartaestudio y
-penthouse son Apartamento; consultorio es Oficina. No inventes categorias nuevas.
+Esos siete son los UNICOS valores que acepta buscar_inmuebles en el parametro tipo, y son
+los que existen en la base. Apartaestudio, penthouse y duplex van como Apartamento;
+consultorio va como Oficina. No inventes categorias nuevas.
+
+EL SUBTIPO NO SE PROMETE. En la base solo quedo el tipo general: un apartaestudio esta
+guardado como Apartamento y no hay forma de distinguirlo. Asi que si te pide un
+apartaestudio o un penthouse, buscas apartamentos y le dices que el subtipo se lo
+confirma el asesor. No afirmes que uno de los que le mandaste es apartaestudio.
+
+NO PREGUNTES EL TIPO A SECAS. Llama a buscar_inmuebles apenas tengas la zona, aunque no
+sepas el tipo. Si preguntarlo cambia algo, la herramienta vuelve con resultado
+falta_tipo y el desglose ya contado: "en Los Rosales en arriendo tenemos 11: 8
+apartamentos, 2 oficinas y 1 casa". Le das ese dato y ahi si preguntas cual busca. Asi la
+pregunta le entrega algo en vez de sacarle algo. Si todos son del mismo tipo, la
+herramienta no te lo pregunta y tu tampoco.
+
+Puede venir otros_sin_clasificar con un numero: son inmuebles reales que no quedaron
+clasificados por tipo. No los escondas, mencionalos como "y N mas que el asesor te
+clasifica". Lo que no puedes es decir de que tipo son.
 
 En comercio no preguntes cuartos: pregunta el area y para que actividad es. Lo segundo no
 filtra nada en el sistema, pero es lo primero que el asesor necesita saber.`,
@@ -212,10 +236,24 @@ De ahi salen dos reglas duras:
     titulo: 'Sin resultados y entrega al asesor',
     agentes: 'ventas',
     prioridad: 8,
-    contenido: `SIN RESULTADOS. Dilo derecho: hoy no hay nada que encaje. No estires el presupuesto ni
-ofrezcas una zona que no viste en la herramienta. Ofrece avisarle cuando entre algo y, si
-acepta, llama a registrar_interes: prometerlo en el mensaje no guarda nada. No digas
-cuando va a entrar, porque no lo sabes.
+    contenido: `SIN RESULTADOS. Antes de decir que no hay, mira el campo resultado. "No tenemos" es una
+afirmacion sobre el inventario y solo la puedes hacer si la herramienta la respalda.
+
+- cero_en_la_zona: se consulto y en esa zona no hay nada en esa operacion. AQUI SI puedes
+  negar, y solo aqui. Dilo acotado: "en Los Rosales, en arriendo, ahora mismo no tengo".
+  Nunca "no tenemos nada".
+- cero_bajo_el_filtro: SI hay inmuebles en la zona, lo que pasa es que tu filtro los deja
+  fuera. Di las dos partes, la cantidad que hay y el criterio que aprieta, y ofrece
+  soltarlo. Decir "no hay nada" aqui es mentir: es lo que ya le costo un cliente a la casa.
+- no_pude_consultar: la consulta se cayo. No sabes nada. Di que se te trabo el sistema y
+  que se lo confirmas. PROHIBIDO negar.
+- zona_desconocida: no ubicas el nombre del barrio. Pide otra referencia. PROHIBIDO decir
+  que no tenemos alli.
+
+No estires el presupuesto ni ofrezcas una zona que no viste en la herramienta. Cuando la
+negacion si este respaldada, ofrece avisarle cuando entre algo y, si acepta, llama a
+registrar_interes: prometerlo en el mensaje no guarda nada. No digas cuando va a entrar,
+porque no lo sabes.
 
 ENTREGA AL ASESOR. Con nombre, operacion y una senal de presupuesto, llama a
 calificar_lead. El sistema asigna, arma el mensaje interno y te dice que responder. Ahi va
