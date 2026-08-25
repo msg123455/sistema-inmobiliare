@@ -37,6 +37,32 @@ import { firmaMetaValida, secretoIgual } from './_core/webhook.ts';
  */
 const SALUDO = 'Hola, soy Diana de INMOBILIARE Julio Corredor.';
 
+/**
+ * Quien puede pedir /chunks, que es un volcado interno.
+ *
+ * En Telegram, cualquiera: es el banco de pruebas, ahi no entra un cliente.
+ *
+ * En WhatsApp hace falta estar en DIAGNOSTICO_TELEFONOS, una lista de numeros
+ * separados por coma. Ahi el numero de quien escribe ES un telefono real y un
+ * cliente que teclee /chunks recibiria los nombres de las herramientas y el
+ * inventario de conocimiento del agente.
+ *
+ * Se comparan solo digitos porque el mismo numero se escribe de cinco formas
+ * (+57 300..., 57300..., 300...) y una diferencia de formato dejaria la
+ * herramienta muda justo para quien la necesita. Se compara por terminacion:
+ * basta con los ultimos 10, que es el numero nacional sin indicativo.
+ */
+function puedeDiagnosticar(entrada: Entrada): boolean {
+  if (entrada.canal === 'telegram') return true;
+  const permitidos = (Deno.env.get('DIAGNOSTICO_TELEFONOS') || '')
+    .split(',')
+    .map((s) => s.replace(/\D/g, ''))
+    .filter((s) => s.length >= 7);
+  if (!permitidos.length) return false;
+  const mio = entrada.tel.replace(/\D/g, '');
+  return permitidos.some((p) => mio.endsWith(p.slice(-10)) || p.endsWith(mio.slice(-10)));
+}
+
 const MODELO_PRIMARIO = 'claude-sonnet-5';
 const MODELO_FALLBACK = 'claude-haiku-4-5-20251001';
 const MODELO_ROUTER   = 'claude-haiku-4-5-20251001';
@@ -171,10 +197,14 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   //
   // Antes exigia bot dedicado (`agenteBot &&`), asi que con un solo bot
   // compartido —que es como se opera— el comando no hacia nada.
-  if (entrada.canal === 'telegram' && /^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  // Vale en los DOS canales: reiniciar solo afecta a la conversacion de quien lo
+  // escribe, asi que un cliente que lo teclee por accidente no rompe nada de
+  // nadie. Y en WhatsApp hace mas falta, porque ahi no existe el boton de
+  // "vaciar chat" que tiene Telegram.
+  if (/^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
     estado = estadoVacio();
     entrada.texto = 'Hola';
-    marca('conversacion reiniciada por comando de Telegram');
+    marca(`conversacion reiniciada por comando (${entrada.canal})`);
   }
 
   // /chunks devuelve la radiografia del turno ANTERIOR y no consume turno: no
@@ -182,9 +212,15 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
   // preguntar "por que contestaste eso" sin alterar la conversacion que se esta
   // diagnosticando.
   //
-  // Es de Telegram y no de WhatsApp a proposito: Telegram es el banco de pruebas
-  // y un cliente real no deberia toparse con un comando de diagnostico.
-  if (entrada.canal === 'telegram' && /^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  // En Telegram lo puede usar cualquiera: es el banco de pruebas y ahi no hay
+  // clientes. En WhatsApp NO, porque ahi si los hay y un cliente que teclee
+  // /chunks recibiria un volcado interno con nombres de herramientas y chunks de
+  // conocimiento. Se abre solo a los numeros de DIAGNOSTICO_TELEFONOS.
+  //
+  // Sin ese secreto puesto, en WhatsApp el comando simplemente no existe y el
+  // mensaje sigue su camino como una frase normal: se falla cerrado, que para
+  // una herramienta de diagnostico es lo correcto.
+  if (/^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto) && puedeDiagnosticar(entrada)) {
     const item = await encolar(db, {
       canal: entrada.canal,
       destino: entrada.destino,

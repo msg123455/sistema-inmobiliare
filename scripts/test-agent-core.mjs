@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { toolsDe } from '../base44/functions/_core/tools/index.ts';
-import { agentesAutomaticosActivos, seleccionarRag } from '../base44/functions/_core/contexto.ts';
+import { AGENTES } from '../base44/functions/_core/protocol.ts';
+import { agentesAutomaticosActivos, armarSystem, seleccionarRag } from '../base44/functions/_core/contexto.ts';
 import { IDENTIDAD_MARCA, PROMPTS } from '../base44/functions/_core/prompts.ts';
 import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
 import { enviarLinkDocumentos } from '../base44/functions/_core/tools/matricula.ts';
@@ -1222,6 +1223,88 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
     /p\.numero_documento \|\| p\.cedula_nit/,
     'Propietario guarda el documento en cedula_nit: sin esto ningun propietario puede verificarse',
   );
+}
+
+// ── El prefijo cacheado tiene que ser byte a byte el mismo ──────────────────
+//
+// El prompt pesa unos 13.000 tokens y se manda entero en cada llamada al modelo,
+// con dos a cuatro llamadas por turno. Anthropic cachea por PREFIJO: lo que va
+// antes de la marca se cobra a 0,1x en las llamadas siguientes... siempre que no
+// cambie ni un byte.
+//
+// Y ahi esta el problema que justifica esta prueba: si alguien mete un dato
+// variable por encima de la marca —la fecha, el nombre del cliente, un contador
+// de mensajes— el prefijo cambia en cada llamada y NO SE CACHEA NADA. No salta
+// ningun error, las respuestas siguen siendo correctas y el unico sintoma es la
+// factura a fin de mes.
+{
+  const base = {
+    config: {},
+    prompt: null,
+    identidadMarca: 'Eres Diana.',
+    rag: '=== CONOCIMIENTO ===\nAlgo que la casa sabe.',
+    ragTitulos: [], ragChars: 0, promptOrigen: 'codigo', promptVersion: null,
+    marcaOrigen: 'codigo', ragDetalle: [], ragDescartados: [], ragActivos: 0,
+  };
+  const ctx = { zonas_disponibles: ['Los Rosales', 'Chico'] };
+
+  // Dos turnos de la MISMA conversacion, con todo lo volatil distinto: el
+  // cliente ya dijo su nombre, el historial crecio, hay datos acumulados y se
+  // encontro al titular. Nada de eso puede tocar el prefijo.
+  const primero = estadoVacio();
+  const segundo = estadoVacio();
+  segundo.compartido.nombre = 'Massimo';
+  segundo.historial.push({ role: 'user', content: 'hola' }, { role: 'assistant', content: 'que tal' });
+  segundo.identidad.verificado = true;
+
+  const a = armarSystem(base, 'ventas', primero, ctx);
+  const b = armarSystem(base, 'ventas', segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: 'Massimo' });
+
+  assert.equal(a[0].cache_control?.type, 'ephemeral', 'el bloque estable lleva la marca de cacheo');
+  assert.equal(b[1].cache_control, undefined, 'el bloque volatil NO la lleva');
+  assert.equal(a[0].text, b[0].text, 'el prefijo cacheado cambio entre turnos: no se cacheara nada');
+
+  // Y lo volatil SI tiene que cambiar, o algo se colo en el lado equivocado.
+  assert.notEqual(a[1].text, b[1].text, 'el bloque volatil deberia reflejar el estado del turno');
+
+  // El nombre del cliente es el invasor mas probable: es lo primero que alguien
+  // querria "personalizar" en la identidad de marca.
+  assert.doesNotMatch(b[0].text, /Massimo/, 'un dato del cliente en el prefijo mata el cache');
+
+  // Las zonas van en el prefijo a proposito: son 2.300 tokens que solo cambian
+  // al reindexar. En el lado volatil se pagarian enteros en cada llamada.
+  assert.match(a[0].text, /Los Rosales/, 'el mapa de zonas va en la mitad cacheada');
+}
+
+// ── Ningun esquema de herramienta puede tener un enum con null dentro ────────
+//
+// Con strict:true la API rechaza `{type:['string','null'], enum:[...,null]}`:
+//
+//   400 Enum value 'Apartamento' does not match declared type '['string','null']'
+//
+// Y rechaza el REQUEST ENTERO, no solo ese campo. Una sola tool mal declarada
+// deja mudo al agente completo. Eso tumbo ventas en produccion: contestaba
+// "se me enredo el sistema" en cada turno, que parece un fallo del modelo y no
+// un esquema invalido, y por eso costo encontrarlo.
+//
+// La forma valida es anyOf con tipos simples en cada rama (ver enumStrOpc).
+{
+  const malas = [];
+  for (const ag of AGENTES) {
+    for (const t of Object.values(toolsDe(ag))) {
+      const props = t.def.input_schema.properties || {};
+      for (const [campo, def] of Object.entries(props)) {
+        const tipoCompuesto = Array.isArray(def?.type);
+        if (def?.enum && tipoCompuesto) {
+          malas.push(`${ag}/${t.def.name}.${campo}: enum con type compuesto`);
+        }
+        if (Array.isArray(def?.enum) && def.enum.some((v) => v === null)) {
+          malas.push(`${ag}/${t.def.name}.${campo}: null dentro del enum`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(malas, [], `esquemas que la API rechazaria:\n  ${malas.join('\n  ')}`);
 }
 
 console.log('agent-core: OK');

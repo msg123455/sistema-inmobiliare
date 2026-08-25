@@ -58,6 +58,21 @@ export async function llamarModelo(opts: {
       });
       if (r.ok) {
         const j = await r.json();
+        // Se registra el uso de cache porque el fallo aqui es SILENCIOSO: si
+        // alguien mete un dato variable (una fecha, un contador) por encima de
+        // la marca de cacheo en armarSystem, el prefijo cambia en cada llamada,
+        // nada se lee de cache y todo se cobra entero. No da error: solo llega
+        // la factura. Con esto se ve en el log del turno.
+        //
+        // `escritos` alto y `leidos` en cero durante varios turnos seguidos es
+        // exactamente ese sintoma.
+        const u = j.usage || {};
+        const leidos = u.cache_read_input_tokens || 0;
+        const escritos = u.cache_creation_input_tokens || 0;
+        console.log(
+          `tokens[${modelo}] entrada ${u.input_tokens || 0} | cache leidos ${leidos} `
+          + `escritos ${escritos} | salida ${u.output_tokens || 0}`,
+        );
         return { bloques: j.content || [], stop_reason: j.stop_reason || '', modelo };
       }
       console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
@@ -80,7 +95,9 @@ export interface ResultadoAgente {
 export async function correrAgente(opts: {
   apiKey: string;
   modelos: string[];
-  system: string;
+  // Bloques de texto, no un string: el primero lleva la marca de cacheo.
+  // Ver armarSystem en contexto.ts.
+  system: string | any[];
   mensajes: any[];
   tools: Record<string, Tool>;
   ctx: CtxTool;

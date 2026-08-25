@@ -700,7 +700,7 @@ var strOpc = (description) => ({ type: ["string", "null"], description });
 var numOpc = (description) => ({ type: ["number", "null"], description });
 var bool = (description) => ({ type: "boolean", description });
 var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
-var enumStrOpc = (description, valores) => ({ type: ["string", "null"], description, enum: [...valores, null] });
+var enumStrOpc = (description, valores) => ({ description, anyOf: [{ type: "string", enum: valores }, { type: "null" }] });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
 // base44/functions/agenteInbound/_core/state.ts
@@ -1212,10 +1212,19 @@ async function cargarContexto(db, agente, estado, entrada) {
   }
 }
 function armarSystem(base, agente, estado, ctxAgente) {
+  const estable = [];
+  estable.push(base.identidadMarca || IDENTIDAD_MARCA);
+  estable.push(String(base.prompt?.prompt || PROMPTS[agente] || ""));
+  if (base.rag) estable.push(base.rag);
+  const zonas = ctxAgente.zonas_disponibles || [];
+  if (zonas.length) {
+    estable.push(
+      `=== ZONAS CON INVENTARIO (${zonas.length}) ===
+Son los nombres EXACTOS. Pasa uno de estos a buscar_inmuebles, no lo que dijo el cliente. Si lo que dijo encaja con varios ("el chico" cae en Chico, Chico Norte, Chico Alto...), preguntale cual antes de buscar. Si no esta en la lista, NO afirmes que no tenemos alli: di que no reconoces esa zona y pide otra referencia.
+` + zonas.join(" · ")
+    );
+  }
   const partes = [];
-  partes.push(base.identidadMarca || IDENTIDAD_MARCA);
-  partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ""));
-  if (base.rag) partes.push(base.rag);
   partes.push(`=== MOMENTO ===
 ${instruccionHorario(/* @__PURE__ */ new Date(), base.config || {})}`);
   const nombre = String(estado.compartido.nombre || "");
@@ -1275,7 +1284,10 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     // recibe la presentacion dos veces seguidas.
     (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
   );
-  return partes.join("\n\n");
+  return [
+    { type: "text", text: estable.join("\n\n"), cache_control: { type: "ephemeral" } },
+    { type: "text", text: partes.join("\n\n") }
+  ];
 }
 
 // base44/functions/agenteInbound/_core/diagnostico.ts
@@ -1344,6 +1356,12 @@ async function llamarModelo(opts) {
       });
       if (r.ok) {
         const j = await r.json();
+        const u = j.usage || {};
+        const leidos = u.cache_read_input_tokens || 0;
+        const escritos = u.cache_creation_input_tokens || 0;
+        console.log(
+          `tokens[${modelo}] entrada ${u.input_tokens || 0} | cache leidos ${leidos} escritos ${escritos} | salida ${u.output_tokens || 0}`
+        );
         return { bloques: j.content || [], stop_reason: j.stop_reason || "", modelo };
       }
       console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
@@ -3486,6 +3504,13 @@ function secretoIgual(recibido, esperado) {
 
 // base44/functions/agenteInbound/entry.ts
 var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
+function puedeDiagnosticar(entrada) {
+  if (entrada.canal === "telegram") return true;
+  const permitidos = (Deno.env.get("DIAGNOSTICO_TELEFONOS") || "").split(",").map((s) => s.replace(/\D/g, "")).filter((s) => s.length >= 7);
+  if (!permitidos.length) return false;
+  const mio = entrada.tel.replace(/\D/g, "");
+  return permitidos.some((p) => mio.endsWith(p.slice(-10)) || p.endsWith(mio.slice(-10)));
+}
 var MODELO_PRIMARIO = "claude-sonnet-5";
 var MODELO_FALLBACK = "claude-haiku-4-5-20251001";
 var MODELO_ROUTER = "claude-haiku-4-5-20251001";
@@ -3581,12 +3606,12 @@ async function procesar(entrada, env, agenteBot = null) {
   const memoriaId = cargada.id;
   let estado = cargada.estado;
   marca("estado cargado");
-  if (entrada.canal === "telegram" && /^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  if (/^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
     estado = estadoVacio();
     entrada.texto = "Hola";
-    marca("conversacion reiniciada por comando de Telegram");
+    marca(`conversacion reiniciada por comando (${entrada.canal})`);
   }
-  if (entrada.canal === "telegram" && /^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  if (/^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto) && puedeDiagnosticar(entrada)) {
     const item = await encolar(db, {
       canal: entrada.canal,
       destino: entrada.destino,

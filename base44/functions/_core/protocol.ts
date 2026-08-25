@@ -204,6 +204,22 @@ export const enumStr = (description: string, valores: string[]) => ({ type: 'str
 // entero, lo que el agente leia como "no hay nada" y le decia al cliente. Con
 // el enum en el ESQUEMA esa clase de fallo deja de ser posible, en vez de
 // depender de que el modelo escriba bien.
+// COMO SE DECLARA UN ENUM QUE ADMITE NULL, Y COMO NO.
+//
+// La forma evidente —`{ type: ['string','null'], enum: [...valores, null] }`—
+// la RECHAZA la API con strict:true:
+//
+//   400 tools.0.custom: Invalid schema:
+//   Enum value 'Apartamento' does not match declared type '['string','null']'
+//
+// Y el rechazo no es del campo: es del request entero. O sea que una sola tool
+// mal declarada deja MUDO al agente completo, en todas sus llamadas. Paso en
+// produccion: ventas dejo de responder del todo y contestaba el globo de
+// emergencia ("se me enredo el sistema"), lo que parece un fallo del modelo y
+// no un esquema invalido.
+//
+// La forma que si acepta es anyOf: la rama del enum y la rama del null por
+// separado, cada una con su tipo simple.
 export const enumStrOpc = (description: string, valores: string[]) =>
-  ({ type: ['string', 'null'], description, enum: [...valores, null] });
+  ({ description, anyOf: [{ type: 'string', enum: valores }, { type: 'null' }] });
 export const lista = (description: string, items: unknown = { type: 'string' }) => ({ type: 'array', description, items });

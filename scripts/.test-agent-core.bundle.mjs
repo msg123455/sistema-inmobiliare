@@ -49,7 +49,7 @@ var strOpc = (description) => ({ type: ["string", "null"], description });
 var numOpc = (description) => ({ type: ["number", "null"], description });
 var bool = (description) => ({ type: "boolean", description });
 var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
-var enumStrOpc = (description, valores) => ({ type: ["string", "null"], description, enum: [...valores, null] });
+var enumStrOpc = (description, valores) => ({ description, anyOf: [{ type: "string", enum: valores }, { type: "null" }] });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
 // base44/functions/_core/tools/asistidos.ts
@@ -2510,6 +2510,84 @@ ${contenido}
 function agentesAutomaticosActivos(config) {
   return config?.activo !== false;
 }
+function armarSystem(base, agente, estado, ctxAgente) {
+  const estable = [];
+  estable.push(base.identidadMarca || IDENTIDAD_MARCA);
+  estable.push(String(base.prompt?.prompt || PROMPTS[agente] || ""));
+  if (base.rag) estable.push(base.rag);
+  const zonas = ctxAgente.zonas_disponibles || [];
+  if (zonas.length) {
+    estable.push(
+      `=== ZONAS CON INVENTARIO (${zonas.length}) ===
+Son los nombres EXACTOS. Pasa uno de estos a buscar_inmuebles, no lo que dijo el cliente. Si lo que dijo encaja con varios ("el chico" cae en Chico, Chico Norte, Chico Alto...), preguntale cual antes de buscar. Si no esta en la lista, NO afirmes que no tenemos alli: di que no reconoces esa zona y pide otra referencia.
+` + zonas.join(" \xB7 ")
+    );
+  }
+  const partes = [];
+  partes.push(`=== MOMENTO ===
+${instruccionHorario(/* @__PURE__ */ new Date(), base.config || {})}`);
+  const nombre = String(estado.compartido.nombre || "");
+  const i = estado.identidad;
+  const estadoTxt = [
+    "=== ESTADO DE ESTA CONVERSACION ===",
+    nombre ? `El cliente se llama ${nombre}. Dirigite a el por su primer nombre.` : "Aun no sabes su nombre.",
+    `Identidad verificada: ${i.verificado && i.expira && new Date(i.expira) > /* @__PURE__ */ new Date() ? "SI" : "NO"}`,
+    i.bloqueado_hasta && new Date(i.bloqueado_hasta) > /* @__PURE__ */ new Date() ? "ATENCION: bloqueado por intentos fallidos de verificacion." : "",
+    Object.keys(ctxAgente.datos || {}).length ? `Datos que ya tienes: ${JSON.stringify(ctxAgente.datos)}` : "",
+    // AQUI YA NO SE HABLA DE INVENTARIO, Y ES DELIBERADO.
+    //
+    // Iba "Hoy hay N inmuebles activos: X en arriendo y Y en venta. Zonas con
+    // disponibilidad: ...", contado sobre los 100 inmuebles precargados. Las dos
+    // mitades eran falsas: N valia siempre 100 porque 100 era el limit, no el
+    // total, y la lista de zonas salia de esas mismas 100 filas arbitrarias.
+    //
+    // Lo grave era donde estaba: dentro de === ESTADO DE ESTA CONVERSACION ===,
+    // o sea con autoridad de hecho del sistema y no de resultado de herramienta.
+    // Si "Los Rosales" no caia entre esas 20 zonas, el prompt le estaba diciendo
+    // al modelo que Rosales no tiene disponibilidad ANTES de que el cliente
+    // preguntara. De ahi salio "no hay ninguno mas en Rosales": el agente no lo
+    // improviso, lo leyo.
+    //
+    // Tampoco se sustituye por la lista completa de zonas. Son ~300 nombres, y
+    // una lista en el prompt es una afirmacion sobre el mundo que envejece sin
+    // avisar. El diccionario vive en el ctx y lo usa buscar_inmuebles, que es la
+    // unica que debe hablar de inventario: si la zona no existe lo dice, y si es
+    // ambigua devuelve las candidatas para que el agente pregunte.
+    ctxAgente.nombre_registrado ? `En el sistema figura como: ${ctxAgente.nombre_registrado}` : ""
+  ].filter(Boolean).join("\n");
+  partes.push(estadoTxt);
+  if (ctxAgente.titular_nombre) {
+    const inmuebles = ctxAgente.titular_inmuebles || [];
+    partes.push([
+      "=== YA ENCONTRASTE A ESTA PERSONA EN LA BASE ===",
+      `Documento ${ctxAgente.titular_documento} -> ${ctxAgente.titular_nombre}`,
+      inmuebles.length === 1 ? `Tiene UN inmueble con nosotros: ${inmuebles[0].direccion}${inmuebles[0].ciudad ? `, ${inmuebles[0].ciudad}` : ""}` : `Tiene ${inmuebles.length} inmuebles con nosotros:
+${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}`).join("\n")}`,
+      "",
+      "DILO DE ENTRADA, en el mismo mensaje: que ya lo encontraste, su nombre, y su inmueble",
+      inmuebles.length === 1 ? "para que lo confirme." : "para que elija de cual se trata.",
+      "Despues preguntale que necesita.",
+      "PROHIBIDO pedirle el nombre, la direccion o el telefono: los tienes aqui arriba.",
+      "PROHIBIDO decirle que no aparece o pedirle que confirme el documento: SI aparece.",
+      "",
+      "SU IDENTIDAD YA ESTA VERIFICADA: dio el documento correcto y escribe desde el",
+      "telefono registrado, que son dos factores. NO llames a verificar_identidad y NO",
+      'le pidas "los ultimos 4 digitos de la cedula": serian los ultimos 4 del mismo',
+      "numero que acaba de dictar, o sea el mismo factor dos veces. Sigue derecho al",
+      "tramite."
+    ].join("\n"));
+  }
+  partes.push(
+    "=== COMO RESPONDER ===\nTerminas SIEMPRE tu turno llamando a la herramienta `responder`. Es la unica forma de que el cliente te lea.\nPuedes llamar varias herramientas en el mismo turno: guarda los datos que hagan falta y responde, todo junto.\nEscribe corto: maximo dos frases por globo. Nunca uses el guion largo. Nunca uses emojis.\nJamas afirmes un dato que no venga del contexto o del resultado de una herramienta. Si no lo tienes, dilo." + // El saludo lo antepone el servidor en el primer mensaje (ver SALUDO en
+    // entry.ts). Sin esta linea el modelo se presenta tambien y el cliente
+    // recibe la presentacion dos veces seguidas.
+    (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
+  );
+  return [
+    { type: "text", text: estable.join("\n\n"), cache_control: { type: "ephemeral" } },
+    { type: "text", text: partes.join("\n\n") }
+  ];
+}
 
 // base44/functions/_core/webhook.ts
 async function firmaMetaValida(rawBody, header, secret) {
@@ -2573,6 +2651,12 @@ async function llamarModelo(opts) {
       });
       if (r.ok) {
         const j = await r.json();
+        const u = j.usage || {};
+        const leidos = u.cache_read_input_tokens || 0;
+        const escritos = u.cache_creation_input_tokens || 0;
+        console.log(
+          `tokens[${modelo}] entrada ${u.input_tokens || 0} | cache leidos ${leidos} escritos ${escritos} | salida ${u.output_tokens || 0}`
+        );
         return { bloques: j.content || [], stop_reason: j.stop_reason || "", modelo };
       }
       console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
@@ -3792,5 +3876,54 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
     /p\.numero_documento \|\| p\.cedula_nit/,
     "Propietario guarda el documento en cedula_nit: sin esto ningun propietario puede verificarse"
   );
+}
+{
+  const base = {
+    config: {},
+    prompt: null,
+    identidadMarca: "Eres Diana.",
+    rag: "=== CONOCIMIENTO ===\nAlgo que la casa sabe.",
+    ragTitulos: [],
+    ragChars: 0,
+    promptOrigen: "codigo",
+    promptVersion: null,
+    marcaOrigen: "codigo",
+    ragDetalle: [],
+    ragDescartados: [],
+    ragActivos: 0
+  };
+  const ctx = { zonas_disponibles: ["Los Rosales", "Chico"] };
+  const primero = estadoVacio();
+  const segundo = estadoVacio();
+  segundo.compartido.nombre = "Massimo";
+  segundo.historial.push({ role: "user", content: "hola" }, { role: "assistant", content: "que tal" });
+  segundo.identidad.verificado = true;
+  const a = armarSystem(base, "ventas", primero, ctx);
+  const b = armarSystem(base, "ventas", segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: "Massimo" });
+  assert.equal(a[0].cache_control?.type, "ephemeral", "el bloque estable lleva la marca de cacheo");
+  assert.equal(b[1].cache_control, void 0, "el bloque volatil NO la lleva");
+  assert.equal(a[0].text, b[0].text, "el prefijo cacheado cambio entre turnos: no se cacheara nada");
+  assert.notEqual(a[1].text, b[1].text, "el bloque volatil deberia reflejar el estado del turno");
+  assert.doesNotMatch(b[0].text, /Massimo/, "un dato del cliente en el prefijo mata el cache");
+  assert.match(a[0].text, /Los Rosales/, "el mapa de zonas va en la mitad cacheada");
+}
+{
+  const malas = [];
+  for (const ag of AGENTES) {
+    for (const t of Object.values(toolsDe(ag))) {
+      const props = t.def.input_schema.properties || {};
+      for (const [campo, def] of Object.entries(props)) {
+        const tipoCompuesto = Array.isArray(def?.type);
+        if (def?.enum && tipoCompuesto) {
+          malas.push(`${ag}/${t.def.name}.${campo}: enum con type compuesto`);
+        }
+        if (Array.isArray(def?.enum) && def.enum.some((v) => v === null)) {
+          malas.push(`${ag}/${t.def.name}.${campo}: null dentro del enum`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(malas, [], `esquemas que la API rechazaria:
+  ${malas.join("\n  ")}`);
 }
 console.log("agent-core: OK");

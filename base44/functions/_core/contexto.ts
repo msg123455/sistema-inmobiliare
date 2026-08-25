@@ -312,18 +312,58 @@ export async function cargarContexto(db: Db, agente: Agente, estado: Estado, ent
   }
 }
 
-// Ensambla el system prompt: identidad de marca (una fila, aplica a todos) +
-// el prompt del agente + estado inyectado + RAG filtrado.
+/**
+ * Ensambla el system prompt en DOS bloques: el estable (identidad, prompt del
+ * agente, conocimiento, zonas) marcado para cache, y el volatil detras.
+ *
+ * Devuelve bloques y no un string porque la marca de cacheo se pone por bloque.
+ * Ver el comentario largo dentro sobre por que el orden importa tanto.
+ */
 export function armarSystem(
   base: Base,
   agente: Agente,
   estado: Estado,
   ctxAgente: Record<string, any>,
-): string {
+): Array<{ type: 'text'; text: string; cache_control?: { type: 'ephemeral' } }> {
+  // ── EL PROMPT VA EN DOS MITADES, Y EL ORDEN ES LO QUE AHORRA EL DINERO ──────
+  //
+  // Anthropic cachea por PREFIJO: cachea desde el principio hasta la marca, y
+  // cualquier byte que cambie antes de esa marca invalida todo lo que va detras.
+  // Leer de cache cuesta la decima parte que procesar de nuevo.
+  //
+  // Asi que primero va TODO lo que no cambia entre un turno y el siguiente
+  // (identidad, prompt del agente, conocimiento de la casa, mapa de zonas), la
+  // marca de cacheo, y despues lo que cambia (la hora, el estado de ESTA
+  // conversacion, el titular encontrado).
+  //
+  // Medido en produccion: el prompt entero pesa unos 13.000 tokens y se manda
+  // completo en CADA llamada al modelo, con dos a cuatro llamadas por turno.
+  // Unos 11.500 de esos son el prefijo estable, y ahora se cobran a 0,1x.
+  //
+  // OJO AL TOCAR ESTO: meter algo que cambie (una fecha, un contador, el nombre
+  // del cliente) por encima de la marca desactiva el cache entero sin dar ningun
+  // error. El sintoma seria la factura, no un fallo.
+  const estable: string[] = [];
+  estable.push(base.identidadMarca || IDENTIDAD_MARCA);
+  estable.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
+  if (base.rag) estable.push(base.rag);
+
+  // El mapa de zonas vive aqui arriba, en la mitad estable, porque solo cambia
+  // cuando se reindexa el inventario. Son unos 2.300 tokens: en la mitad
+  // volatil se pagarian enteros en cada llamada.
+  const zonas = (ctxAgente.zonas_disponibles || []) as string[];
+  if (zonas.length) {
+    estable.push(
+      `=== ZONAS CON INVENTARIO (${zonas.length}) ===\n`
+      + 'Son los nombres EXACTOS. Pasa uno de estos a buscar_inmuebles, no lo que dijo el '
+      + 'cliente. Si lo que dijo encaja con varios ("el chico" cae en Chico, Chico Norte, '
+      + 'Chico Alto...), preguntale cual antes de buscar. Si no esta en la lista, NO afirmes '
+      + 'que no tenemos alli: di que no reconoces esa zona y pide otra referencia.\n'
+      + zonas.join(' · '),
+    );
+  }
+
   const partes: string[] = [];
-  partes.push(base.identidadMarca || IDENTIDAD_MARCA);
-  partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ''));
-  if (base.rag) partes.push(base.rag);
 
   // El horario cambia a que se compromete el agente, no lo que puede hacer.
   // Fuera de horario tiene que resolver el solo: "manana te contacta un asesor"
@@ -406,5 +446,14 @@ export function armarSystem(
       : ''),
   );
 
-  return partes.join('\n\n');
+  // Dos bloques: el estable con la marca de cacheo, y el volatil sin ella.
+  //
+  // Van como bloques de texto y no como un solo string porque la marca se pone
+  // POR BLOQUE. El minimo cacheable de Sonnet son 1024 tokens y el prefijo
+  // estable ronda los 7.500 (mas las definiciones de herramientas, que el API
+  // renderiza ANTES del system y entran en el mismo cache), asi que sobra.
+  return [
+    { type: 'text', text: estable.join('\n\n'), cache_control: { type: 'ephemeral' } },
+    { type: 'text', text: partes.join('\n\n') },
+  ];
 }

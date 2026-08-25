@@ -15,7 +15,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// base44/functions/asistente9/_core/db.ts
+// base44/functions/asistente11/_core/db.ts
 function crearDb(apiKey, baseUrl) {
   const base = (baseUrl || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
   if (!base) throw new Error("BASE44_APP_URL no configurada");
@@ -122,7 +122,7 @@ function crearDb(apiKey, baseUrl) {
   return { base, consultar, list, uno, crear, actualizar, guardar, fallos };
 }
 
-// base44/functions/asistente9/_core/cola.ts
+// base44/functions/asistente11/_core/cola.ts
 async function entregarYa(db, item, env, canales, tokenTelegram) {
   if (!item?.id) return false;
   const globos = Array.isArray(item.globos) ? item.globos : [];
@@ -211,7 +211,7 @@ async function notificarEquipo(config, telCliente, mensajes) {
   }
 }
 
-// base44/functions/asistente9/_core/prompts.ts
+// base44/functions/asistente11/_core/prompts.ts
 var TELEFONO_CONTINGENCIA = "3102109308";
 var IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -524,7 +524,7 @@ certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni ab
 solicitud: transfiere a recepcion.`
 };
 
-// base44/functions/asistente9/_core/habiles.ts
+// base44/functions/asistente11/_core/habiles.ts
 function pascua(anio) {
   const a = anio % 19;
   const b = Math.floor(anio / 100);
@@ -618,7 +618,7 @@ function sumarHabiles(desde, dias) {
   return new Date(f.getTime() + dia - 1e3);
 }
 
-// base44/functions/asistente9/_core/horario.ts
+// base44/functions/asistente11/_core/horario.ts
 var OFFSET_BOGOTA_H = -5;
 var HORARIO_DEFECTO = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
 function horarioDe(config) {
@@ -655,7 +655,7 @@ function instruccionHorario(ahora, config = {}) {
   return `FUERA DE HORARIO. El equipo atiende de lunes a viernes, de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. Agenda la visita o la llamada con la herramienta que corresponda, registra lo que haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo contacta el siguiente dia habil. Nunca uses eso como primera salida.`;
 }
 
-// base44/functions/asistente9/_core/protocol.ts
+// base44/functions/asistente11/_core/protocol.ts
 var AGENTES = [
   "recepcion",
   "ventas",
@@ -700,10 +700,10 @@ var strOpc = (description) => ({ type: ["string", "null"], description });
 var numOpc = (description) => ({ type: ["number", "null"], description });
 var bool = (description) => ({ type: "boolean", description });
 var enumStr = (description, valores) => ({ type: "string", description, enum: valores });
-var enumStrOpc = (description, valores) => ({ type: ["string", "null"], description, enum: [...valores, null] });
+var enumStrOpc = (description, valores) => ({ description, anyOf: [{ type: "string", enum: valores }, { type: "null" }] });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
-// base44/functions/asistente9/_core/state.ts
+// base44/functions/asistente11/_core/state.ts
 var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
 function identidadVacia() {
   return {
@@ -871,7 +871,7 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   return null;
 }
 
-// base44/functions/asistente9/_core/identidad.ts
+// base44/functions/asistente11/_core/identidad.ts
 var HORAS_VIGENCIA = 24;
 var MAX_INTENTOS = 3;
 var BLOQUEO_MIN = 60;
@@ -1047,7 +1047,7 @@ async function crearSesionPortal(db, entrada, estado, tipo) {
   return `${app}/portal/entrar?t=${token}`;
 }
 
-// base44/functions/asistente9/_core/contexto.ts
+// base44/functions/asistente11/_core/contexto.ts
 var MAX_RAG_CHARS = 18e3;
 function destinosDe(ch) {
   return String(ch.agentes || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1212,10 +1212,19 @@ async function cargarContexto(db, agente, estado, entrada) {
   }
 }
 function armarSystem(base, agente, estado, ctxAgente) {
+  const estable = [];
+  estable.push(base.identidadMarca || IDENTIDAD_MARCA);
+  estable.push(String(base.prompt?.prompt || PROMPTS[agente] || ""));
+  if (base.rag) estable.push(base.rag);
+  const zonas = ctxAgente.zonas_disponibles || [];
+  if (zonas.length) {
+    estable.push(
+      `=== ZONAS CON INVENTARIO (${zonas.length}) ===
+Son los nombres EXACTOS. Pasa uno de estos a buscar_inmuebles, no lo que dijo el cliente. Si lo que dijo encaja con varios ("el chico" cae en Chico, Chico Norte, Chico Alto...), preguntale cual antes de buscar. Si no esta en la lista, NO afirmes que no tenemos alli: di que no reconoces esa zona y pide otra referencia.
+` + zonas.join(" · ")
+    );
+  }
   const partes = [];
-  partes.push(base.identidadMarca || IDENTIDAD_MARCA);
-  partes.push(String(base.prompt?.prompt || PROMPTS[agente] || ""));
-  if (base.rag) partes.push(base.rag);
   partes.push(`=== MOMENTO ===
 ${instruccionHorario(/* @__PURE__ */ new Date(), base.config || {})}`);
   const nombre = String(estado.compartido.nombre || "");
@@ -1275,10 +1284,13 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     // recibe la presentacion dos veces seguidas.
     (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
   );
-  return partes.join("\n\n");
+  return [
+    { type: "text", text: estable.join("\n\n"), cache_control: { type: "ephemeral" } },
+    { type: "text", text: partes.join("\n\n") }
+  ];
 }
 
-// base44/functions/asistente9/_core/diagnostico.ts
+// base44/functions/asistente11/_core/diagnostico.ts
 var miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function informeChunks(d) {
   if (!d) {
@@ -1315,7 +1327,7 @@ function informeChunks(d) {
   return l.join("\n");
 }
 
-// base44/functions/asistente9/_core/llm.ts
+// base44/functions/asistente11/_core/llm.ts
 var API = "https://api.anthropic.com/v1/messages";
 function paramsModelo(modelo, effort) {
   if (/haiku/.test(modelo)) return {};
@@ -1344,6 +1356,12 @@ async function llamarModelo(opts) {
       });
       if (r.ok) {
         const j = await r.json();
+        const u = j.usage || {};
+        const leidos = u.cache_read_input_tokens || 0;
+        const escritos = u.cache_creation_input_tokens || 0;
+        console.log(
+          `tokens[${modelo}] entrada ${u.input_tokens || 0} | cache leidos ${leidos} escritos ${escritos} | salida ${u.output_tokens || 0}`
+        );
         return { bloques: j.content || [], stop_reason: j.stop_reason || "", modelo };
       }
       console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
@@ -1448,7 +1466,7 @@ async function correrAgente(opts) {
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
 }
 
-// base44/functions/asistente9/_core/router.ts
+// base44/functions/asistente11/_core/router.ts
 var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 var POR_BOTON = {
   "flujo:consignacion": "consignacion",
@@ -1566,7 +1584,7 @@ ${entrada.texto.slice(0, 600)}`
   };
 }
 
-// base44/functions/asistente9/_core/tools/asistidos.ts
+// base44/functions/asistente11/_core/tools/asistidos.ts
 var PRIORIDAD = {
   baja: "Baja",
   media: "Media",
@@ -1643,7 +1661,7 @@ var ASISTIDOS = {
   consultar_historial_solicitudes: consultarHistorialSolicitudes
 };
 
-// base44/functions/asistente9/_core/brief.ts
+// base44/functions/asistente11/_core/brief.ts
 var ETIQUETAS = {
   operacion: "Operacion",
   tipo_prop: "Tipo de inmueble",
@@ -1704,7 +1722,7 @@ function briefLead(estado, tel, canal, extra = []) {
   return lineas.join("\n");
 }
 
-// base44/functions/asistente9/_core/tools/comunes.ts
+// base44/functions/asistente11/_core/tools/comunes.ts
 var COMPARTIDOS = /* @__PURE__ */ new Set(["nombre", "email", "documento", "direccion_inmueble"]);
 var NUMERICOS = /* @__PURE__ */ new Set(["presupuesto", "canon_esperado", "valor_esperado", "area_m2", "habitaciones", "nps_score"]);
 var responder = {
@@ -1845,7 +1863,7 @@ var enviarMenu = {
   }
 };
 
-// base44/functions/asistente9/_core/tools/identificacion.ts
+// base44/functions/asistente11/_core/tools/identificacion.ts
 var identificarTitular = {
   ...definirTool(
     "identificar_titular",
@@ -1893,7 +1911,7 @@ var identificarTitular = {
   }
 };
 
-// base44/functions/asistente9/_core/scoring.ts
+// base44/functions/asistente11/_core/scoring.ts
 var ETAPA = {
   Lead: 10,
   Visita_Agendada: 35,
@@ -1946,7 +1964,7 @@ function calificar(s) {
   };
 }
 
-// base44/functions/asistente9/_core/tools/ventas.ts
+// base44/functions/asistente11/_core/tools/ventas.ts
 var normalizarZona = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^(los|las|el|la)\s+/, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 async function asignarAsesor(db, criterios) {
   const activos = await db.list("Asesor", { estado: "Activo", limit: 100 });
@@ -2458,7 +2476,7 @@ var VENTAS = {
   agendar_visita: agendarVisita
 };
 
-// base44/functions/asistente9/_core/tools/cartera.ts
+// base44/functions/asistente11/_core/tools/cartera.ts
 var verificarIdentidad = {
   ...definirTool(
     "verificar_identidad",
@@ -2661,7 +2679,7 @@ var CARTERA = {
   enviar_certificado_propietario: enviarCertificadoPropietario
 };
 
-// base44/functions/asistente9/_core/tools/mantenimiento.ts
+// base44/functions/asistente11/_core/tools/mantenimiento.ts
 var registrarReparacion = {
   ...definirTool(
     "registrar_reparacion",
@@ -2773,7 +2791,7 @@ var MANTENIMIENTO = {
   consultar_estado_reparacion: consultarEstadoReparacion
 };
 
-// base44/functions/asistente9/_core/tools/consignacion.ts
+// base44/functions/asistente11/_core/tools/consignacion.ts
 var registrarConsignacion = {
   ...definirTool(
     "registrar_consignacion",
@@ -2864,7 +2882,7 @@ var CONSIGNACION = {
   agendar_avaluo_previo: agendarAvaluoPrevio
 };
 
-// base44/functions/asistente9/_core/tools/avaluos.ts
+// base44/functions/asistente11/_core/tools/avaluos.ts
 var registrarSolicitudAvaluo = {
   ...definirTool(
     "registrar_solicitud_avaluo",
@@ -2934,7 +2952,7 @@ var AVALUOS = {
   cotizar_avaluo: cotizarAvaluo
 };
 
-// base44/functions/asistente9/_core/tools/pqr.ts
+// base44/functions/asistente11/_core/tools/pqr.ts
 var LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
 var DIAS_DEFECTO = {
   Peticion: 15,
@@ -3039,7 +3057,7 @@ var PQR = {
   consultar_estado_pqr: consultarEstadoPqr
 };
 
-// base44/functions/asistente9/_core/tools/matricula.ts
+// base44/functions/asistente11/_core/tools/matricula.ts
 var iniciarMatricula = {
   ...definirTool(
     "iniciar_matricula",
@@ -3171,7 +3189,7 @@ var MATRICULA = {
   enviar_link_portal: enviarLinkDocumentos
 };
 
-// base44/functions/asistente9/_core/tools/index.ts
+// base44/functions/asistente11/_core/tools/index.ts
 var IDENT = { identificar_titular: identificarTitular };
 var HIST = ASISTIDOS;
 var EXTRA = {
@@ -3191,7 +3209,7 @@ function toolsDe(agente, habilitadas) {
   return Object.fromEntries(Object.entries(todas).filter(([n]) => permitidas.has(n)));
 }
 
-// base44/functions/asistente9/_core/canales/whatsapp.ts
+// base44/functions/asistente11/_core/canales/whatsapp.ts
 var whatsapp_exports = {};
 __export(whatsapp_exports, {
   enviar: () => enviar,
@@ -3200,7 +3218,7 @@ __export(whatsapp_exports, {
   normalizar: () => normalizar2
 });
 
-// base44/functions/asistente9/_core/canales/media.ts
+// base44/functions/asistente11/_core/canales/media.ts
 async function transcribir(buf, mimeType, openaiKey) {
   const fd = new FormData();
   fd.append("file", new Blob([buf], { type: mimeType }), "audio.ogg");
@@ -3248,7 +3266,7 @@ async function describirImagen(buf, mimeType, openaiKey, caption) {
   return ((await r.json()).choices?.[0]?.message?.content || "").trim() || null;
 }
 
-// base44/functions/asistente9/_core/canales/whatsapp.ts
+// base44/functions/asistente11/_core/canales/whatsapp.ts
 var GRAPH = "https://graph.facebook.com/v19.0";
 var esWhatsApp = (body) => !!body?.entry?.[0]?.changes;
 var conIndicativo = (t) => {
@@ -3340,7 +3358,7 @@ async function marcarEscribiendo(msgId, env) {
   }
 }
 
-// base44/functions/asistente9/_core/canales/telegram.ts
+// base44/functions/asistente11/_core/canales/telegram.ts
 var telegram_exports = {};
 __export(telegram_exports, {
   enviar: () => enviar2,
@@ -3430,7 +3448,7 @@ async function marcarEscribiendo2(destino, env) {
   }
 }
 
-// base44/functions/asistente9/_core/canales/bots.ts
+// base44/functions/asistente11/_core/canales/bots.ts
 var VAR_POR_AGENTE = {
   recepcion: "TELEGRAM_BOT_RECEPCION",
   ventas: "TELEGRAM_BOT_VENTAS",
@@ -3451,7 +3469,7 @@ function agenteDeUrl(url) {
   return v && esAgente(v) ? v : null;
 }
 
-// base44/functions/asistente9/_core/webhook.ts
+// base44/functions/asistente11/_core/webhook.ts
 async function firmaMetaValida(rawBody, header, secret) {
   if (!header?.startsWith("sha256=") || !secret) return false;
   const hex = header.slice("sha256=".length);
@@ -3484,8 +3502,15 @@ function secretoIgual(recibido, esperado) {
   return diferencia === 0;
 }
 
-// base44/functions/asistente9/entry.ts
+// base44/functions/asistente11/entry.ts
 var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
+function puedeDiagnosticar(entrada) {
+  if (entrada.canal === "telegram") return true;
+  const permitidos = (Deno.env.get("DIAGNOSTICO_TELEFONOS") || "").split(",").map((s) => s.replace(/\D/g, "")).filter((s) => s.length >= 7);
+  if (!permitidos.length) return false;
+  const mio = entrada.tel.replace(/\D/g, "");
+  return permitidos.some((p) => mio.endsWith(p.slice(-10)) || p.endsWith(mio.slice(-10)));
+}
 var MODELO_PRIMARIO = "claude-sonnet-5";
 var MODELO_FALLBACK = "claude-haiku-4-5-20251001";
 var MODELO_ROUTER = "claude-haiku-4-5-20251001";
@@ -3581,12 +3606,12 @@ async function procesar(entrada, env, agenteBot = null) {
   const memoriaId = cargada.id;
   let estado = cargada.estado;
   marca("estado cargado");
-  if (entrada.canal === "telegram" && /^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  if (/^\/(?:start|reiniciar)(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
     estado = estadoVacio();
     entrada.texto = "Hola";
-    marca("conversacion reiniciada por comando de Telegram");
+    marca(`conversacion reiniciada por comando (${entrada.canal})`);
   }
-  if (entrada.canal === "telegram" && /^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto)) {
+  if (/^\/chunks(?:@\w+)?(?:\s|$)/i.test(entrada.texto) && puedeDiagnosticar(entrada)) {
     const item = await encolar(db, {
       canal: entrada.canal,
       destino: entrada.destino,
