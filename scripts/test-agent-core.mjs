@@ -105,12 +105,14 @@ const ZONAS = [
   { nombre: 'Chapinero Alto', normalizado: 'chapinero alto', activo: true },
   { nombre: 'Los Rosales', normalizado: 'rosales', activo: true },
 ];
-const nuevoCtx = (cae = false) => ({
-  db: dbInmuebles(catalogoDemo, ZONAS, cae),
+const nuevoCtx = (props = catalogoDemo, cae = false) => ({
+  db: dbInmuebles(props, ZONAS, cae),
   ctxAgente: {},
   salida: { globos: [], finTurno: false },
   efectos: { transferir: null, escalado: null, notificar: [] },
 });
+// El ctx de una base caida, que es lo que hay que distinguir de un cero real.
+const ctxCaido = () => nuevoCtx(catalogoDemo, true);
 const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   operacion: 'arriendo', barrio: null, tipo: null,
   presupuesto_max: null, habitaciones_min: null, ...input,
@@ -138,6 +140,14 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.deepEqual(primera.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
   assert.match(primera.instruccion, /11: 8 apartamentos, 2 oficinas, 1 casa/);
   assert.match(primera.instruccion, /UNA sola pregunta/);
+  // El plural se arma bien porque esta frase la oye el cliente tal cual: en
+  // castellano "local" hace "locales", no "locals".
+  const conLocales = await buscar({ barrio: 'Chapinero' }, nuevoCtx([
+    ...catalogoDemo,
+    { id: 'l1', operacion: 'Arriendo', estado: 'Disponible', barrio: 'Chapinero', tipo: 'Local', canon_arriendo: 5e6 },
+    { id: 'l2', operacion: 'Arriendo', estado: 'Disponible', barrio: 'Chapinero', tipo: 'Local', canon_arriendo: 6e6 },
+  ]));
+  assert.match(conLocales.instruccion, /2 locales/);
 
   // 2. El cliente contesta "apartamento". Ahora si se muestran, y el total que
   //    viaja es 8: los que ENCAJAN, no los que caben en el mensaje. `mostrados`
@@ -274,6 +284,14 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 
   // Un inmueble que existe pero no se mostro: se resuelve por id contra la base.
   assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctx)).ok, true);
+
+  // Y si entre turnos salio del mercado, no se manda la ficha de algo que ya no
+  // se puede ofrecer. Pero se dice lo que es, no "no lo encuentro".
+  const retirado = { ...catalogoDemo[0], id: 'retirado', estado: 'Arrendado' };
+  const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
+  const fueraDeMercado = await enviarFicha.ejecutar({ inmueble_id: 'retirado' }, ctxRetirado);
+  assert.equal(fueraDeMercado.error, 'no_disponible');
+  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
 
   // Si la base se cae, tampoco se niega.
   const ctxCaido = nuevoCtx(true);
