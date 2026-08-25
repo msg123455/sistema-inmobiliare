@@ -8,7 +8,7 @@ import { IDENTIDAD_MARCA, PROMPTS } from '../base44/functions/_core/prompts.ts';
 import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
 import { enviarLinkDocumentos } from '../base44/functions/_core/tools/matricula.ts';
 import {
-  agendarVisita, buscarInmuebles, buscarPorCodigo, calificarLead, enviarFicha, fmtCOP,
+  agendarVisita, buscarInmuebles, buscarPorCodigo, calificarLead, enviarFichas, fmtCOP,
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
@@ -270,34 +270,34 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.equal(ctx.ctxAgente.mostrados.length, 5, 'queda lo mostrado, para el turno siguiente');
   // Cuatro campos, no la fila entera: esto persiste en MemoriaChat y meter
   // propiedades completas ahi es lo que reventaba la escritura del estado.
-  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ['id', 'codigo', 'titulo', 'ficha']);
-  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 2_000);
+  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ['id', 'codigo', 'titulo', 'ficha', 'tipo', 'barrio', 'precio', 'area', 'hab']);
+  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 4_000);
 
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctx)).ok, true);
+  assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0'] }, ctx)).ok, true);
   assert.equal(ctx.salida.globos.at(-1), 'https://www.metrocuadrado.com/ficha-0');
 
   // Un id que no se mostro se busca en la base antes de decir nada. Y si no
   // aparece, la respuesta NUNCA es "ese ya no lo tengo": era la unica tool de
   // ventas que devolvia un error crudo y el modelo lo improvisaba.
-  const fantasma = await enviarFicha.ejecutar({ inmueble_id: 'no-existe' }, ctx);
+  const fantasma = await enviarFichas.ejecutar({ inmueble_ids: ['no-existe'] }, ctx);
   assert.equal(fantasma.ok, false);
-  assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
+  assert.match(fantasma.instruccion, /NO le digas que los inmuebles ya no estan/);
 
   // Un inmueble que existe pero no se mostro: se resuelve por id contra la base.
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: 'chapi-25' }, ctx)).ok, true);
+  assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ['chapi-25'] }, ctx)).ok, true);
 
   // Y si entre turnos salio del mercado, no se manda la ficha de algo que ya no
   // se puede ofrecer. Pero se dice lo que es, no "no lo encuentro".
   const retirado = { ...catalogoDemo[0], id: 'retirado', estado: 'Arrendado' };
   const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
-  const fueraDeMercado = await enviarFicha.ejecutar({ inmueble_id: 'retirado' }, ctxRetirado);
-  assert.equal(fueraDeMercado.error, 'no_disponible');
-  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
+  const fueraDeMercado = await enviarFichas.ejecutar({ inmueble_ids: ['retirado'] }, ctxRetirado);
+  assert.equal(fueraDeMercado.error, 'ninguno_valido');
+  assert.match(fueraDeMercado.instruccion, /vuelve a buscar con buscar_inmuebles/);
 
   // Si la base se cae, tampoco se niega.
-  const sinBase = await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctxCaido());
-  assert.equal(sinBase.error, 'no_pude_consultar');
-  assert.match(sinBase.instruccion, /NO digas que no existe/);
+  const sinBase = await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0'] }, ctxCaido());
+  assert.equal(sinBase.error, 'ninguno_valido');
+  assert.match(sinBase.instruccion, /vuelve a buscar con buscar_inmuebles/);
 
   // agendar_visita no agenda sobre un id que no pudo ubicar: el asesor se
   // encontraba citas para inmuebles que no existen.

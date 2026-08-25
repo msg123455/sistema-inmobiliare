@@ -840,7 +840,9 @@ la herramienta te lo dice con el desglose ya hecho.
 
 Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exactos de
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
-enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
+enviar_fichas en el mismo turno, con TODOS los ids en una sola llamada: la herramienta
+los parte en un mensaje por inmueble con su precio, su tamano y su link. No escribas tu
+esos datos ni la llames una vez por inmueble.
 
 LEE 'resultado' ANTES DE CONTESTAR. Decide que puedes afirmar:
 - hay ................. muestra los inmuebles. El total real es 'total', no cuantos le
@@ -1307,12 +1309,20 @@ var buscarInmuebles = {
     });
     const visibles = orden.slice(0, MOSTRAR);
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const nuevos = visibles.map((p) => ({
-      id: p.id,
-      codigo: p.codigo_externo || "",
-      titulo: p.titulo || "",
-      ficha: linkFicha(p)
-    }));
+    const nuevos = visibles.map((p) => {
+      const r2 = resumirProp(p, esArr);
+      return {
+        id: r2.id,
+        codigo: r2.codigo || "",
+        titulo: r2.titulo || "",
+        ficha: r2.ficha || "",
+        tipo: r2.tipo || "",
+        barrio: r2.barrio || "",
+        precio: r2.precio || "",
+        area: r2.area_m2 ? String(r2.area_m2) : "",
+        hab: r2.habitaciones ? String(r2.habitaciones) : ""
+      };
+    });
     const vistos = new Set(nuevos.map((m) => m.id));
     c.ctxAgente.mostrados = [...nuevos, ...antes.filter((m) => !vistos.has(m.id))].slice(0, 10);
     return {
@@ -1344,9 +1354,20 @@ async function resolverInmueble(c, id) {
   const p = r.filas[0];
   if (!p) return { ok: false, motivo: "no_mostrado" };
   if (String(p.estado || "") !== "Disponible") return { ok: false, motivo: "no_disponible" };
+  const resum = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
   return {
     ok: true,
-    mostrado: { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) }
+    mostrado: {
+      id: resum.id,
+      codigo: resum.codigo || "",
+      titulo: resum.titulo || "",
+      ficha: resum.ficha || "",
+      tipo: resum.tipo || "",
+      barrio: resum.barrio || "",
+      precio: resum.precio || "",
+      area: resum.area_m2 ? String(resum.area_m2) : "",
+      hab: resum.habitaciones ? String(resum.habitaciones) : ""
+    }
   };
 }
 var noUbicado = (motivo, queIbaAHacer) => ({
@@ -1354,24 +1375,45 @@ var noUbicado = (motivo, queIbaAHacer) => ({
   error: motivo,
   instruccion: motivo === "no_pude_consultar" ? `No pudiste consultar ese inmueble, asi que ${queIbaAHacer} NO se hizo. NO digas que no existe ni que ya no esta disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas.` : motivo === "no_disponible" ? `Ese inmueble ya no esta disponible, asi que ${queIbaAHacer} NO se hizo. Dilo sin rodeos y ofrecele buscar algo parecido con buscar_inmuebles.` : `Ese id no salio en tu busqueda, asi que ${queIbaAHacer} NO se hizo. NO le digas que el inmueble ya no esta ni te lo inventes: vuelve a buscar con buscar_inmuebles y trabaja sobre una de las que devuelva.`
 });
-var enviarFicha = {
+var enviarFichas = {
   ...definirTool(
-    "enviar_ficha",
-    "Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.",
-    { inmueble_id: str("El id que devolvio buscar_inmuebles") }
+    "enviar_fichas",
+    "Manda al cliente las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. Pasa TODOS los ids en una sola llamada: la herramienta arma una tarjeta por inmueble (titulo, precio, area y link) y cada una se envia como un mensaje separado. No la llames una vez por inmueble.",
+    { inmueble_ids: lista("Los ids que devolvio buscar_inmuebles, en el orden que los quieras presentar") }
   ),
   ejecutar: async (input, c) => {
-    const res = await resolverInmueble(c, String(input.inmueble_id || ""));
-    if (!res.ok) return noUbicado(res.motivo, "el envio de la ficha");
-    if (!res.mostrado.ficha) {
+    const ids = Array.isArray(input.inmueble_ids) ? input.inmueble_ids : [];
+    if (!ids.length) {
+      return { ok: false, error: "sin_ids", instruccion: "Pasa al menos un id de buscar_inmuebles." };
+    }
+    let validos = 0;
+    for (const idRaw of ids) {
+      const id = String(idRaw || "").trim();
+      if (!id) continue;
+      const res = await resolverInmueble(c, id);
+      if (!res.ok) continue;
+      if (!res.mostrado.ficha) {
+        c.salida.globos.push(`${res.mostrado.titulo || "Inmueble"} \u2014 el asesor te comparte la ficha con las fotos.`);
+        validos++;
+        continue;
+      }
+      const m = res.mostrado;
+      const datos = [
+        m.precio || "",
+        m.area ? `${m.area} m\xB2` : "",
+        m.hab ? `${m.hab} hab` : ""
+      ].filter(Boolean).join(" \xB7 ");
+      c.salida.globos.push(`${m.titulo}${datos ? ` \xB7 ${datos}` : ""}`);
+      c.salida.globos.push(m.ficha);
+      validos++;
+    }
+    if (!validos) {
       return {
         ok: false,
-        error: "sin_ficha",
-        instruccion: "Ese inmueble no tiene ficha publicada. Dile que el asesor se la comparte. PROHIBIDO inventar el link."
+        error: "ninguno_valido",
+        instruccion: "Ninguno de esos ids salio en tu busqueda. NO le digas que los inmuebles ya no estan: vuelve a buscar con buscar_inmuebles y trabaja sobre las que devuelva."
       };
     }
-    c.salida.globos.push("Te dejo la ficha con las fotos y todos los detalles:");
-    c.salida.globos.push(res.mostrado.ficha);
     return { ok: true };
   }
 };
@@ -1430,16 +1472,16 @@ var buscarPorCodigo = {
     const candidatos = [...new Set([partes ? `${partes[1]}-${partes[2]}` : "", crudo].filter(Boolean))];
     let p = null;
     for (const cand of candidatos) {
-      const r = await c.db.consultar("Propiedad", { codigo_externo: cand, limit: 1 });
-      if (r.ok === false) {
+      const r2 = await c.db.consultar("Propiedad", { codigo_externo: cand, limit: 1 });
+      if (r2.ok === false) {
         return {
           ok: false,
           error: "no_pude_consultar",
           instruccion: "No pudiste consultar ese codigo. PROHIBIDO decirle que no existe: no lo comprobaste. Dile que se te trabo el sistema y que se lo confirmas enseguida."
         };
       }
-      if (r.filas[0]) {
-        p = r.filas[0];
+      if (r2.filas[0]) {
+        p = r2.filas[0];
         break;
       }
     }
@@ -1458,14 +1500,25 @@ var buscarPorCodigo = {
       };
     }
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
+    const r = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
     c.ctxAgente.mostrados = [
-      { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) },
+      {
+        id: r.id,
+        codigo: r.codigo || "",
+        titulo: r.titulo || "",
+        ficha: r.ficha || "",
+        tipo: r.tipo || "",
+        barrio: r.barrio || "",
+        precio: r.precio || "",
+        area: r.area_m2 ? String(r.area_m2) : "",
+        hab: r.habitaciones ? String(r.habitaciones) : ""
+      },
       ...antes.filter((m) => m.id !== p.id)
     ].slice(0, 10);
     return {
       ok: true,
       inmueble: resumirProp(p, !p.precio_venta && !!p.canon_arriendo),
-      instruccion: "Confirmale que si lo tienes, dile lo esencial en una frase y manda la ficha con enviar_ficha en este mismo turno. Despues sigue la conversacion: pregunta si quiere verlo o si busca algo asi."
+      instruccion: "Confirmale que si lo tienes, dile lo esencial en una frase y manda la ficha con enviar_fichas en este mismo turno. Despues sigue la conversacion: pregunta si quiere verlo o si busca algo asi."
     };
   }
 };
@@ -1595,7 +1648,7 @@ var agendarVisita = {
 var VENTAS = {
   buscar_inmuebles: buscarInmuebles,
   buscar_por_codigo: buscarPorCodigo,
-  enviar_ficha: enviarFicha,
+  enviar_fichas: enviarFichas,
   registrar_interes: registrarInteres,
   calificar_lead: calificarLead,
   agendar_visita: agendarVisita
@@ -3137,22 +3190,22 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   const res = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
   assert.equal(res.inmuebles[0].ficha, "https://www.metrocuadrado.com/ficha-0");
   assert.equal(ctx.ctxAgente.mostrados.length, 5, "queda lo mostrado, para el turno siguiente");
-  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ["id", "codigo", "titulo", "ficha"]);
-  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 2e3);
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctx)).ok, true);
+  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ["id", "codigo", "titulo", "ficha", "tipo", "barrio", "precio", "area", "hab"]);
+  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 4e3);
+  assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ["ros-apto-0"] }, ctx)).ok, true);
   assert.equal(ctx.salida.globos.at(-1), "https://www.metrocuadrado.com/ficha-0");
-  const fantasma = await enviarFicha.ejecutar({ inmueble_id: "no-existe" }, ctx);
+  const fantasma = await enviarFichas.ejecutar({ inmueble_ids: ["no-existe"] }, ctx);
   assert.equal(fantasma.ok, false);
-  assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: "chapi-25" }, ctx)).ok, true);
+  assert.match(fantasma.instruccion, /NO le digas que los inmuebles ya no estan/);
+  assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ["chapi-25"] }, ctx)).ok, true);
   const retirado = { ...catalogoDemo[0], id: "retirado", estado: "Arrendado" };
   const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
-  const fueraDeMercado = await enviarFicha.ejecutar({ inmueble_id: "retirado" }, ctxRetirado);
-  assert.equal(fueraDeMercado.error, "no_disponible");
-  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
-  const sinBase = await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctxCaido());
-  assert.equal(sinBase.error, "no_pude_consultar");
-  assert.match(sinBase.instruccion, /NO digas que no existe/);
+  const fueraDeMercado = await enviarFichas.ejecutar({ inmueble_ids: ["retirado"] }, ctxRetirado);
+  assert.equal(fueraDeMercado.error, "ninguno_valido");
+  assert.match(fueraDeMercado.instruccion, /vuelve a buscar con buscar_inmuebles/);
+  const sinBase = await enviarFichas.ejecutar({ inmueble_ids: ["ros-apto-0"] }, ctxCaido());
+  assert.equal(sinBase.error, "ninguno_valido");
+  assert.match(sinBase.instruccion, /vuelve a buscar con buscar_inmuebles/);
   const visitaFalsa = await agendarVisita.ejecutar(
     { inmueble_id: "no-existe", preferencia: "el sabado" },
     { ...ctx, estado: estadoVacio(), db: { ...ctx.db, crear: async () => {
