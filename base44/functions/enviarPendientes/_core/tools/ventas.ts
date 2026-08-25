@@ -157,9 +157,18 @@ export const buscarInmuebles: Tool = {
     if (barrio && !props.length) {
       props = await c.db.list('Propiedad', { estado: 'Disponible', zona: String(input.barrio).trim(), limit: 800 });
     }
+    // El barrio que dijo el cliente puede estar guardado como localidad: si
+    // pidio "Chapinero" y el inmueble figura con barrio "Chapinero Norte" pero
+    // localidad "Chapinero", la localidad lo rescata. Es el ultimo intento
+    // contra la base antes de aceptar el cero.
     if (barrio && !props.length) {
-      props = await c.db.list('Propiedad', { estado: 'Disponible', limit: 800 });
+      props = await c.db.list('Propiedad', { estado: 'Disponible', localidad: String(input.barrio).trim(), limit: 800 });
     }
+    // Si tampoco por localidad hay nada, se acepta el cero y se ofrece registrar
+    // el interes. Antes se cargaban 800 inmuebles arbitrarios y se filtraban
+    // sobre esos: si el cliente pidio Chapinero y los 800 eran de La Calera, el
+    // agente respondia "no tengo nada en Chapinero" teniendo 624 alli, o peor, le
+    // mostraba algo de La Calera como si fuera lo que pidio.
 
     const puntuados = props
       .filter((p) => {

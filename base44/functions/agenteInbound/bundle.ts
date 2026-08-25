@@ -1937,7 +1937,7 @@ var buscarInmuebles = {
       props = await c.db.list("Propiedad", { estado: "Disponible", zona: String(input.barrio).trim(), limit: 800 });
     }
     if (barrio && !props.length) {
-      props = await c.db.list("Propiedad", { estado: "Disponible", limit: 800 });
+      props = await c.db.list("Propiedad", { estado: "Disponible", localidad: String(input.barrio).trim(), limit: 800 });
     }
     const puntuados = props.filter((p) => {
       const op = String(p.operacion || "");
