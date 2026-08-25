@@ -1,4 +1,4 @@
-import { definirTool, str, strOpc, numOpc, enumStr, enumStrOpc, type Tool, type CtxTool } from '../protocol.ts';
+import { definirTool, str, strOpc, numOpc, enumStr, enumStrOpc, lista, type Tool, type CtxTool } from '../protocol.ts';
 import { ctxDe } from '../state.ts';
 import { TELEFONO_CONTINGENCIA } from '../prompts.ts';
 import { calificar } from '../scoring.ts';
@@ -494,15 +494,20 @@ export const buscarInmuebles: Tool = {
     });
     const visibles = orden.slice(0, MOSTRAR);
 
-    // Lo que se le mostro, para que enviar_ficha y agendar_visita resuelvan el
+    // Lo que se le mostro, para que enviar_fichas y agendar_visita resuelvan el
     // id despues. Se guardan CUATRO campos, no la fila entera: esto persiste en
     // MemoriaChat entre turnos (el cliente pide la ficha en el mensaje
     // siguiente) y meter propiedades completas ahi es lo que reventaba la
     // escritura del estado por tamano.
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const nuevos = visibles.map((p: any) => ({
-      id: p.id, codigo: p.codigo_externo || '', titulo: p.titulo || '', ficha: linkFicha(p),
-    }));
+    const nuevos = visibles.map((p: any) => {
+      const r = resumirProp(p, esArr);
+      return {
+        id: r.id, codigo: r.codigo || '', titulo: r.titulo || '', ficha: r.ficha || '',
+        tipo: r.tipo || '', barrio: r.barrio || '', precio: r.precio || '',
+        area: r.area_m2 ? String(r.area_m2) : '', hab: r.habitaciones ? String(r.habitaciones) : '',
+      };
+    });
     const vistos = new Set(nuevos.map((m) => m.id));
     c.ctxAgente.mostrados = [...nuevos, ...antes.filter((m: any) => !vistos.has(m.id))].slice(0, 10);
 
@@ -556,9 +561,14 @@ async function resolverInmueble(c: CtxTool, id: string) {
   // comprueba aqui y no en cada tool para que no se le mande la ficha de algo
   // que ya no se puede ofrecer.
   if (String(p.estado || '') !== 'Disponible') return { ok: false as const, motivo: 'no_disponible' as NoUbicado };
+  const resum = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
   return {
     ok: true as const,
-    mostrado: { id: p.id, codigo: p.codigo_externo || '', titulo: p.titulo || '', ficha: linkFicha(p) },
+    mostrado: {
+      id: resum.id, codigo: resum.codigo || '', titulo: resum.titulo || '', ficha: resum.ficha || '',
+      tipo: resum.tipo || '', barrio: resum.barrio || '', precio: resum.precio || '',
+      area: resum.area_m2 ? String(resum.area_m2) : '', hab: resum.habitaciones ? String(resum.habitaciones) : '',
+    },
   };
 }
 
@@ -566,7 +576,7 @@ async function resolverInmueble(c: CtxTool, id: string) {
  * Que decirle al cliente cuando no se pudo ubicar el inmueble.
  *
  * Las tres salidas llevan instruccion, y son tres distintas a proposito. Antes
- * enviar_ficha era la unica tool de ventas que devolvia un error crudo
+ * enviar_ficha (hoy enviar_fichas) era la unica tool de ventas que devolvia un error crudo
  * —{ok:false, error:'inmueble no encontrado'}— sin ninguna guia, y el modelo
  * improvisaba "ese ya no lo tengo disponible" sobre un inmueble que sigue
  * publicado.
@@ -586,27 +596,49 @@ const noUbicado = (motivo: NoUbicado, queIbaAHacer: string) => ({
         + 'sobre una de las que devuelva.',
 });
 
-export const enviarFicha: Tool = {
+export const enviarFichas: Tool = {
   ...definirTool(
-    'enviar_ficha',
-    'Manda al cliente el link de la ficha (fotos y detalles) de un inmueble concreto que ya viste en buscar_inmuebles. Mandalo apenas presentes el inmueble, sin esperar a que lo pida.',
-    { inmueble_id: str('El id que devolvio buscar_inmuebles') },
+    'enviar_fichas',
+    'Manda al cliente las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. Pasa TODOS los ids en una sola llamada: la herramienta arma una tarjeta por inmueble (titulo, precio, area y link) y cada una se envia como un mensaje separado. No la llames una vez por inmueble.',
+    { inmueble_ids: lista('Los ids que devolvio buscar_inmuebles, en el orden que los quieras presentar') },
   ),
   ejecutar: async (input, c: CtxTool) => {
-    const res = await resolverInmueble(c, String(input.inmueble_id || ''));
-    if (!res.ok) return noUbicado(res.motivo, 'el envio de la ficha');
-
-    if (!res.mostrado.ficha) {
-      return {
-        ok: false,
-        error: 'sin_ficha',
-        instruccion: 'Ese inmueble no tiene ficha publicada. Dile que el asesor se la comparte. '
-          + 'PROHIBIDO inventar el link.',
-      };
+    const ids = Array.isArray(input.inmueble_ids) ? input.inmueble_ids : [];
+    if (!ids.length) {
+      return { ok: false, error: 'sin_ids', instruccion: 'Pasa al menos un id de buscar_inmuebles.' };
     }
 
-    c.salida.globos.push('Te dejo la ficha con las fotos y todos los detalles:');
-    c.salida.globos.push(res.mostrado.ficha);
+    let validos = 0;
+    for (const idRaw of ids) {
+      const id = String(idRaw || '').trim();
+      if (!id) continue;
+      const res = await resolverInmueble(c, id);
+      if (!res.ok) continue;
+
+      if (!res.mostrado.ficha) {
+        c.salida.globos.push(`${res.mostrado.titulo || 'Inmueble'} — el asesor te comparte la ficha con las fotos.`);
+        validos++;
+        continue;
+      }
+
+      const m = res.mostrado;
+      const datos = [
+        m.precio || '',
+        m.area ? `${m.area} m²` : '',
+        m.hab ? `${m.hab} hab` : '',
+      ].filter(Boolean).join(' · ');
+      c.salida.globos.push(`${m.titulo}${datos ? ` · ${datos}` : ''}`);
+      c.salida.globos.push(m.ficha);
+      validos++;
+    }
+
+    if (!validos) {
+      return {
+        ok: false,
+        error: 'ninguno_valido',
+        instruccion: 'Ninguno de esos ids salio en tu busqueda. NO le digas que los inmuebles ya no estan: vuelve a buscar con buscar_inmuebles y trabaja sobre las que devuelva.',
+      };
+    }
     return { ok: true };
   },
 };
@@ -715,10 +747,15 @@ export const buscarPorCodigo: Tool = {
       };
     }
 
-    // Queda a mano para que enviar_ficha no tenga que volver a consultar.
+    // Queda a mano para que enviar_fichas no tenga que volver a consultar.
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
+    const r = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
     c.ctxAgente.mostrados = [
-      { id: p.id, codigo: p.codigo_externo || '', titulo: p.titulo || '', ficha: linkFicha(p) },
+      {
+        id: r.id, codigo: r.codigo || '', titulo: r.titulo || '', ficha: r.ficha || '',
+        tipo: r.tipo || '', barrio: r.barrio || '', precio: r.precio || '',
+        area: r.area_m2 ? String(r.area_m2) : '', hab: r.habitaciones ? String(r.habitaciones) : '',
+      },
       ...antes.filter((m: any) => m.id !== p.id),
     ].slice(0, 10);
 
@@ -726,7 +763,7 @@ export const buscarPorCodigo: Tool = {
       ok: true,
       inmueble: resumirProp(p, !p.precio_venta && !!p.canon_arriendo),
       instruccion: 'Confirmale que si lo tienes, dile lo esencial en una frase y manda la ficha '
-        + 'con enviar_ficha en este mismo turno. Despues sigue la conversacion: pregunta si quiere '
+        + 'con enviar_fichas en este mismo turno. Despues sigue la conversacion: pregunta si quiere '
         + 'verlo o si busca algo asi.',
     };
   },
@@ -872,7 +909,7 @@ export const agendarVisita: Tool = {
 export const VENTAS: Record<string, Tool> = {
   buscar_inmuebles: buscarInmuebles,
   buscar_por_codigo: buscarPorCodigo,
-  enviar_ficha: enviarFicha,
+  enviar_fichas: enviarFichas,
   registrar_interes: registrarInteres,
   calificar_lead: calificarLead,
   agendar_visita: agendarVisita,

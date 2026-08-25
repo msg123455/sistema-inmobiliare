@@ -142,7 +142,9 @@ la herramienta te lo dice con el desglose ya hecho.
 
 Usa buscar_inmuebles antes de mencionar cualquier propiedad. Solo usa datos exactos de
 la herramienta. Si un dato viene vacio, no lo inventes. Cuando presentes una ficha, usa
-enviar_ficha en el mismo turno y continua la conversacion despues del enlace.
+enviar_fichas en el mismo turno, con TODOS los ids en una sola llamada: la herramienta
+los parte en un mensaje por inmueble con su precio, su tamano y su link. No escribas tu
+esos datos ni la llames una vez por inmueble.
 
 LEE 'resultado' ANTES DE CONTESTAR. Decide que puedes afirmar:
 - hay ................. muestra los inmuebles. El total real es 'total', no cuantos le
