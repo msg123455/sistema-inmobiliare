@@ -618,3 +618,26 @@ export function aCSV(filas) {
   // Con BOM para que Excel respete los acentos al abrirlo de doble clic.
   return `\uFEFF${cab.join(',')}\n${cuerpo.join('\n')}\n`;
 }
+
+/**
+ * El listado como TSV, para pegarlo directo en una hoja de calculo.
+ *
+ * Existe porque es el camino mas corto de aqui a Sheets: abrir una hoja en
+ * blanco y pegar. Sin descargar, sin importar, sin conectar cuentas ni aceptar
+ * permisos. Google y Excel entienden el TSV del portapapeles y reparten las
+ * columnas solas.
+ *
+ * Se usa tabulador y no coma a proposito: los nombres de empresa vienen con
+ * comas ("Madecentro Colombia S.A., Ltda") y al pegar romperian la fila. Un
+ * tabulador dentro de un campo no aparece nunca en estos datos, y si apareciera
+ * se sustituye por un espacio en vez de arrastrar comillas, que al pegar se
+ * verian literales.
+ */
+export function aTSV(filas) {
+  const limpio = (v) => String(v ?? '').replace(/[\t\r\n]+/g, ' ').trim();
+  const cab = ['Id', 'Mes', 'Contrato', 'Nombre', 'Correo', 'Archivo'];
+  const cuerpo = filas.map((f) => [
+    f.documento, f.Mes ?? f.mes ?? '', f.contrato, f.nombre, f.email, f.url,
+  ].map(limpio).join('\t'));
+  return `${cab.join('\t')}\n${cuerpo.join('\n')}`;
+}

@@ -4,12 +4,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   FileSpreadsheet, Loader2, ShieldCheck, AlertTriangle, PlayCircle, Download, ArrowRight,
-  HardDrive, ExternalLink,
+  HardDrive, ExternalLink, ClipboardCopy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parsearCSV, filasAObjetos } from '@/lib/csv';
 import { callFunction, FUNCIONES } from '@/lib/backend';
-import { aCSV, construirDirectorio, rellenarLinks } from '@/lib/conciliar';
+import { aCSV, aTSV, construirDirectorio, rellenarLinks } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
 import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 
@@ -100,6 +100,33 @@ export default function EnsayoCodigos() {
   };
 
   const nombreArchivo = `codigos-${periodo}-con-links`;
+
+  /**
+   * Copia el listado al portapapeles en TSV. Es el camino mas corto a Sheets:
+   * abrir una hoja en blanco y pegar. Sin descargas, sin importar, sin conectar
+   * ninguna cuenta.
+   *
+   * navigator.clipboard exige contexto seguro (https) y a veces permiso; el
+   * fallback con textarea + execCommand funciona donde eso falla, que suele ser
+   * justo el navegador de la oficina.
+   */
+  const copiarParaSheets = async () => {
+    const tsv = aTSV(res.out.filas);
+    try {
+      await navigator.clipboard.writeText(tsv);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (!ok) { toast.error('El navegador no dejó copiar. Usa el botón de descargar.'); return; }
+    }
+    toast.success(`${res.out.filas.length} filas copiadas · abre una hoja en Sheets y pega`);
+  };
 
   const descargar = () => {
     const csv = aCSV(res.out.filas);
@@ -226,8 +253,12 @@ export default function EnsayoCodigos() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={copiarParaSheets} className="rounded-lg gap-1.5">
+                  <ClipboardCopy className="w-4 h-4" /> Copiar para Sheets
+                </Button>
+
                 <Button onClick={descargar} variant="outline" className="rounded-lg gap-1.5">
-                  <Download className="w-4 h-4" /> Descargar
+                  <Download className="w-4 h-4" /> Descargar CSV
                 </Button>
 
                 <Button
@@ -240,6 +271,12 @@ export default function EnsayoCodigos() {
                     : drive.conectado ? 'Subir a Google Drive'
                       : 'Conectar Drive y subir'}
                 </Button>
+
+                {drive.sesion !== false && (
+                  <span className="text-xs text-muted-foreground w-full">
+                    «Copiar para Sheets» es lo más rápido: abre una hoja en blanco y pega.
+                  </span>
+                )}
 
                 {drive.sesion === false && (
                   <span className="text-xs text-muted-foreground">
