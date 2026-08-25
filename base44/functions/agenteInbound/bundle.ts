@@ -1934,10 +1934,7 @@ var buscarInmuebles = {
     if (barrio) filtro.barrio = String(input.barrio).trim();
     let props = await c.db.list("Propiedad", filtro);
     if (barrio && !props.length) {
-      props = await c.db.list("Propiedad", { estado: "Disponible", zona: String(input.barrio).trim(), limit: 800 });
-    }
-    if (barrio && !props.length) {
-      props = await c.db.list("Propiedad", { estado: "Disponible", localidad: String(input.barrio).trim(), limit: 800 });
+      props = await c.db.list("Propiedad", { estado: "Disponible", limit: 3e3 });
     }
     const puntuados = props.filter((p) => {
       const op = String(p.operacion || "");

@@ -146,29 +146,25 @@ export const buscarInmuebles: Tool = {
     // por donde acotar y se trae un tope amplio. Es el caso raro —el gate exige
     // zona O presupuesto y la zona es lo que la gente dice primero— pero conviene
     // saber que ahi la busqueda no recorre el catalogo entero.
+    // La API de Base44 filtra por igualdad EXACTA y CASE-SENSITIVE. El barrio se
+    // guarda como "Los Rosales" (Title Case), pero el modelo puede pasarlo como
+    // "los rosales", "LOS ROSALES" o como lo haya escrito el cliente. Cualquier
+    // variante de caso devuelve cero y el agente dice "no hay nada" teniendo 66.
+    //
+    // Estrategia: primero se intenta el filtro exacto (rapido, 66 resultados en
+    // vez de 2737). Si devuelve cero —casi siempre por case mismatch— se trae
+    // todo el inventario disponible y se filtra aqui en memoria, donde el
+    // matching ya es case-insensitive (`.toLowerCase().includes()`). El filtro en
+    // memoria tambien cubre zona y localidad (coincideZona mira barrio, zona y
+    // ciudad), asi que un solo fallback reemplaza a los tres que habia.
     const filtro: Record<string, string | number> = { estado: 'Disponible', limit: 800 };
     if (barrio) filtro.barrio = String(input.barrio).trim();
 
     let props: any[] = await c.db.list('Propiedad', filtro);
 
-    // El barrio exacto puede no coincidir con como lo dijo el cliente ("Chico"
-    // contra "Chico Norte"). Si no hubo suerte, se reintenta por zona y se afina
-    // aqui: es preferible una segunda consulta a responder "no hay nada".
     if (barrio && !props.length) {
-      props = await c.db.list('Propiedad', { estado: 'Disponible', zona: String(input.barrio).trim(), limit: 800 });
+      props = await c.db.list('Propiedad', { estado: 'Disponible', limit: 3000 });
     }
-    // El barrio que dijo el cliente puede estar guardado como localidad: si
-    // pidio "Chapinero" y el inmueble figura con barrio "Chapinero Norte" pero
-    // localidad "Chapinero", la localidad lo rescata. Es el ultimo intento
-    // contra la base antes de aceptar el cero.
-    if (barrio && !props.length) {
-      props = await c.db.list('Propiedad', { estado: 'Disponible', localidad: String(input.barrio).trim(), limit: 800 });
-    }
-    // Si tampoco por localidad hay nada, se acepta el cero y se ofrece registrar
-    // el interes. Antes se cargaban 800 inmuebles arbitrarios y se filtraban
-    // sobre esos: si el cliente pidio Chapinero y los 800 eran de La Calera, el
-    // agente respondia "no tengo nada en Chapinero" teniendo 624 alli, o peor, le
-    // mostraba algo de La Calera como si fuera lo que pidio.
 
     const puntuados = props
       .filter((p) => {
