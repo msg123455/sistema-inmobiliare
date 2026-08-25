@@ -91,6 +91,36 @@ export const linkFicha = (p: any): string => String(
   || '',
 ).trim();
 
+/**
+ * Lo que se recuerda de un inmueble que ya se le enseno al cliente.
+ *
+ * Vive en MemoriaChat entre turnos —el cliente pide la ficha en el mensaje
+ * siguiente— asi que va lo justo para armar su tarjeta sin volver a consultar:
+ * nueve campos cortos por inmueble, diez inmuebles como mucho, unos 1.200
+ * chars. Lo que reventaba la escritura del estado eran CIEN FILAS COMPLETAS
+ * (440 KB), no esto.
+ *
+ * Esta funcion existe para que haya UN solo sitio que decide esa forma.
+ * Antes la construian por separado buscar_inmuebles y buscar_por_codigo, y al
+ * anadir los campos de la tarjeta una de las dos se quedo atras: un inmueble
+ * buscado por codigo salia con la tarjeta a medias y sin precio.
+ */
+function paraMostrar(p: any, esArriendo: boolean) {
+  return {
+    id: p.id,
+    codigo: p.codigo_externo || '',
+    titulo: p.titulo || '',
+    ficha: linkFicha(p),
+    tipo: p.tipo || '',
+    barrio: p.barrio || p.ciudad || '',
+    precio: esArriendo
+      ? (p.canon_arriendo ? `${fmtCOP(p.canon_arriendo)} al mes` : '')
+      : (p.precio_venta ? fmtCOP(p.precio_venta) : ''),
+    area: p.area_m2 ?? null,
+    hab: p.habitaciones ?? null,
+  };
+}
+
 // Como se le describe un inmueble al modelo. Compartida entre buscar_inmuebles
 // y buscar_por_codigo: si cada una arma su propio objeto, terminan afirmando
 // campos distintos del mismo inmueble segun por donde llego el cliente.
@@ -500,14 +530,7 @@ export const buscarInmuebles: Tool = {
     // siguiente) y meter propiedades completas ahi es lo que reventaba la
     // escritura del estado por tamano.
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const nuevos = visibles.map((p: any) => {
-      const r = resumirProp(p, esArr);
-      return {
-        id: r.id, codigo: r.codigo || '', titulo: r.titulo || '', ficha: r.ficha || '',
-        tipo: r.tipo || '', barrio: r.barrio || '', precio: r.precio || '',
-        area: r.area_m2 ? String(r.area_m2) : '', hab: r.habitaciones ? String(r.habitaciones) : '',
-      };
-    });
+    const nuevos = visibles.map((p: any) => paraMostrar(p, esArr));
     const vistos = new Set(nuevos.map((m) => m.id));
     c.ctxAgente.mostrados = [...nuevos, ...antes.filter((m: any) => !vistos.has(m.id))].slice(0, 10);
 
@@ -561,14 +584,9 @@ async function resolverInmueble(c: CtxTool, id: string) {
   // comprueba aqui y no en cada tool para que no se le mande la ficha de algo
   // que ya no se puede ofrecer.
   if (String(p.estado || '') !== 'Disponible') return { ok: false as const, motivo: 'no_disponible' as NoUbicado };
-  const resum = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
   return {
     ok: true as const,
-    mostrado: {
-      id: resum.id, codigo: resum.codigo || '', titulo: resum.titulo || '', ficha: resum.ficha || '',
-      tipo: resum.tipo || '', barrio: resum.barrio || '', precio: resum.precio || '',
-      area: resum.area_m2 ? String(resum.area_m2) : '', hab: resum.habitaciones ? String(resum.habitaciones) : '',
-    },
+    mostrado: { id: p.id, codigo: p.codigo_externo || '', titulo: p.titulo || '', ficha: linkFicha(p) },
   };
 }
 
@@ -596,50 +614,96 @@ const noUbicado = (motivo: NoUbicado, queIbaAHacer: string) => ({
         + 'sobre una de las que devuelva.',
 });
 
+/**
+ * La tarjeta de un inmueble, tal como la lee el cliente. UN globo por inmueble.
+ *
+ * La arma el codigo y no el modelo, a proposito: asi todos los inmuebles se ven
+ * igual, no hay forma de que se cuele un dato inventado en el formato, y el
+ * modelo no gasta tokens de salida redactando cinco fichas casi identicas.
+ *
+ * Los campos vacios se caen solos. Un inmueble sin area publicada sale sin area,
+ * no con "area: no disponible", que es ruido para quien lo lee.
+ */
+function tarjeta(m: Record<string, any>): string {
+  const titulo = [m.tipo, m.barrio && `en ${m.barrio}`].filter(Boolean).join(' ')
+    || m.titulo || 'Inmueble';
+  const detalle = [
+    m.precio,
+    m.area ? `${m.area} m2` : '',
+    m.hab ? `${m.hab} hab` : '',
+  ].filter(Boolean).join(' · ');
+  return [titulo, detalle, m.ficha].filter(Boolean).join('\n');
+}
+
 export const enviarFichas: Tool = {
   ...definirTool(
     'enviar_fichas',
-    'Manda al cliente las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. Pasa TODOS los ids en una sola llamada: la herramienta arma una tarjeta por inmueble (titulo, precio, area y link) y cada una se envia como un mensaje separado. No la llames una vez por inmueble.',
-    { inmueble_ids: lista('Los ids que devolvio buscar_inmuebles, en el orden que los quieras presentar') },
+    'Manda las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. '
+    + 'UNA SOLA llamada con todos los ids: el sistema los parte en un mensaje por inmueble, '
+    + 'con su precio, su tamano y su link. NO la llames una vez por inmueble, y no escribas '
+    + 'tu los datos de cada uno: de eso se encarga la herramienta. Mandalas apenas presentes '
+    + 'los inmuebles, sin esperar a que el cliente las pida.',
+    {
+      inmueble_ids: lista(
+        'Los ids que devolvio buscar_inmuebles, en el orden en que quieres que los reciba. '
+        + 'Maximo 5: mas de eso el cliente no los lee.',
+      ),
+    },
   ),
   ejecutar: async (input, c: CtxTool) => {
-    const ids = Array.isArray(input.inmueble_ids) ? input.inmueble_ids : [];
+    const ids = (Array.isArray(input.inmueble_ids) ? input.inmueble_ids : [])
+      .map((x: unknown) => String(x || '').trim())
+      .filter(Boolean)
+      .slice(0, 5);
+
     if (!ids.length) {
-      return { ok: false, error: 'sin_ids', instruccion: 'Pasa al menos un id de buscar_inmuebles.' };
-    }
-
-    let validos = 0;
-    for (const idRaw of ids) {
-      const id = String(idRaw || '').trim();
-      if (!id) continue;
-      const res = await resolverInmueble(c, id);
-      if (!res.ok) continue;
-
-      if (!res.mostrado.ficha) {
-        c.salida.globos.push(`${res.mostrado.titulo || 'Inmueble'} — el asesor te comparte la ficha con las fotos.`);
-        validos++;
-        continue;
-      }
-
-      const m = res.mostrado;
-      const datos = [
-        m.precio || '',
-        m.area ? `${m.area} m²` : '',
-        m.hab ? `${m.hab} hab` : '',
-      ].filter(Boolean).join(' · ');
-      c.salida.globos.push(`${m.titulo}${datos ? ` · ${datos}` : ''}`);
-      c.salida.globos.push(m.ficha);
-      validos++;
-    }
-
-    if (!validos) {
       return {
         ok: false,
-        error: 'ninguno_valido',
-        instruccion: 'Ninguno de esos ids salio en tu busqueda. NO le digas que los inmuebles ya no estan: vuelve a buscar con buscar_inmuebles y trabaja sobre las que devuelva.',
+        error: 'sin_ids',
+        instruccion: 'No me pasaste ningun id. Usa los que devolvio buscar_inmuebles.',
       };
     }
-    return { ok: true };
+
+    const enviados: string[] = [];
+    const fallidos: Array<{ id: string; motivo: string }> = [];
+
+    for (const id of ids) {
+      const res = await resolverInmueble(c, id);
+      if (!res.ok) { fallidos.push({ id, motivo: res.motivo }); continue; }
+      if (!res.mostrado.ficha) { fallidos.push({ id, motivo: 'sin_ficha' }); continue; }
+      c.salida.globos.push(tarjeta(res.mostrado));
+      enviados.push(id);
+    }
+
+    // Ni uno salio: es el caso de enviar_ficha de antes, con su misma guia.
+    if (!enviados.length) {
+      const unico = fallidos[0];
+      if (unico.motivo === 'sin_ficha') {
+        return {
+          ok: false,
+          error: 'sin_ficha',
+          instruccion: 'Ninguno de esos inmuebles tiene ficha publicada. Dile que el asesor se '
+            + 'la comparte. PROHIBIDO inventar el link.',
+        };
+      }
+      return noUbicado(unico.motivo as NoUbicado, 'el envio de las fichas');
+    }
+
+    // Salieron algunos: se dice CUALES faltaron y por que, en vez de devolver un
+    // ok a secas. Si no, el modelo da por enviadas las cinco y sigue hablando de
+    // un inmueble cuya ficha el cliente nunca recibio.
+    return {
+      ok: true,
+      enviadas: enviados.length,
+      no_enviadas: fallidos.length || undefined,
+      detalle_fallos: fallidos.length ? fallidos : undefined,
+      instruccion: fallidos.length
+        ? `Se mandaron ${enviados.length} fichas. ${fallidos.length} no: de esas NO afirmes que `
+          + 'las mando ni des sus datos. Si el cliente pregunta, dile que esa se la pasa el asesor.'
+        : `Ya salieron las ${enviados.length} fichas, cada una en su mensaje con precio, tamano y `
+          + 'link. NO las repitas ni las describas otra vez: el cliente ya las tiene delante. '
+          + 'Sigue la conversacion: pregunta cual le interesa o si quiere verlas.',
+    };
   },
 };
 
@@ -749,13 +813,8 @@ export const buscarPorCodigo: Tool = {
 
     // Queda a mano para que enviar_fichas no tenga que volver a consultar.
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const r = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
     c.ctxAgente.mostrados = [
-      {
-        id: r.id, codigo: r.codigo || '', titulo: r.titulo || '', ficha: r.ficha || '',
-        tipo: r.tipo || '', barrio: r.barrio || '', precio: r.precio || '',
-        area: r.area_m2 ? String(r.area_m2) : '', hab: r.habitaciones ? String(r.habitaciones) : '',
-      },
+      paraMostrar(p, !p.precio_venta && !!p.canon_arriendo),
       ...antes.filter((m: any) => m.id !== p.id),
     ].slice(0, 10);
 

@@ -2035,6 +2035,19 @@ var fmtCOP = (n) => new Intl.NumberFormat("es-CO", {
 var linkFicha = (p) => String(
   p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
 ).trim();
+function paraMostrar(p, esArriendo) {
+  return {
+    id: p.id,
+    codigo: p.codigo_externo || "",
+    titulo: p.titulo || "",
+    ficha: linkFicha(p),
+    tipo: p.tipo || "",
+    barrio: p.barrio || p.ciudad || "",
+    precio: esArriendo ? p.canon_arriendo ? `${fmtCOP(p.canon_arriendo)} al mes` : "" : p.precio_venta ? fmtCOP(p.precio_venta) : "",
+    area: p.area_m2 ?? null,
+    hab: p.habitaciones ?? null
+  };
+}
 function resumirProp(p, esArriendo) {
   return {
     id: p.id,
@@ -2215,20 +2228,7 @@ var buscarInmuebles = {
     });
     const visibles = orden.slice(0, MOSTRAR);
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const nuevos = visibles.map((p) => {
-      const r2 = resumirProp(p, esArr);
-      return {
-        id: r2.id,
-        codigo: r2.codigo || "",
-        titulo: r2.titulo || "",
-        ficha: r2.ficha || "",
-        tipo: r2.tipo || "",
-        barrio: r2.barrio || "",
-        precio: r2.precio || "",
-        area: r2.area_m2 ? String(r2.area_m2) : "",
-        hab: r2.habitaciones ? String(r2.habitaciones) : ""
-      };
-    });
+    const nuevos = visibles.map((p) => paraMostrar(p, esArr));
     const vistos = new Set(nuevos.map((m) => m.id));
     c.ctxAgente.mostrados = [...nuevos, ...antes.filter((m) => !vistos.has(m.id))].slice(0, 10);
     return {
@@ -2260,20 +2260,9 @@ async function resolverInmueble(c, id) {
   const p = r.filas[0];
   if (!p) return { ok: false, motivo: "no_mostrado" };
   if (String(p.estado || "") !== "Disponible") return { ok: false, motivo: "no_disponible" };
-  const resum = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
   return {
     ok: true,
-    mostrado: {
-      id: resum.id,
-      codigo: resum.codigo || "",
-      titulo: resum.titulo || "",
-      ficha: resum.ficha || "",
-      tipo: resum.tipo || "",
-      barrio: resum.barrio || "",
-      precio: resum.precio || "",
-      area: resum.area_m2 ? String(resum.area_m2) : "",
-      hab: resum.habitaciones ? String(resum.habitaciones) : ""
-    }
+    mostrado: { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) }
   };
 }
 var noUbicado = (motivo, queIbaAHacer) => ({
@@ -2281,46 +2270,67 @@ var noUbicado = (motivo, queIbaAHacer) => ({
   error: motivo,
   instruccion: motivo === "no_pude_consultar" ? `No pudiste consultar ese inmueble, asi que ${queIbaAHacer} NO se hizo. NO digas que no existe ni que ya no esta disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas.` : motivo === "no_disponible" ? `Ese inmueble ya no esta disponible, asi que ${queIbaAHacer} NO se hizo. Dilo sin rodeos y ofrecele buscar algo parecido con buscar_inmuebles.` : `Ese id no salio en tu busqueda, asi que ${queIbaAHacer} NO se hizo. NO le digas que el inmueble ya no esta ni te lo inventes: vuelve a buscar con buscar_inmuebles y trabaja sobre una de las que devuelva.`
 });
+function tarjeta(m) {
+  const titulo = [m.tipo, m.barrio && `en ${m.barrio}`].filter(Boolean).join(" ") || m.titulo || "Inmueble";
+  const detalle = [
+    m.precio,
+    m.area ? `${m.area} m2` : "",
+    m.hab ? `${m.hab} hab` : ""
+  ].filter(Boolean).join(" · ");
+  return [titulo, detalle, m.ficha].filter(Boolean).join("\n");
+}
 var enviarFichas = {
   ...definirTool(
     "enviar_fichas",
-    "Manda al cliente las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. Pasa TODOS los ids en una sola llamada: la herramienta arma una tarjeta por inmueble (titulo, precio, area y link) y cada una se envia como un mensaje separado. No la llames una vez por inmueble.",
-    { inmueble_ids: lista("Los ids que devolvio buscar_inmuebles, en el orden que los quieras presentar") }
+    "Manda las fichas de uno o varios inmuebles que ya viste en buscar_inmuebles. UNA SOLA llamada con todos los ids: el sistema los parte en un mensaje por inmueble, con su precio, su tamano y su link. NO la llames una vez por inmueble, y no escribas tu los datos de cada uno: de eso se encarga la herramienta. Mandalas apenas presentes los inmuebles, sin esperar a que el cliente las pida.",
+    {
+      inmueble_ids: lista(
+        "Los ids que devolvio buscar_inmuebles, en el orden en que quieres que los reciba. Maximo 5: mas de eso el cliente no los lee."
+      )
+    }
   ),
   ejecutar: async (input, c) => {
-    const ids = Array.isArray(input.inmueble_ids) ? input.inmueble_ids : [];
+    const ids = (Array.isArray(input.inmueble_ids) ? input.inmueble_ids : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 5);
     if (!ids.length) {
-      return { ok: false, error: "sin_ids", instruccion: "Pasa al menos un id de buscar_inmuebles." };
-    }
-    let validos = 0;
-    for (const idRaw of ids) {
-      const id = String(idRaw || "").trim();
-      if (!id) continue;
-      const res = await resolverInmueble(c, id);
-      if (!res.ok) continue;
-      if (!res.mostrado.ficha) {
-        c.salida.globos.push(`${res.mostrado.titulo || "Inmueble"} — el asesor te comparte la ficha con las fotos.`);
-        validos++;
-        continue;
-      }
-      const m = res.mostrado;
-      const datos = [
-        m.precio || "",
-        m.area ? `${m.area} m²` : "",
-        m.hab ? `${m.hab} hab` : ""
-      ].filter(Boolean).join(" · ");
-      c.salida.globos.push(`${m.titulo}${datos ? ` · ${datos}` : ""}`);
-      c.salida.globos.push(m.ficha);
-      validos++;
-    }
-    if (!validos) {
       return {
         ok: false,
-        error: "ninguno_valido",
-        instruccion: "Ninguno de esos ids salio en tu busqueda. NO le digas que los inmuebles ya no estan: vuelve a buscar con buscar_inmuebles y trabaja sobre las que devuelva."
+        error: "sin_ids",
+        instruccion: "No me pasaste ningun id. Usa los que devolvio buscar_inmuebles."
       };
     }
-    return { ok: true };
+    const enviados = [];
+    const fallidos = [];
+    for (const id of ids) {
+      const res = await resolverInmueble(c, id);
+      if (!res.ok) {
+        fallidos.push({ id, motivo: res.motivo });
+        continue;
+      }
+      if (!res.mostrado.ficha) {
+        fallidos.push({ id, motivo: "sin_ficha" });
+        continue;
+      }
+      c.salida.globos.push(tarjeta(res.mostrado));
+      enviados.push(id);
+    }
+    if (!enviados.length) {
+      const unico = fallidos[0];
+      if (unico.motivo === "sin_ficha") {
+        return {
+          ok: false,
+          error: "sin_ficha",
+          instruccion: "Ninguno de esos inmuebles tiene ficha publicada. Dile que el asesor se la comparte. PROHIBIDO inventar el link."
+        };
+      }
+      return noUbicado(unico.motivo, "el envio de las fichas");
+    }
+    return {
+      ok: true,
+      enviadas: enviados.length,
+      no_enviadas: fallidos.length || void 0,
+      detalle_fallos: fallidos.length ? fallidos : void 0,
+      instruccion: fallidos.length ? `Se mandaron ${enviados.length} fichas. ${fallidos.length} no: de esas NO afirmes que las mando ni des sus datos. Si el cliente pregunta, dile que esa se la pasa el asesor.` : `Ya salieron las ${enviados.length} fichas, cada una en su mensaje con precio, tamano y link. NO las repitas ni las describas otra vez: el cliente ya las tiene delante. Sigue la conversacion: pregunta cual le interesa o si quiere verlas.`
+    };
   }
 };
 var registrarInteres = {
@@ -2378,16 +2388,16 @@ var buscarPorCodigo = {
     const candidatos = [...new Set([partes ? `${partes[1]}-${partes[2]}` : "", crudo].filter(Boolean))];
     let p = null;
     for (const cand of candidatos) {
-      const r2 = await c.db.consultar("Propiedad", { codigo_externo: cand, limit: 1 });
-      if (r2.ok === false) {
+      const r = await c.db.consultar("Propiedad", { codigo_externo: cand, limit: 1 });
+      if (r.ok === false) {
         return {
           ok: false,
           error: "no_pude_consultar",
           instruccion: "No pudiste consultar ese codigo. PROHIBIDO decirle que no existe: no lo comprobaste. Dile que se te trabo el sistema y que se lo confirmas enseguida."
         };
       }
-      if (r2.filas[0]) {
-        p = r2.filas[0];
+      if (r.filas[0]) {
+        p = r.filas[0];
         break;
       }
     }
@@ -2406,19 +2416,8 @@ var buscarPorCodigo = {
       };
     }
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
-    const r = resumirProp(p, !p.precio_venta && !!p.canon_arriendo);
     c.ctxAgente.mostrados = [
-      {
-        id: r.id,
-        codigo: r.codigo || "",
-        titulo: r.titulo || "",
-        ficha: r.ficha || "",
-        tipo: r.tipo || "",
-        barrio: r.barrio || "",
-        precio: r.precio || "",
-        area: r.area_m2 ? String(r.area_m2) : "",
-        hab: r.habitaciones ? String(r.habitaciones) : ""
-      },
+      paraMostrar(p, !p.precio_venta && !!p.canon_arriendo),
       ...antes.filter((m) => m.id !== p.id)
     ].slice(0, 10);
     return {

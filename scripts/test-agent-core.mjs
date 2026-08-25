@@ -268,20 +268,22 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   const res = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
   assert.equal(res.inmuebles[0].ficha, 'https://www.metrocuadrado.com/ficha-0');
   assert.equal(ctx.ctxAgente.mostrados.length, 5, 'queda lo mostrado, para el turno siguiente');
-  // Cuatro campos, no la fila entera: esto persiste en MemoriaChat y meter
+  // Nueve campos cortos, no la fila entera: esto persiste en MemoriaChat y meter
   // propiedades completas ahi es lo que reventaba la escritura del estado.
-  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ['id', 'codigo', 'titulo', 'ficha', 'tipo', 'barrio', 'precio', 'area', 'hab']);
-  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 4_000);
+  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]),
+    ['id', 'codigo', 'titulo', 'ficha', 'tipo', 'barrio', 'precio', 'area', 'hab']);
+  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 2_000);
 
   assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0'] }, ctx)).ok, true);
-  assert.equal(ctx.salida.globos.at(-1), 'https://www.metrocuadrado.com/ficha-0');
+  assert.match(ctx.salida.globos.at(-1), /https:\/\/www\.metrocuadrado\.com\/ficha-0$/,
+    'la tarjeta termina en el link');
 
   // Un id que no se mostro se busca en la base antes de decir nada. Y si no
   // aparece, la respuesta NUNCA es "ese ya no lo tengo": era la unica tool de
   // ventas que devolvia un error crudo y el modelo lo improvisaba.
   const fantasma = await enviarFichas.ejecutar({ inmueble_ids: ['no-existe'] }, ctx);
   assert.equal(fantasma.ok, false);
-  assert.match(fantasma.instruccion, /NO le digas que los inmuebles ya no estan/);
+  assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
 
   // Un inmueble que existe pero no se mostro: se resuelve por id contra la base.
   assert.equal((await enviarFichas.ejecutar({ inmueble_ids: ['chapi-25'] }, ctx)).ok, true);
@@ -291,13 +293,64 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   const retirado = { ...catalogoDemo[0], id: 'retirado', estado: 'Arrendado' };
   const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
   const fueraDeMercado = await enviarFichas.ejecutar({ inmueble_ids: ['retirado'] }, ctxRetirado);
-  assert.equal(fueraDeMercado.error, 'ninguno_valido');
-  assert.match(fueraDeMercado.instruccion, /vuelve a buscar con buscar_inmuebles/);
+  assert.equal(fueraDeMercado.error, 'no_disponible');
+  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
+
+  // ── VARIOS INMUEBLES EN UNA SOLA LLAMADA ─────────────────────────────────
+  //
+  // Antes la tool mandaba UNO y empujaba dos globos: la frase "Te dejo la ficha
+  // con las fotos" y el link. Para cinco inmuebles el modelo la llamaba cinco
+  // veces y salian diez mensajes, la mitad de ellos la misma frase repetida.
+  //
+  // Ahora es una llamada con todos los ids y el sistema la parte: un mensaje por
+  // inmueble, con su tipo, su zona, su precio, su tamano y su link. El formato
+  // lo arma el codigo, no el modelo: asi salen todos iguales, no se puede colar
+  // un dato inventado, y el modelo no gasta salida redactando cinco fichas.
+  {
+    const c2 = nuevoCtx();
+    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c2);
+    c2.salida.globos.length = 0;
+
+    const varias = await enviarFichas.ejecutar(
+      { inmueble_ids: ['ros-apto-0', 'ros-apto-1', 'ros-apto-2'] }, c2);
+
+    assert.equal(varias.ok, true);
+    assert.equal(varias.enviadas, 3);
+    assert.equal(c2.salida.globos.length, 3, 'un mensaje por inmueble, ni uno mas');
+    assert.match(varias.instruccion, /NO las repitas/,
+      'se le dice que no vuelva a describirlas, o las escribe otra vez debajo');
+
+    // La tarjeta lleva lo que el cliente necesita para decidir.
+    const t = c2.salida.globos[0];
+    assert.match(t, /Apartamento/, 'el tipo');
+    assert.match(t, /Los Rosales/, 'la zona');
+    assert.match(t, /\$/, 'el precio');
+    assert.match(t, /https:\/\//, 'el link');
+
+    // Un tope, porque nadie lee ocho fichas seguidas.
+    const c3 = nuevoCtx();
+    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c3);
+    c3.salida.globos.length = 0;
+    await enviarFichas.ejecutar(
+      { inmueble_ids: ['ros-apto-0', 'ros-apto-1', 'ros-apto-2', 'ros-apto-3', 'ros-apto-4', 'chapi-25'] }, c3);
+    assert.ok(c3.salida.globos.length <= 5, 'como mucho cinco');
+
+    // Y si alguna falla, se dice CUALES. Devolver ok a secas hace que el modelo
+    // de por enviadas las cinco y siga hablando de una que el cliente no vio.
+    const c4 = nuevoCtx();
+    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c4);
+    c4.salida.globos.length = 0;
+    const mixto = await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0', 'no-existe'] }, c4);
+    assert.equal(mixto.ok, true);
+    assert.equal(mixto.enviadas, 1);
+    assert.equal(mixto.no_enviadas, 1);
+    assert.match(mixto.instruccion, /NO afirmes que las mando/);
+  }
 
   // Si la base se cae, tampoco se niega.
   const sinBase = await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0'] }, ctxCaido());
-  assert.equal(sinBase.error, 'ninguno_valido');
-  assert.match(sinBase.instruccion, /vuelve a buscar con buscar_inmuebles/);
+  assert.equal(sinBase.error, 'no_pude_consultar');
+  assert.match(sinBase.instruccion, /NO digas que no existe/);
 
   // agendar_visita no agenda sobre un id que no pudo ubicar: el asesor se
   // encontraba citas para inmuebles que no existen.
