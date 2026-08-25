@@ -594,26 +594,7 @@ export const enviarFicha: Tool = {
   ),
   ejecutar: async (input, c: CtxTool) => {
     const res = await resolverInmueble(c, String(input.inmueble_id || ''));
-
-    // Las tres salidas llevan instruccion. Antes esta era la unica tool de
-    // ventas que devolvia un error crudo —{ok:false, error:'inmueble no
-    // encontrado'}— sin ninguna guia, y el modelo improvisaba "ese ya no lo
-    // tengo disponible" sobre un inmueble que sigue publicado.
-    if (!res.ok) {
-      return res.motivo === 'no_pude_consultar'
-        ? {
-          ok: false,
-          error: 'no_pude_consultar',
-          instruccion: 'No pudiste consultar ese inmueble. NO digas que no existe ni que ya no esta '
-            + 'disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas.',
-        }
-        : {
-          ok: false,
-          error: 'no_mostrado',
-          instruccion: 'Ese id no salio en tu busqueda. NO inventes la ficha y NO le digas que el '
-            + 'inmueble ya no esta: vuelve a buscar con buscar_inmuebles y manda una de las que devuelva.',
-        };
-    }
+    if (!res.ok) return noUbicado(res.motivo, 'el envio de la ficha');
 
     if (!res.mostrado.ficha) {
       return {
@@ -872,14 +853,7 @@ export const agendarVisita: Tool = {
     // una Visita con el id que viniera, y el asesor se encontraba una cita para
     // un inmueble que no existe.
     const res = await resolverInmueble(c, String(input.inmueble_id || ''));
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: res.motivo,
-        instruccion: 'No pudiste ubicar ese inmueble, asi que la visita NO quedo agendada. No le '
-          + 'digas que si. Vuelve a buscar con buscar_inmuebles, confirma con el cual es y agenda sobre ese.',
-      };
-    }
+    if (!res.ok) return noUbicado(res.motivo, 'la visita');
 
     await c.db.crear('Visita', {
       contacto_id: String(c.estado.compartido.contacto_id || ''),

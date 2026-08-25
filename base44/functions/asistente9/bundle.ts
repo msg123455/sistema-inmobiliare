@@ -2206,6 +2206,11 @@ async function resolverInmueble(c, id) {
     mostrado: { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) }
   };
 }
+var noUbicado = (motivo, queIbaAHacer) => ({
+  ok: false,
+  error: motivo,
+  instruccion: motivo === "no_pude_consultar" ? `No pudiste consultar ese inmueble, asi que ${queIbaAHacer} NO se hizo. NO digas que no existe ni que ya no esta disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas.` : motivo === "no_disponible" ? `Ese inmueble ya no esta disponible, asi que ${queIbaAHacer} NO se hizo. Dilo sin rodeos y ofrecele buscar algo parecido con buscar_inmuebles.` : `Ese id no salio en tu busqueda, asi que ${queIbaAHacer} NO se hizo. NO le digas que el inmueble ya no esta ni te lo inventes: vuelve a buscar con buscar_inmuebles y trabaja sobre una de las que devuelva.`
+});
 var enviarFicha = {
   ...definirTool(
     "enviar_ficha",
@@ -2214,17 +2219,7 @@ var enviarFicha = {
   ),
   ejecutar: async (input, c) => {
     const res = await resolverInmueble(c, String(input.inmueble_id || ""));
-    if (!res.ok) {
-      return res.motivo === "no_pude_consultar" ? {
-        ok: false,
-        error: "no_pude_consultar",
-        instruccion: "No pudiste consultar ese inmueble. NO digas que no existe ni que ya no esta disponible: no lo sabes. Dile que se te trabo el sistema y que se lo confirmas."
-      } : {
-        ok: false,
-        error: "no_mostrado",
-        instruccion: "Ese id no salio en tu busqueda. NO inventes la ficha y NO le digas que el inmueble ya no esta: vuelve a buscar con buscar_inmuebles y manda una de las que devuelva."
-      };
-    }
+    if (!res.ok) return noUbicado(res.motivo, "el envio de la ficha");
     if (!res.mostrado.ficha) {
       return {
         ok: false,
@@ -2440,13 +2435,7 @@ var agendarVisita = {
   ),
   ejecutar: async (input, c) => {
     const res = await resolverInmueble(c, String(input.inmueble_id || ""));
-    if (!res.ok) {
-      return {
-        ok: false,
-        error: res.motivo,
-        instruccion: "No pudiste ubicar ese inmueble, asi que la visita NO quedo agendada. No le digas que si. Vuelve a buscar con buscar_inmuebles, confirma con el cual es y agenda sobre ese."
-      };
-    }
+    if (!res.ok) return noUbicado(res.motivo, "la visita");
     await c.db.crear("Visita", {
       contacto_id: String(c.estado.compartido.contacto_id || ""),
       propiedad_id: res.mostrado.id,

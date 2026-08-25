@@ -247,11 +247,11 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 
   // Y el modo de fallo que producia la negacion sin ningun sintoma visible: la
   // consulta se cae y el agente lo cuenta como inventario vacio.
-  const ctxCaido = nuevoCtx(true);
-  const caida = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctxCaido);
+  const sinBase = ctxCaido();
+  const caida = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, sinBase);
   assert.equal(caida.resultado, 'no_pude_consultar');
   assert.match(caida.instruccion, /PROHIBIDO decirle que no hay inmuebles/);
-  assert.ok(ctxCaido.efectos.escalado, 'un fallo de la base deja avisado a un humano');
+  assert.ok(sinBase.efectos.escalado, 'un fallo de la base deja avisado a un humano');
 
   // La UNICA negacion permitida: se consulto, la zona existe y no hay nada de
   // esa operacion. Va acotada a esa zona y esa operacion.
@@ -294,8 +294,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
 
   // Si la base se cae, tampoco se niega.
-  const ctxCaido = nuevoCtx(true);
-  const sinBase = await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctxCaido);
+  const sinBase = await enviarFicha.ejecutar({ inmueble_id: 'ros-apto-0' }, ctxCaido());
   assert.equal(sinBase.error, 'no_pude_consultar');
   assert.match(sinBase.instruccion, /NO digas que no existe/);
 
@@ -324,7 +323,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.equal(noExiste.error, 'no_encontrado');
   assert.match(noExiste.instruccion, /Consultado/);
   // Si no se pudo consultar, no se puede decir que no existe.
-  const caido = await buscarPorCodigo.ejecutar({ codigo: '99-9999' }, nuevoCtx(true));
+  const caido = await buscarPorCodigo.ejecutar({ codigo: '99-9999' }, ctxCaido());
   assert.equal(caido.error, 'no_pude_consultar');
   assert.match(caido.instruccion, /PROHIBIDO decirle que no existe/);
 }

@@ -2937,12 +2937,13 @@ var ZONAS = [
   { nombre: "Chapinero Alto", normalizado: "chapinero alto", activo: true },
   { nombre: "Los Rosales", normalizado: "rosales", activo: true }
 ];
-var nuevoCtx = (cae = false) => ({
-  db: dbInmuebles(catalogoDemo, ZONAS, cae),
+var nuevoCtx = (props = catalogoDemo, cae = false) => ({
+  db: dbInmuebles(props, ZONAS, cae),
   ctxAgente: {},
   salida: { globos: [], finTurno: false },
   efectos: { transferir: null, escalado: null, notificar: [] }
 });
+var ctxCaido = () => nuevoCtx(catalogoDemo, true);
 var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   operacion: "arriendo",
   barrio: null,
@@ -2960,6 +2961,12 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.deepEqual(primera.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
   assert.match(primera.instruccion, /11: 8 apartamentos, 2 oficinas, 1 casa/);
   assert.match(primera.instruccion, /UNA sola pregunta/);
+  const conLocales = await buscar({ barrio: "Chapinero" }, nuevoCtx([
+    ...catalogoDemo,
+    { id: "l1", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 5e6 },
+    { id: "l2", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 6e6 }
+  ]));
+  assert.match(conLocales.instruccion, /2 locales/);
   const conTipo = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
   assert.equal(conTipo.resultado, "hay");
   assert.equal(conTipo.total, 8);
@@ -3022,11 +3029,11 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   const rara = await buscar({ barrio: "Villavicencio" }, nuevoCtx());
   assert.equal(rara.resultado, "zona_desconocida");
   assert.match(rara.instruccion, /PROHIBIDO afirmar que no tenemos/);
-  const ctxCaido = nuevoCtx(true);
-  const caida = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctxCaido);
+  const sinBase = ctxCaido();
+  const caida = await buscar({ barrio: "rosales", tipo: "Apartamento" }, sinBase);
   assert.equal(caida.resultado, "no_pude_consultar");
   assert.match(caida.instruccion, /PROHIBIDO decirle que no hay inmuebles/);
-  assert.ok(ctxCaido.efectos.escalado, "un fallo de la base deja avisado a un humano");
+  assert.ok(sinBase.efectos.escalado, "un fallo de la base deja avisado a un humano");
   const vacia = await buscar({ operacion: "venta", barrio: "Chapinero" }, nuevoCtx());
   assert.equal(vacia.resultado, "cero_en_la_zona");
   assert.match(vacia.instruccion, /Esto SI lo puedes afirmar/);
@@ -3045,8 +3052,12 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.equal(fantasma.ok, false);
   assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
   assert.equal((await enviarFicha.ejecutar({ inmueble_id: "chapi-25" }, ctx)).ok, true);
-  const ctxCaido = nuevoCtx(true);
-  const sinBase = await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctxCaido);
+  const retirado = { ...catalogoDemo[0], id: "retirado", estado: "Arrendado" };
+  const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
+  const fueraDeMercado = await enviarFicha.ejecutar({ inmueble_id: "retirado" }, ctxRetirado);
+  assert.equal(fueraDeMercado.error, "no_disponible");
+  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
+  const sinBase = await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctxCaido());
   assert.equal(sinBase.error, "no_pude_consultar");
   assert.match(sinBase.instruccion, /NO digas que no existe/);
   const visitaFalsa = await agendarVisita.ejecutar(
@@ -3068,7 +3079,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   const noExiste = await buscarPorCodigo.ejecutar({ codigo: "99-9999" }, ctx);
   assert.equal(noExiste.error, "no_encontrado");
   assert.match(noExiste.instruccion, /Consultado/);
-  const caido = await buscarPorCodigo.ejecutar({ codigo: "99-9999" }, nuevoCtx(true));
+  const caido = await buscarPorCodigo.ejecutar({ codigo: "99-9999" }, ctxCaido());
   assert.equal(caido.error, "no_pude_consultar");
   assert.match(caido.instruccion, /PROHIBIDO decirle que no existe/);
 }
