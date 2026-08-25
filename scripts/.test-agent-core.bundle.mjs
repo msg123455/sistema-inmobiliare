@@ -1126,15 +1126,28 @@ var fmtCOP = (n) => new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0
 }).format(Math.round(n)).replace(/\s+/g, "");
-var linkFicha = (p) => String(
-  p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
+function linkPropio(p, esArriendo) {
+  const codigo = String(p?.codigo_externo || "").trim();
+  const tipo = String(p?.tipo || "").trim();
+  const barrio = String(p?.barrio || "").trim();
+  const ciudad = String(p?.ciudad || "").trim();
+  if (!codigo || !tipo || tipo === "Otro" || !barrio || !ciudad) return "";
+  const op = String(p?.operacion || "") === "Venta" ? "venta" : String(p?.operacion || "") === "Arriendo" ? "arriendo" : esArriendo ? "arriendo" : "venta";
+  const slug = normalizarZona(`${tipo} en ${op} ${barrio} ${ciudad}`).replace(/\s+/g, "-");
+  if (!slug) return "";
+  return `https://www.inmobiliarelatam.com/inmueble/${slug}_${codigo}/`;
+}
+var linkFicha = (p, esArriendo = false) => String(
+  // Nuestra web primero, siempre. Los portales son el respaldo para lo que no
+  // se puede construir (tipo 'Otro', o falta el barrio o la ciudad).
+  linkPropio(p, esArriendo) || p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
 ).trim();
 function paraMostrar(p, esArriendo) {
   return {
     id: p.id,
     codigo: p.codigo_externo || "",
     titulo: p.titulo || "",
-    ficha: linkFicha(p),
+    ficha: linkFicha(p, esArriendo),
     tipo: p.tipo || "",
     barrio: p.barrio || p.ciudad || "",
     precio: esArriendo ? p.canon_arriendo ? `${fmtCOP(p.canon_arriendo)} al mes` : "" : p.precio_venta ? fmtCOP(p.precio_venta) : "",
@@ -1155,7 +1168,7 @@ function resumirProp(p, esArriendo) {
     parqueaderos: p.parqueaderos ?? null,
     precio: esArriendo ? p.canon_arriendo ? fmtCOP(p.canon_arriendo) + " al mes" : null : p.precio_venta ? fmtCOP(p.precio_venta) : null,
     administracion: p.valor_administracion ?? p.administracion ?? null,
-    ficha: linkFicha(p) || null,
+    ficha: linkFicha(p, esArriendo) || null,
     video: p.link_instagram || null
   };
 }
@@ -1356,7 +1369,7 @@ async function resolverInmueble(c, id) {
   if (String(p.estado || "") !== "Disponible") return { ok: false, motivo: "no_disponible" };
   return {
     ok: true,
-    mostrado: { id: p.id, codigo: p.codigo_externo || "", titulo: p.titulo || "", ficha: linkFicha(p) }
+    mostrado: paraMostrar(p, !p.precio_venta && !!p.canon_arriendo)
   };
 }
 var noUbicado = (motivo, queIbaAHacer) => ({
@@ -4032,5 +4045,24 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   }
   assert.deepEqual(malas, [], `esquemas que la API rechazaria:
   ${malas.join("\n  ")}`);
+}
+{
+  const base = { codigo_externo: "90-74529", tipo: "Apartamento", barrio: "Los Rosales", ciudad: "Bogota" };
+  assert.equal(
+    linkPropio({ ...base, operacion: "Arriendo" }, true),
+    "https://www.inmobiliarelatam.com/inmueble/apartamento-en-arriendo-los-rosales-bogota_90-74529/",
+    "este enlace exacto devuelve 200 en el sitio real"
+  );
+  assert.equal(
+    linkPropio({ ...base, operacion: "Venta", codigo_externo: "90-74527" }, false),
+    "https://www.inmobiliarelatam.com/inmueble/apartamento-en-venta-los-rosales-bogota_90-74527/"
+  );
+  assert.match(linkPropio({ ...base, operacion: "Arriendo" }, true), /los-rosales/);
+  assert.equal(linkPropio({ ...base, tipo: "Otro", operacion: "Venta" }, false), "");
+  assert.equal(linkPropio({ ...base, barrio: "", operacion: "Venta" }, false), "");
+  assert.equal(linkPropio({ ...base, codigo_externo: "", operacion: "Venta" }, false), "");
+  const conPortal = { ...base, operacion: "Arriendo", portales: { metrocuadrado: "https://metrocuadrado.com/x" } };
+  assert.match(linkFicha(conPortal, true), /inmobiliarelatam\.com/, "nuestra web va primero");
+  assert.equal(linkFicha({ ...conPortal, tipo: "Otro" }, true), "https://metrocuadrado.com/x");
 }
 console.log("agent-core: OK");

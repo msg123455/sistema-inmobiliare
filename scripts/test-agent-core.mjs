@@ -9,6 +9,7 @@ import { cotizarAvaluo } from '../base44/functions/_core/tools/avaluos.ts';
 import { enviarLinkDocumentos } from '../base44/functions/_core/tools/matricula.ts';
 import {
   agendarVisita, buscarInmuebles, buscarPorCodigo, calificarLead, enviarFichas, fmtCOP,
+  linkFicha, linkPropio,
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
 import { decidirAgente } from '../base44/functions/_core/router.ts';
@@ -1362,6 +1363,49 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
     }
   }
   assert.deepEqual(malas, [], `esquemas que la API rechazaria:\n  ${malas.join('\n  ')}`);
+}
+
+// ── La ficha manda a NUESTRA web, no a la de la competencia ─────────────────
+//
+// Los 2737 inmuebles tienen codigo_externo y NINGUNO tiene link_web, asi que
+// hasta ahora cada ficha que Diana mandaba llevaba al cliente a Metrocuadrado o
+// a MercadoLibre: a navegar el inventario de la competencia, que esta justo al
+// lado del nuestro en esas paginas. El lead se paga y se regala.
+//
+// El patron esta verificado contra el sitio real, y el slug NO es decorativo:
+// con el codigo bueno y un slug inventado responde 404.
+{
+  const base = { codigo_externo: '90-74529', tipo: 'Apartamento', barrio: 'Los Rosales', ciudad: 'Bogota' };
+
+  assert.equal(
+    linkPropio({ ...base, operacion: 'Arriendo' }, true),
+    'https://www.inmobiliarelatam.com/inmueble/apartamento-en-arriendo-los-rosales-bogota_90-74529/',
+    'este enlace exacto devuelve 200 en el sitio real',
+  );
+  assert.equal(
+    linkPropio({ ...base, operacion: 'Venta', codigo_externo: '90-74527' }, false),
+    'https://www.inmobiliarelatam.com/inmueble/apartamento-en-venta-los-rosales-bogota_90-74527/',
+  );
+
+  // El articulo NO se puede comer: "los rosales" es parte del slug del sitio.
+  // normalizarZona lo quita cuando va al principio, y aqui va en medio; si
+  // alguien reutiliza esa funcion para otra cosa y cambia ese detalle, el
+  // enlace se rompe en silencio y el cliente recibe un 404.
+  assert.match(linkPropio({ ...base, operacion: 'Arriendo' }, true), /los-rosales/);
+
+  // 'Otro' es donde el importador tira lo que no reconocio, y el sitio no tiene
+  // ruta para eso: devolvia 500. Mejor caer al portal que mandar un link muerto.
+  assert.equal(linkPropio({ ...base, tipo: 'Otro', operacion: 'Venta' }, false), '');
+
+  // Sin los datos del slug tampoco se inventa.
+  assert.equal(linkPropio({ ...base, barrio: '', operacion: 'Venta' }, false), '');
+  assert.equal(linkPropio({ ...base, codigo_externo: '', operacion: 'Venta' }, false), '');
+
+  // Y el orden: la nuestra gana al portal. Este era el bug de negocio.
+  const conPortal = { ...base, operacion: 'Arriendo', portales: { metrocuadrado: 'https://metrocuadrado.com/x' } };
+  assert.match(linkFicha(conPortal, true), /inmobiliarelatam\.com/, 'nuestra web va primero');
+  // Pero si no se puede construir, el portal sigue sirviendo de respaldo.
+  assert.equal(linkFicha({ ...conPortal, tipo: 'Otro' }, true), 'https://metrocuadrado.com/x');
 }
 
 console.log('agent-core: OK');

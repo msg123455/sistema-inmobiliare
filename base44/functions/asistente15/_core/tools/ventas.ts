@@ -80,8 +80,53 @@ export const fmtCOP = (n: number) => new Intl.NumberFormat('es-CO', {
 // (`link_wasi` salio de aqui porque INMOBILIARE no usa Wasi —era residuo de la
 // app de la que se clono esto— y estaba de primero, asi que bastaba que alguien
 // llenara ese campo para mandar al cliente a otra plataforma.)
-export const linkFicha = (p: any): string => String(
-  p?.link_web
+/**
+ * La ficha del inmueble en NUESTRA web, armada a partir del codigo de SIMI.
+ *
+ * POR QUE HACE FALTA CONSTRUIRLA. Los 2737 inmuebles tienen codigo_externo y
+ * NINGUNO tiene link_web. Sin esto, cada ficha que Diana manda lleva al cliente
+ * a Metrocuadrado o a MercadoLibre, o sea a navegar el inventario de la
+ * competencia que esta justo al lado del nuestro. El lead se paga y se regala.
+ *
+ * EL PATRON, verificado contra el sitio real:
+ *   /inmueble/{tipo}-en-{operacion}-{barrio}-{ciudad}_{codigo}/
+ *   .../inmueble/apartamento-en-arriendo-los-rosales-bogota_90-74529/  -> 200
+ *
+ * El slug NO es decorativo: con el codigo bueno y un slug inventado el sitio
+ * responde 404. Hay que armarlo igual que el, o no mandarlo.
+ *
+ * MEDIDO sobre una muestra variada de 17 inmuebles (todos los tipos, arriendo y
+ * venta, barrios de una y de varias palabras, Bogota y municipios): 15 aciertan.
+ * Los dos que no son los de tipo 'Otro', que es donde el importador tira lo que
+ * no reconocio y para lo que el sitio no tiene ruta. Por eso se excluyen aqui:
+ * mandar un enlace muerto es peor que mandar al portal de la competencia.
+ */
+export function linkPropio(p: any, esArriendo: boolean): string {
+  const codigo = String(p?.codigo_externo || '').trim();
+  const tipo = String(p?.tipo || '').trim();
+  const barrio = String(p?.barrio || '').trim();
+  const ciudad = String(p?.ciudad || '').trim();
+  // 'Otro' no tiene ruta en el sitio, y sin codigo, tipo o barrio no hay slug
+  // que valga. Se devuelve vacio y linkFicha cae al portal.
+  if (!codigo || !tipo || tipo === 'Otro' || !barrio || !ciudad) return '';
+
+  // Venta_y_Arriendo existe en el enum: se usa la operacion que el cliente pidio,
+  // que es la ficha que le sirve.
+  const op = String(p?.operacion || '') === 'Venta' ? 'venta'
+    : String(p?.operacion || '') === 'Arriendo' ? 'arriendo'
+      : (esArriendo ? 'arriendo' : 'venta');
+
+  const slug = normalizarZona(`${tipo} en ${op} ${barrio} ${ciudad}`)
+    .replace(/\s+/g, '-');
+  if (!slug) return '';
+  return `https://www.inmobiliarelatam.com/inmueble/${slug}_${codigo}/`;
+}
+
+export const linkFicha = (p: any, esArriendo = false): string => String(
+  // Nuestra web primero, siempre. Los portales son el respaldo para lo que no
+  // se puede construir (tipo 'Otro', o falta el barrio o la ciudad).
+  linkPropio(p, esArriendo)
+  || p?.link_web
   || p?.portales?.metrocuadrado
   || p?.portales?.fincaraiz
   || p?.portales?.mercadolibre
@@ -110,7 +155,7 @@ function paraMostrar(p: any, esArriendo: boolean) {
     id: p.id,
     codigo: p.codigo_externo || '',
     titulo: p.titulo || '',
-    ficha: linkFicha(p),
+    ficha: linkFicha(p, esArriendo),
     tipo: p.tipo || '',
     barrio: p.barrio || p.ciudad || '',
     precio: esArriendo
@@ -141,7 +186,7 @@ export function resumirProp(p: any, esArriendo: boolean) {
       ? (p.canon_arriendo ? fmtCOP(p.canon_arriendo) + ' al mes' : null)
       : (p.precio_venta ? fmtCOP(p.precio_venta) : null),
     administracion: p.valor_administracion ?? p.administracion ?? null,
-    ficha: linkFicha(p) || null,
+    ficha: linkFicha(p, esArriendo) || null,
     video: p.link_instagram || null,
   };
 }
@@ -586,7 +631,7 @@ async function resolverInmueble(c: CtxTool, id: string) {
   if (String(p.estado || '') !== 'Disponible') return { ok: false as const, motivo: 'no_disponible' as NoUbicado };
   return {
     ok: true as const,
-    mostrado: { id: p.id, codigo: p.codigo_externo || '', titulo: p.titulo || '', ficha: linkFicha(p) },
+    mostrado: paraMostrar(p, !p.precio_venta && !!p.canon_arriendo),
   };
 }
 
