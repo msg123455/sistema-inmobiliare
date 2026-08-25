@@ -288,7 +288,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
     { ...ctx, estado: estadoVacio(), db: { ...ctx.db, crear: async () => { throw new Error('no debe crear'); } } },
   );
   assert.equal(visitaFalsa.ok, false);
-  assert.match(visitaFalsa.instruccion, /NO quedo agendada/);
+  assert.match(visitaFalsa.instruccion, /la visita NO se hizo/);
 }
 
 // ── buscar_por_codigo consulta la BASE, no una ventana ──────────────────────
