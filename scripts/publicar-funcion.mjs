@@ -5,7 +5,25 @@
  *   node scripts/publicar-funcion.mjs codigosMensuales
  *   node scripts/publicar-funcion.mjs codigosMensuales --dry
  *
- * POR QUE EXISTE. Base44 sirve el artefacto del PRIMER despliegue de un nombre:
+ * NO USAR SIN LEER ESTO. El motivo por el que se escribio resulto ser falso a
+ * medias, y usarlo rompe cosas.
+ *
+ * La sincronizacion desde GitHub PODA las funciones que no tienen directorio en
+ * el repo, y este script borra el directorio numerado al terminar. Asi
+ * desaparecieron solas codigosMensuales2, 5 y 6 —y sincronizarSimi3—, dejando a
+ * la pantalla llamando a un nombre inexistente: un "Error 404" que parecia un
+ * fallo de Mailchimp.
+ *
+ * Ademas el problema que venia a resolver no aplica por aqui: el artefacto
+ * congelado es cosa de `base44 functions deploy` desde el CLI. La sincronizacion
+ * desde GitHub si reemplaza, comprobado con codigosMensuales sirviendo la
+ * revision 7.
+ *
+ * Para desplegar un cambio: tocar el directorio base y empujar a GitHub. Esto
+ * solo tiene sentido si algun dia hay que forzar un nombre nuevo a proposito, y
+ * entonces hay que quitarle el borrado del directorio.
+ *
+ * POR QUE SE ESCRIBIO. Base44 sirve el artefacto del PRIMER despliegue de un nombre:
  * los siguientes suben, dicen "deployed" y no reemplazan nada. Ya estaba
  * documentado para la funcion conversacional en publicar-asistente.mjs; se
  * comprobo que pasa igual con las demas desplegando codigosMensuales con un

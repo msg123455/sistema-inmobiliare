@@ -25,24 +25,32 @@ export const BACKEND_URL = (
 const FUNCTIONS_TOKEN = import.meta.env.VITE_FUNCTIONS_TOKEN || 'SYNCWASI2026';
 
 /**
- * Nombre con el que cada función está DESPLEGADA en Base44.
+ * Nombre con el que cada función está desplegada en Base44.
  *
- * No siempre coincide con la carpeta del repo. Base44 sirve el artefacto del
- * primer despliegue de un nombre —los siguientes suben, dicen «deployed» y no
- * reemplazan nada—, así que cada cambio obliga a publicar bajo un nombre nuevo.
- * Comprobado desplegando codigosMensuales con un campo `revision` en su
- * respuesta y viendo que la función viva seguía sin traerlo.
+ * SIEMPRE EL NOMBRE BASE, el mismo del directorio en `base44/functions/`.
+ * Nunca una versión numerada.
  *
- * Vive aquí, en un solo sitio, para que subir de versión sea cambiar una línea
- * en vez de buscar el nombre por todas las pantallas. Lo publica
- * scripts/publicar-funcion.mjs, que al terminar recuerda actualizar esto.
+ * Aquí hubo una creencia equivocada que costó una tarde. Se pensaba que Base44
+ * servía para siempre el artefacto del primer despliegue de un nombre, así que
+ * cada cambio se publicaba como `codigosMensuales2`, `3`… Eso es cierto SOLO
+ * para `base44 functions deploy` desde el CLI. La sincronización desde GitHub sí
+ * reemplaza el artefacto: comprobado el 25 de agosto, con `codigosMensuales`
+ * sirviendo la revisión 7, la última.
+ *
+ * Y las versiones numeradas son ADEMÁS peligrosas: la sincronización poda las
+ * funciones que no tienen directorio en el repo, y `publicar-funcion.mjs` borra
+ * ese directorio al terminar. Resultado: `codigosMensuales2`, `5` y `6`
+ * desaparecieron solas, la pantalla siguió llamando al `6` y salió un
+ * «Error 404» que parecía un fallo de Mailchimp. Lo mismo se llevó por delante
+ * a `sincronizarSimi3`.
+ *
+ * Regla, entonces: se cambia el código en el directorio, se empuja a GitHub, y
+ * esto no se toca.
  */
 export const FUNCIONES = {
-  codigos: 'codigosMensuales6',
+  codigos: 'codigosMensuales',
   campana: 'campanaCodigos',
-  // Sube a sincronizarSimi3, 4… cada vez que se publique. Mientras esto no se
-  // toque, la pantalla sigue llamando al artefacto viejo aunque el repo cambie.
-  simi: 'sincronizarSimi2',
+  simi: 'sincronizarSimi',
 };
 
 /**
