@@ -482,6 +482,7 @@ async function procesar(entrada: Entrada, env: Record<string, string>, agenteBot
     rag: base.ragDetalle.map((c) => ({ t: c.titulo, c: c.chars, esp: c.especifico })),
     fuera: base.ragDescartados.map((c) => ({ t: c.titulo, c: c.chars, m: c.motivo })),
     tools: Object.keys(tools),
+    gasto: res.gasto,
     guardado_chars: 0,
   };
   // Se mide el estado ya con su propio diag dentro, que es lo que de verdad va a

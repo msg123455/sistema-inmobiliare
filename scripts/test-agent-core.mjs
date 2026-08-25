@@ -1261,6 +1261,10 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   const b = armarSystem(base, 'ventas', segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: 'Massimo' });
 
   assert.equal(a[0].cache_control?.type, 'ephemeral', 'el bloque estable lleva la marca de cacheo');
+  // Una hora, no los 5 minutos por defecto: entre dos mensajes de un cliente
+  // real pasan mas de 5 minutos, y con el TTL corto cada turno reescribe el
+  // prefijo entero, que cuesta mas que procesarlo sin cache.
+  assert.equal(a[0].cache_control?.ttl, '1h', 'el cache tiene que durar una hora');
   assert.equal(b[1].cache_control, undefined, 'el bloque volatil NO la lleva');
   assert.equal(a[0].text, b[0].text, 'el prefijo cacheado cambio entre turnos: no se cacheara nada');
 

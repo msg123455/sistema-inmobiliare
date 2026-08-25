@@ -19,10 +19,33 @@ function paramsModelo(modelo: string, effort?: string) {
   return { output_config: { effort: effort || 'low' } };
 }
 
+/** Lo que costo una llamada. Se suma por turno y acaba en /chunks. */
+export interface Gasto {
+  entrada: number;      // tokens cobrados a precio completo
+  cache_leidos: number; // servidos de cache, a una decima parte
+  cache_escritos: number;
+  salida: number;
+  llamadas: number;
+}
+
+export const gastoCero = (): Gasto =>
+  ({ entrada: 0, cache_leidos: 0, cache_escritos: 0, salida: 0, llamadas: 0 });
+
+export function sumarGasto(a: Gasto, b: Gasto): Gasto {
+  return {
+    entrada: a.entrada + b.entrada,
+    cache_leidos: a.cache_leidos + b.cache_leidos,
+    cache_escritos: a.cache_escritos + b.cache_escritos,
+    salida: a.salida + b.salida,
+    llamadas: a.llamadas + b.llamadas,
+  };
+}
+
 export interface RespuestaModelo {
   bloques: any[];
   stop_reason: string;
   modelo: string;
+  gasto: Gasto;
 }
 
 export async function llamarModelo(opts: {
@@ -67,13 +90,18 @@ export async function llamarModelo(opts: {
         // `escritos` alto y `leidos` en cero durante varios turnos seguidos es
         // exactamente ese sintoma.
         const u = j.usage || {};
-        const leidos = u.cache_read_input_tokens || 0;
-        const escritos = u.cache_creation_input_tokens || 0;
+        const gasto: Gasto = {
+          entrada: u.input_tokens || 0,
+          cache_leidos: u.cache_read_input_tokens || 0,
+          cache_escritos: u.cache_creation_input_tokens || 0,
+          salida: u.output_tokens || 0,
+          llamadas: 1,
+        };
         console.log(
-          `tokens[${modelo}] entrada ${u.input_tokens || 0} | cache leidos ${leidos} `
-          + `escritos ${escritos} | salida ${u.output_tokens || 0}`,
+          `tokens[${modelo}] entrada ${gasto.entrada} | cache leidos ${gasto.cache_leidos} `
+          + `escritos ${gasto.cache_escritos} | salida ${gasto.salida}`,
         );
-        return { bloques: j.content || [], stop_reason: j.stop_reason || '', modelo };
+        return { bloques: j.content || [], stop_reason: j.stop_reason || '', modelo, gasto };
       }
       console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
     } catch (e) {
@@ -88,6 +116,10 @@ export interface ResultadoAgente {
   finTurno: boolean;
   pendiente: { mensajes: any[] } | null;
   llamadas: number;
+  // Lo que costo el turno entero, sumando todas las llamadas. Sale por /chunks
+  // porque el fallo de cacheo es SILENCIOSO: sin esto, la unica senal seria la
+  // factura a fin de mes.
+  gasto: Gasto;
 }
 
 // Un turno del agente. `mensajes` entra como el historial ya formateado para la
@@ -116,6 +148,7 @@ export async function correrAgente(opts: {
   // produccion muestran turnos de 47s y de 108s completandose sin problema.
   const tope = opts.presupuestoLlamadas ?? 4;
   let llamadas = 0;
+  let gasto = gastoCero();
 
   while (llamadas < tope) {
     const res = await llamarModelo({
@@ -128,6 +161,7 @@ export async function correrAgente(opts: {
       effort: opts.effort,
     });
     llamadas++;
+    if (res) gasto = sumarGasto(gasto, res.gasto);
     if (!res) break;
 
     const usos = res.bloques.filter((b: any) => b.type === 'tool_use');
@@ -137,7 +171,7 @@ export async function correrAgente(opts: {
     if (!usos.length) {
       const texto = res.bloques.filter((b: any) => b.type === 'text').map((b: any) => b.text).join(' ').trim();
       if (texto) opts.ctx.salida.globos.push(texto);
-      return { globos: opts.ctx.salida.globos, finTurno: true, pendiente: null, llamadas };
+      return { globos: opts.ctx.salida.globos, finTurno: true, pendiente: null, llamadas, gasto };
     }
 
     mensajes.push({ role: 'assistant', content: res.bloques });
@@ -191,7 +225,7 @@ export async function correrAgente(opts: {
     }
 
     if (terminal) {
-      return { globos: opts.ctx.salida.globos, finTurno: opts.ctx.salida.finTurno, pendiente: null, llamadas };
+      return { globos: opts.ctx.salida.globos, finTurno: opts.ctx.salida.finTurno, pendiente: null, llamadas, gasto };
     }
 
     mensajes.push({ role: 'user', content: resultados });
@@ -228,6 +262,7 @@ export async function correrAgente(opts: {
       toolChoice: { type: 'tool', name: 'responder' },
     });
     llamadas++;
+    if (cierre) gasto = sumarGasto(gasto, cierre.gasto);
     for (const uso of (cierre?.bloques || []).filter((b: any) => b.type === 'tool_use')) {
       const tool = opts.tools[uso.name];
       if (tool) await tool.ejecutar(uso.input, opts.ctx);
@@ -248,5 +283,5 @@ export async function correrAgente(opts: {
 
   // Ya hay algo que decir, asi que NO se aparca: aparcar sin quien lo retome es
   // perder el turno.
-  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas };
+  return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas, gasto };
 }

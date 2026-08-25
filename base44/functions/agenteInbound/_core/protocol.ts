@@ -91,6 +91,10 @@ export interface DiagTurno {
   fuera: Array<{ t: string; c: number; m: string }>;
   tools: string[];
   guardado_chars: number;
+  // Lo que costo el turno. Va aqui y no solo al log porque el fallo de cacheo
+  // no da error: si el prefijo se invalida, todo se cobra entero y lo unico que
+  // cambia es la factura. Con esto, /chunks lo dice en el chat.
+  gasto?: { entrada: number; cache_leidos: number; cache_escritos: number; salida: number; llamadas: number };
 }
 
 export interface Estado {

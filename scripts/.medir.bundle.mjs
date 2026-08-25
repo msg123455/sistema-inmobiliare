@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-// scripts/test-agent-core.mjs
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-
 // base44/functions/_core/protocol.ts
 var AGENTES = [
   "recepcion",
@@ -15,17 +11,6 @@ var AGENTES = [
   "pqr",
   "matricula"
 ];
-var esAgente = (v) => typeof v === "string" && AGENTES.includes(v);
-var ETIQUETAS_AGENTE = {
-  recepcion: "saludo suelto, mensaje ambiguo, o no encaja en ninguna otra categoria",
-  ventas: "busca comprar o arrendar un inmueble, pide fotos, precios, visitas",
-  consignacion: "ES DUENO de un inmueble y quiere venderlo, arrendarlo o ponerlo en administracion",
-  cartera: "pagos, canon, saldo, estado de cuenta, mora, recibo, codigo de barras, certificado",
-  mantenimiento: "algo se dano en el inmueble que habita: fugas, danos, reparaciones, emergencias",
-  avaluos: "quiere un avaluo comercial de un inmueble, o pregunta cuanto vale",
-  pqr: "inquietud o consulta sobre el servicio, y tambien peticion, queja, reclamo, sugerencia o felicitacion",
-  matricula: "esta tramitando un contrato de arriendo nuevo: papeleria, estudio, codeudor, F117"
-};
 function definirTool(name, description, props, opts = {}) {
   return {
     def: {
@@ -130,7 +115,6 @@ var ASISTIDOS = {
 };
 
 // base44/functions/_core/state.ts
-var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
 function identidadVacia() {
   return {
     verificado: false,
@@ -158,68 +142,6 @@ function estadoVacio() {
     pausada: false
   };
 }
-function migrar(raw2) {
-  const v = estadoVacio();
-  if (!raw2 || typeof raw2 !== "object") return v;
-  const o = raw2;
-  if (o.v === 2) {
-    return {
-      ...v,
-      ...o,
-      identidad: { ...identidadVacia(), ...o.identidad || {} },
-      ctx: o.ctx && typeof o.ctx === "object" ? o.ctx : {},
-      agente_activo: esAgente(o.agente_activo) ? o.agente_activo : "recepcion",
-      historial: Array.isArray(o.historial) ? o.historial : [],
-      msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
-      agente_historial: Array.isArray(o.agente_historial) ? o.agente_historial : []
-    };
-  }
-  const ahora = (/* @__PURE__ */ new Date()).toISOString();
-  return {
-    ...v,
-    agente_activo: "ventas",
-    agente_historial: [{ agente: "ventas", desde: ahora, motivo: "migracion:v1" }],
-    compartido: {
-      nombre: o.datos?.nombre || o.nombre || "",
-      contacto_id: o.contacto_id || "",
-      campana_id: o.campana_id || "",
-      campana_nombre: o.campana_nombre || ""
-    },
-    historial: Array.isArray(o.historial) ? o.historial : [],
-    msg_ids: Array.isArray(o.msg_ids) ? o.msg_ids : [],
-    pausada: !!o.pausada,
-    ctx: {
-      ventas: {
-        datos: o.datos && typeof o.datos === "object" ? o.datos : {},
-        etapa_ventas: o.etapa_ventas || "calentamiento",
-        estado_emocional: o.estado_emocional || "sin_definir",
-        tipo_comprador: o.tipo_comprador || "sin_definir",
-        motivacion_principal: o.motivacion_principal || "sin_definir",
-        nivel_urgencia: o.nivel_urgencia || "explorando",
-        objeciones_activas: Array.isArray(o.objeciones_activas) ? o.objeciones_activas : [],
-        calificado: !!o.calificado,
-        descalificado: !!o.descalificado,
-        motivo_desc: o.motivo_desc || "",
-        broker: o.broker || "",
-        broker_tel: o.broker_tel || "",
-        broker_genero: o.broker_genero || "",
-        despidio: !!o.despidio
-      }
-    }
-  };
-}
-async function cargarEstado(db, canal, tel) {
-  const clave3 = claveDe(canal, tel);
-  let fila = await db.uno("MemoriaChat", { clave: clave3 });
-  if (!fila) fila = await db.uno("MemoriaChat", { telefono: String(tel).replace(/\D/g, "") });
-  if (!fila) return { id: null, estado: estadoVacio(), fila: null };
-  let bruto = {};
-  try {
-    bruto = JSON.parse(fila.estado_json || "{}");
-  } catch {
-  }
-  return { id: fila.id, estado: migrar(bruto), fila };
-}
 function ctxDe(estado, agente) {
   if (!estado.ctx[agente]) estado.ctx[agente] = {};
   return estado.ctx[agente];
@@ -237,64 +159,6 @@ function transferir(estado, destino, motivo) {
     content: `[Sistema: transferido de ${origen} a ${destino}. Motivo: ${motivo}]`,
     ts: (/* @__PURE__ */ new Date()).toISOString()
   });
-}
-function olvidarTransitorios(estado, agente, claves) {
-  const scratch = estado.ctx[agente];
-  if (!scratch) return;
-  for (const k of claves) delete scratch[k];
-}
-var ESCALONES = [
-  { nombre: "completo", reducir: (e) => e },
-  // El scratch se recarga solo en el turno siguiente. Es lo primero que sobra.
-  { nombre: "sin ctx", reducir: (e) => ({ ...e, ctx: {} }) },
-  { nombre: "sin ctx, 8 mensajes", reducir: (e) => ({ ...e, ctx: {}, historial: e.historial.slice(-8) }) },
-  {
-    nombre: "minimo",
-    reducir: (e) => ({
-      ...estadoVacio(),
-      agente_activo: e.agente_activo,
-      agente_historial: e.agente_historial.slice(-3),
-      identidad: e.identidad,
-      compartido: e.compartido,
-      historial: e.historial.slice(-2),
-      msg_ids: e.msg_ids.slice(-5),
-      pausada: e.pausada
-    })
-  }
-];
-async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
-  estado.historial = estado.historial.slice(-24);
-  estado.msg_ids = estado.msg_ids.slice(-20);
-  const fila = (json) => ({
-    clave: claveDe(canal, tel),
-    telefono: String(tel).replace(/\D/g, ""),
-    canal: canal === "telegram" ? "Telegram" : "WhatsApp",
-    nombre: String(estado.compartido.nombre || ""),
-    contacto_id: extra.contacto_id ?? String(estado.compartido.contacto_id || ""),
-    agente_activo: estado.agente_activo,
-    pausada: estado.pausada,
-    // Campo indexado: continuarTurno lo consulta en vez de escanear la tabla.
-    tiene_turno_pendiente: !!estado.turno_pendiente,
-    estado_json: json,
-    ultimo_mensaje: (extra.ultimo_mensaje || "").slice(0, 1e3),
-    ultima_respuesta: (extra.ultima_respuesta || "").slice(0, 1e3),
-    fecha_ultimo_mensaje: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  for (const [i, escalon] of ESCALONES.entries()) {
-    const json = JSON.stringify(escalon.reducir(estado));
-    const id = await db.guardar("MemoriaChat", memoriaId, fila(json));
-    if (id) {
-      if (i > 0) {
-        console.error(
-          `estado guardado en el escalon "${escalon.nombre}" (${json.length} chars): Base44 rechazo los ${i} intento(s) anteriores por tamano`
-        );
-      }
-      return id;
-    }
-    console.error(`escalon "${escalon.nombre}" rechazado (${json.length} chars)`);
-  }
-  console.error("NO SE PUDO GUARDAR MemoriaChat en ningun escalon \u2014 la conversacion se pierde");
-  return null;
 }
 
 // base44/functions/_core/brief.ts
@@ -337,8 +201,8 @@ function briefLead(estado, tel, canal, extra = []) {
     ...estado.ctx?.[estado.agente_activo]?.datos || {}
   };
   const relevantes = [];
-  for (const [clave3, etiqueta] of Object.entries(ETIQUETAS)) {
-    const v = datos[clave3];
+  for (const [clave2, etiqueta] of Object.entries(ETIQUETAS)) {
+    const v = datos[clave2];
     if (v === void 0 || v === null || v === "") continue;
     const texto = fmt(v);
     if (texto) relevantes.push(`  ${etiqueta}: ${texto}`);
@@ -571,12 +435,12 @@ function bloqueado(estado) {
   const h = estado.identidad.bloqueado_hasta;
   return !!h && new Date(h).getTime() > Date.now();
 }
-async function verificar(db, estado, entrada2, tipo, valor) {
+async function verificar(db, estado, entrada, tipo, valor) {
   if (bloqueado(estado)) {
-    await auditar(db, { tipo: "verificacion", telefono: entrada2.tel, exito: false, detalle: "intento durante bloqueo" });
+    await auditar(db, { tipo: "verificacion", telefono: entrada.tel, exito: false, detalle: "intento durante bloqueo" });
     return { verificado: false, intentos_restantes: 0, bloqueado: true };
   }
-  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada2.tel);
+  const { arrendatario, propietario, contrato } = await reconocerTelefono(db, entrada.tel);
   let ok = false;
   let sujeto;
   let rolArrendatario = false;
@@ -597,7 +461,7 @@ async function verificar(db, estado, entrada2, tipo, valor) {
     const dado = String(valor || "").trim().toUpperCase();
     if (dado) {
       const sol = await db.uno("SolicitudMatricula", { numero_solicitud: dado });
-      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada2.tel)) {
+      if (sol && soloDigitos(sol.telefono_contacto) === soloDigitos(entrada.tel)) {
         ok = true;
         sujeto = sol.id;
       }
@@ -632,7 +496,7 @@ async function verificar(db, estado, entrada2, tipo, valor) {
       intentos: 0,
       bloqueado_hasta: null
     };
-    await auditar(db, { tipo: "verificacion", sujeto_id: sujeto, telefono: entrada2.tel, exito: true, detalle: tipo });
+    await auditar(db, { tipo: "verificacion", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
     return { verificado: true, intentos_restantes: MAX_INTENTOS, bloqueado: false };
   }
   i.intentos = (i.intentos || 0) + 1;
@@ -643,14 +507,14 @@ async function verificar(db, estado, entrada2, tipo, valor) {
   }
   await auditar(db, {
     tipo: "verificacion",
-    telefono: entrada2.tel,
+    telefono: entrada.tel,
     exito: false,
     detalle: `${tipo} fallido (intento ${i.intentos}/${MAX_INTENTOS})`
   });
   return { verificado: false, intentos_restantes: restantes, bloqueado: restantes === 0 };
 }
 var SECCIONES_PROPIETARIO = /* @__PURE__ */ new Set(["certificados", "liquidaciones"]);
-async function crearSesionPortal(db, entrada2, estado, tipo) {
+async function crearSesionPortal(db, entrada, estado, tipo) {
   const arrendatarioId = estado.identidad.arrendatario_id;
   const propietarioId = estado.identidad.propietario_id;
   const comoPropietario = SECCIONES_PROPIETARIO.has(tipo) ? !!propietarioId : !arrendatarioId && !!propietarioId;
@@ -664,13 +528,13 @@ async function crearSesionPortal(db, entrada2, estado, tipo) {
     sujeto_id: sujeto,
     sujeto_tipo: comoPropietario ? "propietario" : "arrendatario",
     contrato_id: estado.identidad.contrato_id || "",
-    telefono: soloDigitos(entrada2.tel),
+    telefono: soloDigitos(entrada.tel),
     expira: new Date(Date.now() + TTL_PORTAL_MIN * 6e4).toISOString(),
     usado: false,
     creada: (/* @__PURE__ */ new Date()).toISOString()
   });
   if (!fila) return null;
-  await auditar(db, { tipo: "sesion_portal", sujeto_id: sujeto, telefono: entrada2.tel, exito: true, detalle: tipo });
+  await auditar(db, { tipo: "sesion_portal", sujeto_id: sujeto, telefono: entrada.tel, exito: true, detalle: tipo });
   const app = (Deno.env.get("PORTAL_URL") || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
   return `${app}/portal/entrar?t=${token}`;
 }
@@ -2466,50 +2330,6 @@ function instruccionHorario(ahora, config = {}) {
 }
 
 // base44/functions/_core/contexto.ts
-var MAX_RAG_CHARS = 18e3;
-function destinosDe(ch) {
-  return String(ch.agentes || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
-}
-function seleccionarRag(chunks2, agente, maxChars = MAX_RAG_CHARS) {
-  const relevantes = (chunks2 || []).map((ch) => ({ ch, destinos: destinosDe(ch) })).filter(({ destinos }) => destinos.includes("todos") || destinos.includes(agente)).sort((a, b) => {
-    const especificoA = a.destinos.includes(agente) && !a.destinos.includes("todos") ? 1 : 0;
-    const especificoB = b.destinos.includes(agente) && !b.destinos.includes("todos") ? 1 : 0;
-    return especificoB - especificoA || (Number(b.ch.prioridad) || 5) - (Number(a.ch.prioridad) || 5) || String(a.ch.titulo || "").localeCompare(String(b.ch.titulo || ""), "es");
-  });
-  let usado = 0;
-  const trozos = [];
-  const titulos = [];
-  const detalle = [];
-  const descartados = [];
-  for (const { ch, destinos } of relevantes) {
-    const titulo = String(ch.titulo || "").trim();
-    const contenido = String(ch.contenido || "").trim();
-    if (!titulo || !contenido) {
-      descartados.push({ titulo: titulo || "(sin titulo)", chars: contenido.length, motivo: "vacio" });
-      continue;
-    }
-    const bloque = `[${titulo}]
-${contenido}
-
-`;
-    if (usado + bloque.length > maxChars) {
-      descartados.push({ titulo, chars: bloque.length, motivo: "no cabe en el presupuesto" });
-      continue;
-    }
-    trozos.push(bloque);
-    titulos.push(titulo);
-    detalle.push({
-      titulo,
-      chars: bloque.length,
-      especifico: destinos.includes(agente) && !destinos.includes("todos")
-    });
-    usado += bloque.length;
-  }
-  return { texto: trozos.join(""), titulos, chars: usado, detalle, descartados };
-}
-function agentesAutomaticosActivos(config) {
-  return config?.activo !== false;
-}
 function armarSystem(base, agente, estado, ctxAgente) {
   const estable = [];
   estable.push(base.identidadMarca || IDENTIDAD_MARCA);
@@ -2584,1314 +2404,48 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     (estado.historial.length <= 1 ? '\n\nTU PRESENTACION YA SE ENVIO: el cliente acaba de recibir, como mensaje aparte, "Hola, soy Diana de INMOBILIARE Julio Corredor."\nTu mensaje va DESPUES de ese, asi que NO empieces con "Hola", "Buenas", "Que tal" ni ningun saludo, y no repitas tu nombre. Saludar dos veces seguidas es de las cosas que mas delatan a un bot. Arranca directo por lo que el cliente necesita.' : "")
   );
   return [
-    {
-      type: "text",
-      text: estable.join("\n\n"),
-      cache_control: { type: "ephemeral", ttl: "1h" }
-    },
+    { type: "text", text: estable.join("\n\n"), cache_control: { type: "ephemeral" } },
     { type: "text", text: partes.join("\n\n") }
   ];
 }
 
-// base44/functions/_core/webhook.ts
-async function firmaMetaValida(rawBody, header, secret) {
-  if (!header?.startsWith("sha256=") || !secret) return false;
-  const hex2 = header.slice("sha256=".length);
-  if (!/^[0-9a-fA-F]{64}$/.test(hex2)) return false;
-  const firma2 = new Uint8Array(32);
-  for (let i = 0; i < firma2.length; i++) {
-    firma2[i] = Number.parseInt(hex2.slice(i * 2, i * 2 + 2), 16);
-  }
-  try {
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"]
-    );
-    return await crypto.subtle.verify("HMAC", key, firma2, rawBody);
-  } catch (e) {
-    console.error("No se pudo verificar la firma de Meta:", e.message);
-    return false;
-  }
+// scripts/.medir-tokens.mjs
+var tok = (s) => Math.round(s.length / 3.6);
+console.log("=== IDENTIDAD_MARCA ===");
+console.log(`chars ${IDENTIDAD_MARCA.length}  ~tokens ${tok(IDENTIDAD_MARCA)}`);
+console.log("\n=== PROMPTS por agente (codigo) ===");
+for (const a of AGENTES) {
+  console.log(`${a.padEnd(14)} chars ${String(PROMPTS[a].length).padStart(6)}  ~tokens ${tok(PROMPTS[a])}`);
 }
-function secretoIgual(recibido, esperado) {
-  if (!recibido || !esperado) return false;
-  const a = new TextEncoder().encode(recibido);
-  const b = new TextEncoder().encode(esperado);
-  let diferencia = a.length ^ b.length;
-  const largo = Math.max(a.length, b.length);
-  for (let i = 0; i < largo; i++) diferencia |= (a[i] || 0) ^ (b[i] || 0);
-  return diferencia === 0;
+console.log("\n=== DEFINICIONES DE TOOLS por agente (viajan en CADA llamada) ===");
+for (const a of AGENTES) {
+  const tools = toolsDe(a);
+  const defs = Object.values(tools).map((t) => t.def);
+  const json = JSON.stringify(defs);
+  console.log(`${a.padEnd(14)} n=${String(defs.length).padStart(2)}  chars ${String(json.length).padStart(6)}  ~tokens ${String(tok(json)).padStart(5)}`);
 }
-
-// base44/functions/_core/llm.ts
-var API = "https://api.anthropic.com/v1/messages";
-function paramsModelo(modelo, effort) {
-  if (/haiku/.test(modelo)) return {};
-  return { output_config: { effort: effort || "low" } };
-}
-async function llamarModelo(opts) {
-  for (const modelo of opts.modelos) {
-    const body = {
-      model: modelo,
-      max_tokens: opts.maxTokens ?? 4e3,
-      system: opts.system,
-      messages: opts.messages,
-      ...paramsModelo(modelo, opts.effort)
-    };
-    if (opts.tools?.length) body.tools = opts.tools;
-    if (opts.toolChoice) body.tool_choice = opts.toolChoice;
-    try {
-      const r = await fetch(API, {
-        method: "POST",
-        headers: {
-          "x-api-key": opts.apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json"
-        },
-        body: JSON.stringify(body)
-      });
-      if (r.ok) {
-        const j = await r.json();
-        const u = j.usage || {};
-        const gasto = {
-          entrada: u.input_tokens || 0,
-          cache_leidos: u.cache_read_input_tokens || 0,
-          cache_escritos: u.cache_creation_input_tokens || 0,
-          salida: u.output_tokens || 0,
-          llamadas: 1
-        };
-        console.log(
-          `tokens[${modelo}] entrada ${gasto.entrada} | cache leidos ${gasto.cache_leidos} escritos ${gasto.cache_escritos} | salida ${gasto.salida}`
-        );
-        return { bloques: j.content || [], stop_reason: j.stop_reason || "", modelo, gasto };
-      }
-      console.error(`Anthropic ${modelo} ${r.status}:`, (await r.text()).slice(0, 300));
-    } catch (e) {
-      console.error(`Anthropic ${modelo} excepcion:`, e.message);
-    }
-  }
-  return null;
-}
-
-// base44/functions/_core/router.ts
-var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
-var POR_BOTON = {
-  "flujo:consignacion": "consignacion",
-  "flujo:buscar": "ventas",
-  "flujo:pagos": "cartera",
-  "flujo:reparacion": "mantenimiento",
-  "flujo:avaluo": "avaluos",
-  "flujo:pqr": "pqr",
-  "flujo:matricula": "matricula",
-  "flujo:inquietudes": "recepcion"
-};
-var FRASES = [
-  ["cartera", /\b(estado de cuenta|codigo de barras|recibo de pago|pagar el arriendo|pagar mi arriendo|cuanto debo|mi saldo|en mora|paz y salvo|certificado de arrendamiento)\b/],
-  ["mantenimiento", /\b(se dano|se me dano|esta danado|fuga|se inunda|no hay agua|no sirve el|arreglar|reparacion|gotera|humedad|se rompio)\b/],
-  ["consignacion", /\b(quiero arrendar mi|quiero vender mi|poner mi (apartamento|casa|local|oficina)|consignar mi|administren mi|en administracion)\b/],
-  ["avaluos", /\b(avaluo|avaluar|cuanto vale mi|peritaje)\b/],
-  // Inquietud y PQR van al MISMO agente a proposito. Son cosas distintas —una
-  // consulta no dispara termino legal y un reclamo si— pero decidir cual es
-  // requiere leer lo que el cliente cuenta, y esa frontera se razona mejor en
-  // una sola cabeza que repartida en dos agentes que se transfieren el caso.
-  ["pqr", /\b(queja|reclamo|pqr|peticion formal|inconformidad|mal servicio|denuncia|inquietud|tengo una duda|una consulta|quiero preguntar)\b/],
-  // "matricula" a secas es ambiguo y en inmobiliaria pesa mas el otro
-  // significado: la MATRICULA INMOBILIARIA es el folio de la ORIP, el numero del
-  // certificado de tradicion y libertad. Un propietario que pregunta por su
-  // folio caia en el tramite de arriendo y terminaba dictando su cedula para
-  // algo que nunca pidio.
-  //
-  // Se exige que la palabra venga acompanada de algo del tramite. La palabra
-  // sola cae al nivel 2, que pregunta en vez de adivinar, que es justo lo que
-  // hay que hacer con un termino de doble sentido.
-  ["matricula", /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/]
-];
-function porFrase(texto) {
-  const t = normalizar(texto);
-  if (!t) return null;
-  for (const [agente, re] of FRASES) if (re.test(t)) return agente;
-  return null;
-}
-async function decidirAgente(db, estado, entrada2, opts) {
-  const porBoton = POR_BOTON[entrada2.botonId];
-  if (porBoton) return { agente: porBoton, nivel: 1, motivo: `boton:${entrada2.botonId}` };
-  const cambio = porFrase(entrada2.texto);
-  const activo = estado.agente_activo;
-  const fijado = esAgente(activo) && estado.agente_historial.length > 0;
-  if (fijado && (!cambio || cambio === activo)) {
-    return { agente: activo, nivel: 0, motivo: "pegajosidad" };
-  }
-  if (cambio) return { agente: cambio, nivel: 1, motivo: `frase:${cambio}` };
-  if (entrada2.adReferral?.adId) return { agente: "ventas", nivel: 1, motivo: "ad_referral" };
-  const tel = entrada2.tel.replace(/\D/g, "");
-  if (tel) {
-    const [arrs, props] = await Promise.all([
-      db.list("Arrendatario", { telefono: tel, limit: 1 }),
-      db.list("Propietario", { telefono: tel, limit: 1 })
-    ]);
-    if (arrs[0] || props[0]) {
-      const [reps, pqrs] = await Promise.all([
-        db.list("Reparacion", { arrendatario_id: arrs[0]?.id, estado: "En_proceso", limit: 1 }),
-        db.list("PQR", { contacto_telefono: tel, estado: "En_proceso", limit: 1 })
-      ]);
-      if (reps[0]) return { agente: "mantenimiento", nivel: 1, motivo: "reparacion_abierta" };
-      if (pqrs[0]) return { agente: "pqr", nivel: 1, motivo: "pqr_abierta" };
-      return { agente: "cartera", nivel: 1, motivo: "telefono_conocido" };
-    }
-  }
-  const clasif = await clasificar(entrada2, estado, opts.anthropicKey, opts.modeloRouter);
-  if (clasif && clasif.confianza >= 0.6) {
-    return { agente: clasif.agente, nivel: 2, motivo: `llm:${clasif.motivo}`.slice(0, 120) };
-  }
-  return { agente: "recepcion", nivel: 2, motivo: "baja_confianza" };
-}
-async function clasificar(entrada2, estado, apiKey, modelo) {
-  if (!apiKey) return null;
-  const etiquetas = AGENTES.map((a) => `- ${a}: ${ETIQUETAS_AGENTE[a]}`).join("\n");
-  const ultimos = estado.historial.slice(-3).map((m) => `${m.role === "user" ? "Cliente" : "Asesor"}: ${String(m.content).slice(0, 300)}`).join("\n");
-  const res = await llamarModelo({
-    apiKey,
-    modelos: [modelo],
-    maxTokens: 100,
-    system: `Clasificas el mensaje de un cliente de una inmobiliaria de Bogota en una de estas categorias:
-${etiquetas}
-
-Responde SOLO con la herramienta clasificar_intencion. Si dudas, baja la confianza; no adivines.`,
-    messages: [{
-      role: "user",
-      content: `${ultimos ? `Contexto reciente:
-${ultimos}
-
-` : ""}Mensaje a clasificar:
-${entrada2.texto.slice(0, 600)}`
-    }],
-    tools: [{
-      name: "clasificar_intencion",
-      description: "Clasifica la intencion del mensaje del cliente.",
-      strict: true,
-      input_schema: {
-        type: "object",
-        properties: {
-          agente: { type: "string", enum: [...AGENTES], description: "Categoria elegida" },
-          confianza: { type: "number", description: "De 0 a 1. Menos de 0.6 si el mensaje es ambiguo." },
-          motivo: { type: "string", description: "Justificacion en menos de 12 palabras" }
-        },
-        required: ["agente", "confianza", "motivo"],
-        additionalProperties: false
-      }
-    }],
-    toolChoice: { type: "tool", name: "clasificar_intencion" }
-  });
-  const uso = res?.bloques.find((b) => b.type === "tool_use");
-  if (!uso?.input || !esAgente(uso.input.agente)) return null;
-  return {
-    agente: uso.input.agente,
-    confianza: Number(uso.input.confianza) || 0,
-    motivo: String(uso.input.motivo || "")
-  };
-}
-
-// base44/functions/_core/privacidad.ts
-var POLITICA_VERSION = "2026-01";
-var POLITICA_URL_DEFECTO = "https://bit.ly/3imaawE";
-function urlPolitica(config) {
-  return String(config?.politica_datos_url || "").trim() || POLITICA_URL_DEFECTO;
-}
-function textoAviso(config) {
-  const empresa = String(config?.nombre_inmobiliaria || "").trim() || "INMOBILIARE Julio Corredor";
-  return `Antes de seguir: en ${empresa} tratamos tus datos conforme a nuestra pol\xEDtica. Si contin\xFAas, entenderemos que la aceptas. Puedes consultarla en ${urlPolitica(config)}`;
-}
-function debeAvisar(esPrimerTurno, contacto) {
-  if (!esPrimerTurno) return false;
-  if (!contacto) return true;
-  if (!contacto.autoriza_tratamiento) return true;
-  return String(contacto.politica_version || "") !== POLITICA_VERSION;
-}
-function marcaAutorizacion() {
-  return {
-    autoriza_tratamiento: true,
-    fecha_autorizacion: (/* @__PURE__ */ new Date()).toISOString(),
-    politica_version: POLITICA_VERSION
-  };
-}
-
-// base44/functions/_core/canales/media.ts
-async function transcribir(buf, mimeType, openaiKey) {
-  const fd = new FormData();
-  fd.append("file", new Blob([buf], { type: mimeType }), "audio.ogg");
-  fd.append("model", "whisper-1");
-  fd.append("language", "es");
-  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${openaiKey}` },
-    body: fd
-  });
-  if (!r.ok) {
-    console.error("Whisper error:", r.status);
-    return null;
-  }
-  return ((await r.json()).text || "").trim() || null;
-}
-function base64(buf) {
-  const bytes = new Uint8Array(buf);
-  let bin = "";
-  for (let i = 0; i < bytes.length; i += 32768) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + 32768)));
-  }
-  return btoa(bin);
-}
-async function describirImagen(buf, mimeType, openaiKey, caption) {
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${openaiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      max_tokens: 200,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "text", text: `Un cliente de una inmobiliaria en Bogota envio esta imagen por chat${caption ? ` con el texto: "${caption}"` : ""}. Describe en 1 o 2 frases en espanol QUE muestra, enfocandote en lo util para bienes raices: si es un inmueble (que tipo o ambiente), un dano o averia (que se ve danado), un plano, un pantallazo de un anuncio, un documento (cedula, extracto, recibo), o algo personal. Solo la descripcion, sin preambulos.` },
-          { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64(buf)}` } }
-        ]
-      }]
-    })
-  });
-  if (!r.ok) {
-    console.error("Vision error:", r.status);
-    return null;
-  }
-  return ((await r.json()).choices?.[0]?.message?.content || "").trim() || null;
-}
-
-// base44/functions/_core/canales/telegram.ts
-var API2 = (token) => `https://api.telegram.org/bot${token}`;
-async function descargarMedia(fileId, tgToken) {
-  const rInfo = await fetch(`${API2(tgToken)}/getFile?file_id=${encodeURIComponent(fileId)}`);
-  if (!rInfo.ok) return null;
-  const path = (await rInfo.json())?.result?.file_path;
-  if (!path) return null;
-  const rBin = await fetch(`https://api.telegram.org/file/bot${tgToken}/${path}`);
-  if (!rBin.ok) return null;
-  const mimeType = /\.(jpe?g)$/i.test(path) ? "image/jpeg" : /\.png$/i.test(path) ? "image/png" : "audio/ogg";
-  return { buf: await rBin.arrayBuffer(), mimeType };
-}
-async function normalizar2(body, env) {
-  const m = body?.message || body?.edited_message;
-  const chatId = m?.chat?.id;
-  if (!chatId) return null;
-  if (Number(chatId) < 0) return null;
-  const base = {
-    canal: "telegram",
-    tel: String(chatId),
-    // message_id solo es unico dentro de cada bot/chat. El prefijo evita que
-    // dos bots dedicados conserven el mismo numero y el dedup descarte uno.
-    msgId: `${env.tgBotKey || "compartido"}:${String(m.message_id || "")}`,
-    botonId: "",
-    adReferral: { adId: "", adTitulo: "", adCuerpo: "" },
-    destino: String(chatId)
-  };
-  const texto = String(m.text || "").trim();
-  if (texto) return { ...base, texto };
-  const audioId = m.voice?.file_id || m.audio?.file_id;
-  if (audioId && env.openaiKey) {
-    const media = await descargarMedia(audioId, env.tgToken);
-    const t = media ? await transcribir(media.buf, media.mimeType, env.openaiKey) : null;
-    return t ? { ...base, texto: t } : null;
-  }
-  const fotoId = Array.isArray(m.photo) && m.photo.length ? m.photo[m.photo.length - 1].file_id : "";
-  if (fotoId) {
-    const caption = String(m.caption || "").trim();
-    let desc = null;
-    if (env.openaiKey) {
-      const media = await descargarMedia(fotoId, env.tgToken);
-      if (media) desc = await describirImagen(media.buf, media.mimeType, env.openaiKey, caption);
-    }
-    return {
-      ...base,
-      texto: desc ? caption ? `${caption}
-[El cliente envio una foto: ${desc}]` : `[El cliente envio una foto: ${desc}]` : caption || "[El cliente envio una foto que no pude ver bien]"
-    };
-  }
-  if (m.document) {
-    const nombre = String(m.document.file_name || "").slice(0, 120);
-    const caption = String(m.caption || "").trim();
-    const aviso = `[El cliente envio un archivo${nombre ? ` llamado "${nombre}"` : ""}. NO lo has abierto ni puedes leerlo.]`;
-    return { ...base, texto: caption ? `${caption}
-${aviso}` : aviso };
-  }
-  if (m.video || m.sticker || m.location || m.contact) {
-    const que = m.video ? "video" : m.sticker ? "sticker" : m.location ? "ubicacion" : "contacto";
-    return { ...base, texto: `[El cliente envio un ${que} que no puedes procesar.]` };
-  }
-  return null;
-}
-
-// scripts/test-agent-core.mjs
-assert.equal(Object.keys(PROMPTS).length, 8, "deben existir exactamente ocho agentes");
-assert.match(IDENTIDAD_MARCA, /Te llamas DIANA/, "la identidad publica es Diana");
-assert.doesNotMatch(`${IDENTIDAD_MARCA}
-${Object.values(PROMPTS).join("\n")}`, /Valentina|Camila|Andres|Daniela|Julian|Mauricio/);
-for (const [agente, prompt] of Object.entries(PROMPTS)) {
-  assert.ok(prompt.split("\n").length <= 80, `${agente} supera 80 lineas`);
-}
-assert.match(PROMPTS.ventas, /guardar_dato/);
-assert.equal(fmtCOP(25e5), "$2.500.000");
-var rosalesArriendo = [
-  ...Array.from({ length: 8 }, (_, i) => ({
-    id: `ros-apto-${i}`,
-    codigo_externo: `90-100${i}`,
-    titulo: `Apartamento ${i} en Los Rosales`,
-    operacion: "Arriendo",
-    estado: "Disponible",
-    barrio: "Los Rosales",
-    tipo: "Apartamento",
-    habitaciones: 3,
-    canon_arriendo: 4e6 + i * 5e5,
-    portales: { metrocuadrado: `https://www.metrocuadrado.com/ficha-${i}` }
-  })),
-  // Las oficinas tienen habitaciones 0 y NO es un dato que falte: es que no
-  // aplica. Filtrarlas por cuartos las borraria del inventario.
-  ...Array.from({ length: 2 }, (_, i) => ({
-    id: `ros-ofi-${i}`,
-    codigo_externo: `90-200${i}`,
-    titulo: `Oficina ${i} en Los Rosales`,
-    operacion: "Arriendo",
-    estado: "Disponible",
-    barrio: "Los Rosales",
-    tipo: "Oficina",
-    habitaciones: 0,
-    canon_arriendo: 9e6
-  })),
-  {
-    id: "ros-casa-0",
-    codigo_externo: "90-3000",
-    titulo: "Casa en Los Rosales",
-    operacion: "Arriendo",
-    estado: "Disponible",
-    barrio: "Los Rosales",
-    tipo: "Casa",
-    habitaciones: 5,
-    canon_arriendo: 2e7
-  }
-];
-var catalogoDemo = [
-  ...rosalesArriendo,
-  {
-    id: "ros-venta-0",
-    codigo_externo: "90-4000",
-    titulo: "Apartamento en venta en Los Rosales",
-    operacion: "Venta",
-    estado: "Disponible",
-    barrio: "Los Rosales",
-    tipo: "Apartamento",
-    habitaciones: 3,
-    precio_venta: 12e8
-  },
-  // Sin precio cargado. El importador guarda 0 cuando la celda venia vacia: no
-  // se puede prometer que cabe en un presupuesto, pero tampoco desaparece.
-  {
-    id: "ros-venta-1",
-    codigo_externo: "90-4001",
-    titulo: "Casa en venta en Los Rosales",
-    operacion: "Venta",
-    estado: "Disponible",
-    barrio: "Los Rosales",
-    tipo: "Casa",
-    habitaciones: 4,
-    precio_venta: 0
-  },
-  {
-    id: "chapi-25",
-    titulo: "Apartamento en Chapinero",
-    operacion: "Arriendo",
-    estado: "Disponible",
-    barrio: "Chapinero",
-    tipo: "Apartamento",
-    canon_arriendo: 25e5,
-    portales: { metrocuadrado: "https://www.metrocuadrado.com/ficha-real" }
-  }
-];
-var dbInmuebles = (props, zonas, cae = false) => ({
-  list: async (entidad) => entidad === "ZonaInmueble" ? zonas : [],
-  consultar: async (entidad, filtro = {}) => {
-    if (cae) return { ok: false, motivo: "http", detalle: "500" };
-    if (entidad !== "Propiedad") return { ok: true, filas: [] };
-    return {
-      ok: true,
-      filas: props.filter((p) => (!filtro.barrio || p.barrio === filtro.barrio) && (!filtro.estado || p.estado === filtro.estado) && (!filtro.id || p.id === filtro.id) && (!filtro.codigo_externo || p.codigo_externo === filtro.codigo_externo))
-    };
-  }
-});
-var ZONAS = [
-  { nombre: "Chapinero", normalizado: "chapinero", activo: true },
-  { nombre: "Chapinero Alto", normalizado: "chapinero alto", activo: true },
-  { nombre: "Los Rosales", normalizado: "rosales", activo: true }
-];
-var nuevoCtx = (props = catalogoDemo, cae = false) => ({
-  db: dbInmuebles(props, ZONAS, cae),
-  ctxAgente: {},
-  salida: { globos: [], finTurno: false },
-  efectos: { transferir: null, escalado: null, notificar: [] }
-});
-var ctxCaido = () => nuevoCtx(catalogoDemo, true);
-var buscar = (input, ctx) => buscarInmuebles.ejecutar({
-  operacion: "arriendo",
-  barrio: null,
-  tipo: null,
-  presupuesto_max: null,
-  habitaciones_min: null,
-  ...input
-}, ctx);
+console.log("\n=== DETALLE tools de VENTAS (la mas cara) ===");
 {
-  const ctx = nuevoCtx();
-  const primera = await buscar({ barrio: "rosales" }, ctx);
-  assert.equal(primera.resultado, "falta_tipo");
-  assert.equal(primera.zona, "Los Rosales");
-  assert.equal(primera.en_la_zona, 11, "el total real de la zona, no los que caben en un mensaje");
-  assert.deepEqual(primera.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
-  assert.match(primera.instruccion, /11: 8 apartamentos, 2 oficinas, 1 casa/);
-  assert.match(primera.instruccion, /UNA sola pregunta/);
-  const conLocales = await buscar({ barrio: "Chapinero" }, nuevoCtx([
-    ...catalogoDemo,
-    { id: "l1", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 5e6 },
-    { id: "l2", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 6e6 }
-  ]));
-  assert.match(conLocales.instruccion, /2 locales/);
-  const conTipo = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
-  assert.equal(conTipo.resultado, "hay");
-  assert.equal(conTipo.total, 8);
-  assert.equal(conTipo.mostrados, 5);
-  assert.equal(conTipo.hay_mas, true);
-  assert.equal(conTipo.en_la_zona, 11);
-  assert.match(conTipo.nota, /el numero es 8, no 5/);
-  assert.equal(conTipo.inmuebles[0].id, "ros-apto-0");
-  assert.equal(conTipo.inmuebles[0].precio, "$4.000.000 al mes");
-  const otraVez = await buscar({ barrio: "rosales" }, ctx);
-  assert.equal(otraVez.resultado, "hay");
-  assert.equal(otraVez.total, 11, "sin tipo, encajan los 11");
-  const soloUno = await buscar({ barrio: "Chapinero" }, nuevoCtx());
-  assert.equal(soloUno.resultado, "hay");
-  assert.equal(soloUno.total, 1);
-}
-{
-  const caro = await buscar({
-    barrio: "rosales",
-    tipo: "Apartamento",
-    presupuesto_max: 1e3
-  }, nuevoCtx());
-  assert.equal(caro.resultado, "cero_bajo_el_filtro");
-  assert.equal(caro.en_la_zona, 11, "sabe que en la zona SI hay, aunque ninguno pase el filtro");
-  assert.deepEqual(caro.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
-  assert.match(caro.instruccion, /PROHIBIDO decir "no hay nada"/);
-  assert.match(caro.instruccion, /SI tenemos 11/);
-  for (const dicho of ["apartamentos", "apto", "apartaestudio", "penthouse", "Apartamento"]) {
-    const r = await buscar({ barrio: "rosales", tipo: dicho }, nuevoCtx());
-    assert.equal(r.resultado, "hay", `"${dicho}" no puede dar cero`);
-    assert.equal(r.total, 8);
+  const tools = toolsDe("ventas");
+  const filas = Object.entries(tools).map(([n, t]) => {
+    const j = JSON.stringify(t.def);
+    return { n, chars: j.length, desc: (t.def.description || "").length, esquema: j.length - (t.def.description || "").length };
+  }).sort((x, y) => y.chars - x.chars);
+  for (const f of filas) {
+    console.log(`  ${f.n.padEnd(22)} total ${String(f.chars).padStart(5)}  desc ${String(f.desc).padStart(5)}  esquema ${String(f.esquema).padStart(5)}  ~tok ${tok(String(f.chars * 0 + f.chars))}`);
   }
-  const raro = await buscar({ barrio: "rosales", tipo: "iglu" }, nuevoCtx());
-  assert.equal(raro.resultado, "falta_tipo", 'un tipo ilegible se trata como "todavia no lo se"');
-  const conCuartos = await buscar({ barrio: "rosales", habitaciones_min: 2 }, nuevoCtx());
-  assert.equal(conCuartos.resultado, "falta_tipo");
-  const cuartosYTipo = await buscar({
-    barrio: "rosales",
-    tipo: "Oficina",
-    habitaciones_min: 2
-  }, nuevoCtx());
-  assert.equal(cuartosYTipo.total, 2, "una oficina no se descarta por no tener cuartos");
-  const enVenta = await buscar({
-    operacion: "venta",
-    barrio: "rosales",
-    tipo: "Casa",
-    presupuesto_max: 2e9
-  }, nuevoCtx());
-  assert.equal(enVenta.resultado, "cero_bajo_el_filtro");
-  assert.equal(enVenta.sin_precio_publicado, 1);
-  assert.match(enVenta.instruccion, /sin precio cargado/);
+  const total = filas.reduce((s, f) => s + f.chars, 0);
+  console.log(`  TOTAL ventas: ${total} chars  ~${tok("x".repeat(total))} tokens`);
 }
-{
-  const sinZona = await buscar({ tipo: "Apartamento", presupuesto_max: 3e6 }, nuevoCtx());
-  assert.equal(sinZona.resultado, "falta_zona");
-  const ambigua = await buscar({ barrio: "chapiner" }, nuevoCtx());
-  assert.equal(ambigua.resultado, "zona_ambigua");
-  assert.deepEqual(ambigua.sugerencias, ["Chapinero", "Chapinero Alto"]);
-  assert.match(ambigua.instruccion, /NO digas que no hay nada/);
-  const rara = await buscar({ barrio: "Villavicencio" }, nuevoCtx());
-  assert.equal(rara.resultado, "zona_desconocida");
-  assert.match(rara.instruccion, /PROHIBIDO afirmar que no tenemos/);
-  const sinBase = ctxCaido();
-  const caida = await buscar({ barrio: "rosales", tipo: "Apartamento" }, sinBase);
-  assert.equal(caida.resultado, "no_pude_consultar");
-  assert.match(caida.instruccion, /PROHIBIDO decirle que no hay inmuebles/);
-  assert.ok(sinBase.efectos.escalado, "un fallo de la base deja avisado a un humano");
-  const vacia = await buscar({ operacion: "venta", barrio: "Chapinero" }, nuevoCtx());
-  assert.equal(vacia.resultado, "cero_en_la_zona");
-  assert.match(vacia.instruccion, /Esto SI lo puedes afirmar/);
-  assert.match(vacia.instruccion, /registrar_interes/);
-}
-{
-  const ctx = nuevoCtx();
-  const res = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
-  assert.equal(res.inmuebles[0].ficha, "https://www.metrocuadrado.com/ficha-0");
-  assert.equal(ctx.ctxAgente.mostrados.length, 5, "queda lo mostrado, para el turno siguiente");
-  assert.deepEqual(Object.keys(ctx.ctxAgente.mostrados[0]), ["id", "codigo", "titulo", "ficha"]);
-  assert.ok(JSON.stringify(ctx.ctxAgente.mostrados).length < 2e3);
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctx)).ok, true);
-  assert.equal(ctx.salida.globos.at(-1), "https://www.metrocuadrado.com/ficha-0");
-  const fantasma = await enviarFicha.ejecutar({ inmueble_id: "no-existe" }, ctx);
-  assert.equal(fantasma.ok, false);
-  assert.match(fantasma.instruccion, /NO le digas que el inmueble ya no esta/);
-  assert.equal((await enviarFicha.ejecutar({ inmueble_id: "chapi-25" }, ctx)).ok, true);
-  const retirado = { ...catalogoDemo[0], id: "retirado", estado: "Arrendado" };
-  const ctxRetirado = { ...nuevoCtx(), db: dbInmuebles([retirado], ZONAS) };
-  const fueraDeMercado = await enviarFicha.ejecutar({ inmueble_id: "retirado" }, ctxRetirado);
-  assert.equal(fueraDeMercado.error, "no_disponible");
-  assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
-  const sinBase = await enviarFicha.ejecutar({ inmueble_id: "ros-apto-0" }, ctxCaido());
-  assert.equal(sinBase.error, "no_pude_consultar");
-  assert.match(sinBase.instruccion, /NO digas que no existe/);
-  const visitaFalsa = await agendarVisita.ejecutar(
-    { inmueble_id: "no-existe", preferencia: "el sabado" },
-    { ...ctx, estado: estadoVacio(), db: { ...ctx.db, crear: async () => {
-      throw new Error("no debe crear");
-    } } }
-  );
-  assert.equal(visitaFalsa.ok, false);
-  assert.match(visitaFalsa.instruccion, /la visita NO se hizo/);
-}
-{
-  const ctx = nuevoCtx();
-  for (const dicho of ["90-1001", "cod 90-1001", "90 1001"]) {
-    const r = await buscarPorCodigo.ejecutar({ codigo: dicho }, ctx);
-    assert.equal(r.ok, true, `"${dicho}" tiene que encontrar el inmueble`);
-    assert.equal(r.inmueble.codigo, "90-1001");
-  }
-  const noExiste = await buscarPorCodigo.ejecutar({ codigo: "99-9999" }, ctx);
-  assert.equal(noExiste.error, "no_encontrado");
-  assert.match(noExiste.instruccion, /Consultado/);
-  const caido = await buscarPorCodigo.ejecutar({ codigo: "99-9999" }, ctxCaido());
-  assert.equal(caido.error, "no_pude_consultar");
-  assert.match(caido.instruccion, /PROHIBIDO decirle que no existe/);
-}
-assert.match(IDENTIDAD_MARCA, /tampoco puedes afirmar que algo NO existe/);
-assert.doesNotMatch(PROMPTS.ventas, /Si no hay opciones, dilo sin rodeos/);
-assert.match(PROMPTS.ventas, /cero_bajo_el_filtro/);
-assert.match(PROMPTS.ventas, /tipo de inmueble/);
-var estadoLead = estadoVacio();
-estadoLead.compartido.contacto_id = "contacto-1";
-var actualizaciones = [];
-var ctxLead = {
-  estado: estadoLead,
-  entrada: { tel: "573001112233", canal: "telegram" },
-  db: {
-    list: async () => [],
-    actualizar: async (entidad, id, datos) => {
-      actualizaciones.push({ entidad, id, datos });
-      return { id, ...datos };
-    },
-    crear: async () => ({ id: "historial-1" })
-  },
-  efectos: { notificar: [] }
-};
-var lead = await calificarLead.ejecutar({
-  nombre: "Laura Gomez",
-  operacion: "arriendo",
-  zona: "Chapinero",
-  tipo_inmueble: "apartamento",
-  presupuesto: 25e5,
-  observaciones: null
-}, ctxLead);
-assert.equal(lead.ok, true);
-assert.equal(estadoLead.compartido.nombre, "Laura Gomez");
-assert.equal(actualizaciones.find((item) => item.entidad === "Contacto").datos.nombre, "Laura Gomez");
-assert.match(ctxLead.efectos.notificar[0], /\$2\.500\.000/);
-var cotizacion = await cotizarAvaluo.ejecutar({}, {});
-assert.equal(cotizacion.error, "tarifario_no_aprobado");
-assert.equal("valor_servicio" in cotizacion, false);
-var portalMatricula = await enviarLinkDocumentos.ejecutar({}, {});
-assert.equal(portalMatricula.error, "portal_documentos_no_disponible");
-var chunks = [
-  { titulo: "Comun grande", contenido: "x".repeat(300), agentes: "todos", prioridad: 10 },
-  { titulo: "Solo cartera", contenido: "regla de saldo", agentes: "cartera", prioridad: 10 },
-  { titulo: "Sin destino", contenido: "no debe entrar", agentes: "", prioridad: 10 },
-  { titulo: "Demasiado grande", contenido: "y".repeat(1e3), agentes: "cartera", prioridad: 9 },
-  { titulo: "Especifico pequeno", contenido: "regla corta", agentes: "cartera", prioridad: 8 }
-];
-var rag = seleccionarRag(chunks, "cartera", 420);
-assert.deepEqual(rag.titulos, ["Solo cartera", "Especifico pequeno", "Comun grande"]);
-assert.ok(rag.chars <= 420);
-assert.doesNotMatch(rag.texto, /Sin destino|Demasiado grande/);
-assert.equal(agentesAutomaticosActivos(void 0), true);
-assert.equal(agentesAutomaticosActivos({}), true);
-assert.equal(agentesAutomaticosActivos({ activo: false }), false);
-assert.equal(secretoIgual("telegram-secreto", "telegram-secreto"), true);
-assert.equal(secretoIgual("telegram-secreto-x", "telegram-secreto"), false);
-var raw = new TextEncoder().encode('{"object":"whatsapp_business_account"}').buffer;
-var clave2 = await crypto.subtle.importKey(
-  "raw",
-  new TextEncoder().encode("meta-secreto"),
-  { name: "HMAC", hash: "SHA-256" },
-  false,
-  ["sign"]
-);
-var firma = new Uint8Array(await crypto.subtle.sign("HMAC", clave2, raw));
-var hex = [...firma].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-assert.equal(await firmaMetaValida(raw, `sha256=${hex}`, "meta-secreto"), true);
-assert.equal(await firmaMetaValida(raw, `sha256=${hex}`, "otro-secreto"), false);
-var entradaTelegram = await normalizar2(
-  { message: { message_id: 7, chat: { id: 12345 }, text: "hola" } },
-  { tgToken: "", openaiKey: "", tgBotKey: "ventas" }
-);
-assert.equal(entradaTelegram.msgId, "ventas:7");
-var entrada = (texto, extras = {}) => ({
-  canal: "telegram",
-  tel: "573001112233",
-  texto,
-  msgId: "m1",
-  botonId: "",
-  adReferral: { adId: "", adTitulo: "", adCuerpo: "" },
-  destino: "123",
-  ...extras
-});
-var dbVacio = { list: async () => [] };
-var optsRouter = { anthropicKey: "", modeloRouter: "sin-modelo" };
-assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada("tengo una fuga de agua"), optsRouter)).agente, "mantenimiento");
-for (const [texto, esperado] of [
-  ["necesito el codigo de barras", "cartera"],
-  ["quiero vender mi apartamento", "consignacion"],
-  ["necesito un avaluo comercial", "avaluos"],
-  ["quiero poner una queja", "pqr"],
-  ["tengo dudas del codeudor", "matricula"]
-]) {
-  assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada(texto), optsRouter)).agente, esperado);
-}
-assert.equal((await decidirAgente(
-  dbVacio,
-  estadoVacio(),
-  entrada("hola", { botonId: "flujo:pqr" }),
-  optsRouter
-)).agente, "pqr");
-var pegajoso = estadoVacio();
-pegajoso.agente_activo = "ventas";
-pegajoso.agente_historial.push({ agente: "ventas", desde: (/* @__PURE__ */ new Date()).toISOString(), motivo: "prueba" });
-assert.equal((await decidirAgente(dbVacio, pegajoso, entrada("y tiene parqueadero?"), optsRouter)).agente, "ventas");
-var dbCliente = {
-  list: async (entidad) => entidad === "Arrendatario" ? [{ id: "arr-1" }] : []
-};
-assert.equal((await decidirAgente(dbCliente, estadoVacio(), entrada("buenas tardes"), optsRouter)).agente, "cartera");
-assert.equal((await decidirAgente(dbVacio, estadoVacio(), entrada("buenas tardes"), optsRouter)).agente, "recepcion");
-{
-  assert.equal(debeAvisar(true, null), true, "contacto nuevo debe recibir aviso");
-  assert.equal(debeAvisar(true, {}), true, "contacto sin autorizacion debe recibir aviso");
-  assert.equal(
-    debeAvisar(true, { autoriza_tratamiento: true, politica_version: POLITICA_VERSION }),
-    false,
-    "ya autorizado con la version vigente no debe recibirlo de nuevo"
-  );
-  assert.equal(
-    debeAvisar(true, { autoriza_tratamiento: true, politica_version: "vieja" }),
-    true,
-    "version de politica distinta obliga a re-avisar"
-  );
-  assert.equal(debeAvisar(false, {}), false, "solo se avisa en el primer turno");
-  const aviso = textoAviso({});
-  assert.ok(aviso.includes("bit.ly/3imaawE"), "el aviso lleva la URL de la politica");
-  assert.ok(aviso.length < 300, "el aviso cabe en un globo");
-  assert.ok(
-    textoAviso({ politica_datos_url: "https://x.co/p" }).includes("https://x.co/p"),
-    "ConfigAgente.politica_datos_url manda sobre el defecto"
-  );
-  const marca = marcaAutorizacion();
-  assert.equal(marca.autoriza_tratamiento, true);
-  assert.equal(marca.politica_version, POLITICA_VERSION);
-  assert.ok(!Number.isNaN(Date.parse(marca.fecha_autorizacion)), "fecha_autorizacion es ISO valida");
-}
-{
-  const f2026 = festivosColombia(2026);
-  assert.equal(f2026.size, 18, "2026 tiene 18 festivos");
-  assert.ok(f2026.has("2026-01-01"), "ano nuevo es fijo");
-  assert.ok(f2026.has("2026-04-03"), "Viernes Santo 2026 = 3 abr");
-  assert.ok(f2026.has("2026-01-12"), "Reyes se corre al lunes 12");
-  assert.ok(!f2026.has("2026-01-06"), "Reyes NO queda el 6 (Ley Emiliani)");
-  assert.equal(festivosColombia(2030).size, 17, "2030: dos festivos coinciden");
-  assert.equal(esHabil(/* @__PURE__ */ new Date("2026-01-01T12:00:00Z")), false, "festivo no es habil");
-  assert.equal(esHabil(/* @__PURE__ */ new Date("2026-08-01T12:00:00Z")), false, "sabado no es habil");
-  const vence = sumarHabiles(/* @__PURE__ */ new Date("2026-07-31T10:00:00Z"), 15);
-  assert.equal(vence.toISOString().slice(0, 10), "2026-08-25");
-  assert.ok(esHabil(vence), "un vencimiento siempre cae en dia habil");
-}
-{
-  const listo = calificar({
-    etapa_pipeline: "Lead",
-    presupuesto_max: 8e8,
-    zona: "Chico",
-    operacion: "venta",
-    timing: "ya",
-    forma_pago: "credito_aprobado",
-    decide_solo: true
-  });
-  const mirando = calificar({
-    etapa_pipeline: "Lead",
-    operacion: "arriendo",
-    timing: "explorando",
-    forma_pago: "no_sabe",
-    decide_solo: false
-  });
-  assert.ok(listo.score > mirando.score, "un lead listo puntua mas que uno que solo mira");
-  assert.equal(listo.temperatura, "Urgente");
-  assert.equal(mirando.temperatura, "Frio");
-  assert.notEqual(
-    listo.temperatura,
-    mirando.temperatura,
-    "dos perfiles opuestos NO pueden dar la misma temperatura"
-  );
-  assert.ok(listo.motivos.length > 0, "la calificacion trae motivos");
-  assert.ok(listo.motivos.some((m) => m.includes("timing")), "el timing pesa y queda registrado");
-  const conCompetencia = calificar({ etapa_pipeline: "Lead", presupuesto_max: 3e8, otra_inmobiliaria: true });
-  const sinCompetencia = calificar({ etapa_pipeline: "Lead", presupuesto_max: 3e8 });
-  assert.ok(conCompetencia.score < sinCompetencia.score);
-  assert.ok(conCompetencia.score > 0, "la competencia no descalifica");
-  assert.equal(calificar({ etapa_pipeline: "Lead", presupuesto_max: 3e8 }).score, sinCompetencia.score);
-  assert.ok(calificar({
-    etapa_pipeline: "Escritura",
-    presupuesto_max: 1e9,
-    timing: "ya",
-    forma_pago: "contado",
-    decide_solo: true,
-    visitas_realizadas: 3,
-    visita_con_interes: true
-  }).score <= 100);
-  assert.ok(calificar({ etapa_pipeline: "Perdido", ultima_actividad: "2020-01-01T00:00:00Z" }).score >= 0);
-}
-{
-  const ctxBase = () => ({
-    db: null,
-    estado: estadoVacio(),
-    entrada: entrada("hola"),
-    ctxAgente: {},
-    config: {},
-    salida: { globos: [], finTurno: false },
-    efectos: { transferir: null, escalado: null, notificar: [] }
-  });
-  const sinCierre = ctxBase();
-  const r1 = responder.ejecutar({ globos: ["Cualquier cosa me escribes"], fin_turno: true }, sinCierre);
-  assert.equal(r1.ok, false, "no se puede cerrar sin siguiente paso");
-  assert.equal(r1.error, "cierre_sin_siguiente_paso");
-  assert.equal(sinCierre.salida.finTurno, false, "el turno queda abierto");
-  assert.ok(sinCierre.salida.globos.length > 0, "los globos si se envian: el cliente no se queda mudo");
-  const conCierre = ctxBase();
-  conCierre.hubo_cierre = true;
-  const r2 = responder.ejecutar({ globos: ["Listo, quedaste registrado"], fin_turno: true }, conCierre);
-  assert.equal(r2.ok, true);
-  assert.equal(conCierre.salida.finTurno, true);
-  const escalado = ctxBase();
-  escalado.efectos.escalado = { motivo: "x", prioridad: "alta" };
-  assert.equal(responder.ejecutar({ globos: ["Un asesor te contacta"], fin_turno: true }, escalado).ok, true);
-  const transferido = ctxBase();
-  transferido.efectos.transferir = "cartera";
-  assert.equal(responder.ejecutar({ globos: ["Va"], fin_turno: true }, transferido).ok, true);
-  const sigue = ctxBase();
-  assert.equal(responder.ejecutar({ globos: ["Y en que zona la buscas?"], fin_turno: false }, sigue).ok, true);
-  assert.equal(sigue.salida.finTurno, false);
-}
-{
-  const ctx = {
-    db: dbInmuebles([], [{ nombre: "Chapinero", normalizado: "chapinero", activo: true }]),
-    ctxAgente: {},
-    estado: estadoVacio(),
-    entrada: entrada("busco algo"),
-    salida: { globos: [], finTurno: false },
-    efectos: { transferir: null, escalado: null, notificar: [] }
-  };
-  const r = await buscarInmuebles.ejecutar(
-    { operacion: "arriendo", barrio: "Chapinero", tipo: null, presupuesto_max: null, habitaciones_min: null },
-    ctx
-  );
-  assert.equal(r.resultado, "cero_en_la_zona");
-  assert.ok(r.instruccion, "el caso sin resultados trae guia, no una lista vacia pelada");
-  assert.ok(r.instruccion.includes("registrar_interes"), "apunta a la tool que si existe");
-}
-{
-  const juevesDiez = /* @__PURE__ */ new Date("2026-08-06T15:00:00Z");
-  const juevesNoche = /* @__PURE__ */ new Date("2026-08-07T02:00:00Z");
-  const domingo = /* @__PURE__ */ new Date("2026-08-09T15:00:00Z");
-  assert.equal(hayEquipo(juevesDiez), true, "jueves 10am hay equipo");
-  assert.equal(hayEquipo(juevesNoche), false, "9pm no hay equipo");
-  assert.equal(hayEquipo(domingo), false, "domingo no hay equipo");
-  const festivo = /* @__PURE__ */ new Date("2026-08-17T15:00:00Z");
-  assert.equal(hayEquipo(festivo), false, "festivo no hay equipo aunque sea lunes");
-  assert.ok(instruccionHorario(juevesNoche).includes("FUERA DE HORARIO"));
-  assert.ok(!instruccionHorario(juevesDiez).includes("FUERA DE HORARIO"));
-}
-{
-  const st = estadoVacio();
-  st.compartido.nombre = "Karen Gonzalez";
-  st.agente_activo = "ventas";
-  st.ctx.ventas = { datos: { operacion: "arriendo", zona: "Chapinero", presupuesto: 3e6, timing: "ya" }, temperatura: "Caliente", score: 72 };
-  st.historial = [{ role: "user", content: "necesito algo urgente para el mes entrante" }];
-  const b = briefLead(st, "573001234567", "whatsapp", ["MOTIVO: pide hablar con una persona"]);
-  assert.ok(b.includes("Karen Gonzalez"));
-  assert.ok(b.includes("Chapinero"), "la zona viaja");
-  assert.ok(b.includes("$3.000.000"), "el presupuesto viaja formateado");
-  assert.ok(b.includes("CALIENTE"), "la calificacion viaja");
-  assert.ok(b.includes("MOTIVO"), "el motivo del escalamiento viaja");
-  assert.ok(b.includes("urgente para el mes"), "el ultimo mensaje da el tono");
-  const vacio = briefLead(estadoVacio(), "573009999999", "telegram");
-  assert.ok(vacio.includes("Sin nombre"));
-  assert.ok(!vacio.includes("undefined"));
-}
-var mutantes = [];
-var exigeFallo = (nombre, fn) => {
-  assert.throws(fn, `MUTANTE "${nombre}": la prueba paso con el bug puesto, no sirve de nada`);
-  mutantes.push(nombre);
-};
-var capturandoErrores = async (fn) => {
-  const original = console.error;
-  const lineas = [];
-  console.error = (...args) => lineas.push(args.map(String).join(" "));
-  try {
-    return { valor: await fn(), lineas };
-  } finally {
-    console.error = original;
-  }
-};
-var crearDbMemoria = ({ limiteChars = Infinity } = {}) => {
-  const filas = /* @__PURE__ */ new Map();
-  const escrituras = [];
-  const fallos = [];
-  let seq = 0;
-  const coincide = (fila, filtro = {}) => Object.entries(filtro).every(([k, v]) => k === "limit" || v === void 0 || v === null || v === "" ? true : String(fila[k] ?? "") === String(v));
-  const list = async (entidad, filtro = {}) => {
-    const limite = Number(filtro.limit) || Infinity;
-    const res = [];
-    for (const [k, fila] of filas) {
-      if (!k.startsWith(`${entidad}:`) || !coincide(fila, filtro)) continue;
-      res.push({ ...fila });
-      if (res.length >= limite) break;
-    }
-    return res;
-  };
-  const uno = async (entidad, filtro) => (await list(entidad, { ...filtro, limit: 1 }))[0] ?? null;
-  const escribir = (entidad, id, datos, op) => {
-    const chars = JSON.stringify(datos).length;
-    const registro = {
-      entidad,
-      id,
-      op,
-      chars,
-      estadoChars: String(datos.estado_json ?? "").length,
-      rechazada: chars > limiteChars,
-      datos
-    };
-    escrituras.push(registro);
-    if (registro.rechazada) {
-      fallos.push(`${op} ${entidad} 413: payload de ${chars} chars`);
-      return null;
-    }
-    const previa = filas.get(`${entidad}:${id}`) || {};
-    const fila = { ...previa, ...datos, id };
-    filas.set(`${entidad}:${id}`, fila);
-    return { ...fila };
-  };
-  const crear = async (entidad, datos) => escribir(entidad, `${entidad}-${++seq}`, datos, "crear");
-  const actualizar = async (entidad, id, datos) => escribir(entidad, id, datos, "actualizar");
-  const guardar = async (entidad, id, datos) => {
-    const res = id ? await actualizar(entidad, id, datos) : await crear(entidad, datos);
-    return res?.id ?? null;
-  };
-  return {
-    filas,
-    escrituras,
-    fallos,
-    list,
-    uno,
-    crear,
-    actualizar,
-    guardar,
-    contar: (entidad) => [...filas.keys()].filter((k) => k.startsWith(`${entidad}:`)).length,
-    ultima: () => escrituras.at(-1)
-  };
-};
-var catalogoGordo = (n = 100) => Array.from({ length: n }, (_, i) => ({
-  id: `prop-${i}`,
-  titulo: `Apartamento ${i} en Chapinero Alto`,
-  operacion: i % 2 ? "Arriendo" : "Venta",
-  estado: "Disponible",
-  barrio: "Chapinero",
-  ciudad: "Bogota",
-  tipo: "Apartamento",
-  canon_arriendo: 25e5 + i * 1e3,
-  precio_venta: 45e7 + i * 1e3,
-  habitaciones: 3,
-  banos: 2,
-  area: 78,
-  estrato: 4,
-  parqueadero: true,
-  direccion: `Calle ${100 + i} # 15-${i}`,
-  descripcion: `Apartamento remodelado con excelente iluminacion natural. `.repeat(11),
-  portales: { metrocuadrado: `https://www.metrocuadrado.com/inmueble/${i}` }
-}));
-var PESO_CATALOGO = JSON.stringify(catalogoGordo()).length;
-assert.ok(
-  PESO_CATALOGO > 8e4,
-  `premisa rota: el catalogo simulado pesa ${PESO_CATALOGO} chars y ya no reproduce el incidente`
-);
-var LIMITE_BACKEND = 8e4;
-{
-  const st = estadoVacio();
-  st.agente_activo = "ventas";
-  st.compartido.nombre = "Laura Gomez";
-  st.compartido.contacto_id = "contacto-1";
-  st.identidad.verificado = true;
-  st.identidad.arrendatario_id = "arr-1";
-  st.identidad.contrato_id = "ctr-1";
-  st.historial = [{ role: "user", content: "busco apartamento en Chapinero", ts: "2026-08-11T10:00:00Z" }];
-  const scratch = ctxDe(st, "ventas");
-  scratch.datos = { operacion: "arriendo", zona: "Chapinero", presupuesto: 3e6 };
-  scratch.etapa_ventas = "calificacion";
-  scratch.objeciones_activas = ["precio"];
-  const delTurno = {
-    catalogo: catalogoGordo(),
-    campana: { id: "cmp-1", nombre: "Chapinero agosto" },
-    resumen_portafolio: "Hoy hay 100 inmuebles activos: 50 en arriendo y 50 en venta."
-  };
-  const transitorias = Object.keys(delTurno);
-  Object.assign(scratch, delTurno);
-  assert.ok(JSON.stringify(st).length > 8e4, "con el catalogo mezclado el estado desborda");
-  olvidarTransitorios(st, "ventas", transitorias);
-  for (const k of transitorias) {
-    assert.equal(k in st.ctx.ventas, false, `${k} no puede persistirse: se recarga en cada turno`);
-  }
-  assert.deepEqual(
-    st.ctx.ventas.datos,
-    { operacion: "arriendo", zona: "Chapinero", presupuesto: 3e6 },
-    "lo que guardo guardar_dato NO se toca"
-  );
-  assert.equal(st.ctx.ventas.etapa_ventas, "calificacion");
-  assert.deepEqual(st.ctx.ventas.objeciones_activas, ["precio"]);
-  assert.equal(st.compartido.nombre, "Laura Gomez");
-  assert.equal(st.identidad.verificado, true, "la verificacion sobrevive: re-verificar es un turno perdido");
-  assert.equal(st.identidad.arrendatario_id, "arr-1");
-  assert.equal(st.historial.length, 1, "el historial no se toca");
-  assert.ok(JSON.stringify(st).length < 2e3, "el estado vuelve a un tamano sano");
-  olvidarTransitorios(st, "ventas", transitorias);
-  olvidarTransitorios(st, "cartera", ["catalogo"]);
-  assert.deepEqual(st.ctx.ventas.datos, { operacion: "arriendo", zona: "Chapinero", presupuesto: 3e6 });
-  const conBug = estadoVacio();
-  Object.assign(ctxDe(conBug, "ventas"), { datos: { zona: "Chapinero" } }, delTurno);
-  exigeFallo(
-    "olvidarTransitorios como no-op",
-    () => assert.equal("catalogo" in conBug.ctx.ventas, false)
-  );
-}
-{
-  const db = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
-  const st = estadoVacio();
-  st.agente_activo = "ventas";
-  st.compartido.nombre = "Laura Gomez";
-  st.identidad.verificado = true;
-  st.identidad.arrendatario_id = "arr-1";
-  st.historial = Array.from({ length: 6 }, (_, i) => ({
-    role: i % 2 ? "assistant" : "user",
-    content: `mensaje ${i}`,
-    ts: "2026-08-11T10:00:00Z"
-  }));
-  ctxDe(st, "ventas").catalogo = catalogoGordo();
-  assert.ok(JSON.stringify(st).length > LIMITE_BACKEND, "sin el tope, esta escritura la rechaza el backend");
-  const { valor: id, lineas } = await capturandoErrores(
-    () => guardarEstado(db, null, "telegram", "573001112233", st, { ultimo_mensaje: "mensaje 4" })
-  );
-  assert.ok(id, "se escribio igual: perder el scratch es aceptable, perder la conversacion no");
-  assert.equal(db.fallos.length, 1, "el primer intento lo rechaza el backend, y queda anotado");
-  assert.match(
-    lineas.join("\n"),
-    /escalon "completo" rechazado/,
-    "hay que decir que se degrado, no degradar en silencio"
-  );
-  assert.match(lineas.join("\n"), /escalon "sin ctx"/, "y en que escalon quedo");
-  const escrito = db.ultima();
-  assert.ok(escrito.estadoChars < 6e4, `estado_json quedo en ${escrito.estadoChars} chars`);
-  const guardado = JSON.parse(escrito.datos.estado_json);
-  assert.deepEqual(guardado.ctx, {}, "ctx se descarta ENTERO, no se poda a medias");
-  assert.equal(guardado.historial.length, 6, "el historial sobrevive");
-  assert.equal(guardado.compartido.nombre, "Laura Gomez");
-  assert.equal(guardado.identidad.verificado, true);
-  assert.equal(escrito.datos.agente_activo, "ventas", "las columnas indexadas se escriben igual");
-  assert.equal(st.ctx.ventas.catalogo.length, 100, "el objeto en memoria no se muta");
-  const releida = await cargarEstado(db, "telegram", "573001112233");
-  assert.equal(releida.estado.historial.length, 6);
-  assert.equal(releida.estado.compartido.nombre, "Laura Gomez");
-  const dbSinTope = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
-  const crudo = await dbSinTope.guardar("MemoriaChat", null, {
-    clave: claveDe("telegram", "573001112233"),
-    telefono: "573001112233",
-    estado_json: JSON.stringify(st)
-  });
-  assert.equal(crudo, null, "ESE era el bug: el backend rechaza y db devuelve null sin lanzar");
-  assert.equal(dbSinTope.fallos.length, 1, "el rechazo queda en fallos, no en una excepcion");
-  assert.equal(
-    (await cargarEstado(dbSinTope, "telegram", "573001112233")).id,
-    null,
-    "sin tope no queda NADA escrito: el turno siguiente arranca de cero"
-  );
-  exigeFallo("guardarEstado sin el tope de 60k", () => assert.ok(crudo));
-}
-{
-  const CANAL = "telegram";
-  const TEL = "573001112233";
-  const correrTurno = async (db2, { texto, respuesta, tools = () => {
-  }, olvidar = true }) => {
-    const { id, estado } = await cargarEstado(db2, CANAL, TEL);
-    estado.historial.push({ role: "user", content: texto, ts: (/* @__PURE__ */ new Date()).toISOString() });
-    if (!estado.agente_historial.length) {
-      estado.agente_activo = "ventas";
-      estado.agente_historial.push({ agente: "ventas", desde: (/* @__PURE__ */ new Date()).toISOString(), motivo: "frase:ventas" });
-    }
-    const scratch = ctxDe(estado, estado.agente_activo);
-    const delTurno = { catalogo: catalogoGordo(), resumen_portafolio: "Hoy hay 100 inmuebles activos." };
-    const transitorias = Object.keys(delTurno);
-    Object.assign(scratch, delTurno);
-    tools(estado, scratch);
-    estado.historial.push({ role: "assistant", content: respuesta, ts: (/* @__PURE__ */ new Date()).toISOString() });
-    if (olvidar) olvidarTransitorios(estado, estado.agente_activo, transitorias);
-    return await guardarEstado(db2, id, CANAL, TEL, estado, { ultimo_mensaje: texto, ultima_respuesta: respuesta });
-  };
-  const GUION = [
-    {
-      texto: "Hola, soy Laura Gomez",
-      respuesta: "Hola Laura. En que zona la buscas?",
-      tools: (estado, scratch) => {
-        estado.compartido.nombre = "Laura Gomez";
-        scratch.datos = { ...scratch.datos, operacion: "arriendo" };
-      }
-    },
-    {
-      texto: "En Chapinero",
-      respuesta: "Perfecto. Cual es tu presupuesto?",
-      tools: (_estado, scratch) => {
-        scratch.datos = { ...scratch.datos, zona: "Chapinero" };
-      }
-    },
-    {
-      texto: "Hasta 3 millones",
-      respuesta: "Listo, te paso opciones esta tarde.",
-      tools: (_estado, scratch) => {
-        scratch.datos = { ...scratch.datos, presupuesto: 3e6 };
-      }
-    }
-  ];
-  const db = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
-  const { lineas } = await capturandoErrores(async () => {
-    for (const paso of GUION) {
-      assert.ok(await correrTurno(db, paso), `turno "${paso.texto}": la escritura NO puede fallar`);
-    }
-  });
-  assert.deepEqual(lineas, [], "ningun turno tuvo que activar el tope: olvidarTransitorios basto");
-  assert.deepEqual(db.fallos, [], "ninguna escritura fue rechazada por tamano");
-  const { estado: final } = await cargarEstado(db, CANAL, TEL);
-  assert.equal(final.compartido.nombre, "Laura Gomez", "el nombre del PRIMER mensaje sigue ahi");
-  assert.equal(final.ctx.ventas.datos.operacion, "arriendo", "el dato del turno 1 llego al turno 3");
-  assert.equal(final.ctx.ventas.datos.zona, "Chapinero", "el dato del turno 2 llego al turno 3");
-  assert.equal(final.ctx.ventas.datos.presupuesto, 3e6);
-  assert.equal(final.historial.length, 6, "los tres turnos completos quedaron en el historial");
-  assert.equal(final.historial[0].content, "Hola, soy Laura Gomez");
-  assert.equal(final.historial.at(-1).content, "Listo, te paso opciones esta tarde.");
-  assert.equal(final.agente_activo, "ventas");
-  assert.equal(final.agente_historial.length, 1, "un solo ruteo en todo el hilo");
-  assert.equal("catalogo" in final.ctx.ventas, false, "el catalogo nunca viajo al almacen");
-  assert.equal(db.contar("MemoriaChat"), 1, "los tres mensajes son UN hilo");
-  assert.equal(db.escrituras[0].op, "crear");
-  assert.deepEqual(db.escrituras.slice(1).map((e) => e.op), ["actualizar", "actualizar"]);
-  assert.ok(
-    db.escrituras.every((e) => e.chars < 5e3),
-    "el estado no crece turno a turno: es la senal temprana del incidente"
-  );
-  const dbBug = crearDbMemoria({ limiteChars: LIMITE_BACKEND });
-  await capturandoErrores(async () => {
-    for (const paso of GUION) await correrTurno(dbBug, { ...paso, olvidar: false });
-  });
-  const { estado: conBug } = await cargarEstado(dbBug, CANAL, TEL);
-  assert.equal(conBug.historial.length, 6, "el historial se ve bien: por eso nadie lo noto");
-  assert.deepEqual(conBug.ctx, {}, "pero el ctx se perdio en cada turno");
-  exigeFallo(
-    "multi-turno sin olvidarTransitorios",
-    () => assert.equal(conBug.ctx.ventas?.datos?.zona, "Chapinero")
-  );
-}
-{
-  const rutear = async (estado, ent, agenteBot) => {
-    const hiloNuevo = !estado.agente_historial.length;
-    return agenteBot && hiloNuevo ? { agente: agenteBot, nivel: 0, motivo: "bot dedicado (entrada)" } : await decidirAgente(dbVacio, estado, ent, optsRouter);
-  };
-  const hilo = estadoVacio();
-  const d0 = await rutear(hilo, entrada("necesito una reparacion"), "ventas");
-  assert.equal(d0.agente, "ventas", "en el primer mensaje el bot dedicado define la entrada");
-  assert.equal(d0.motivo, "bot dedicado (entrada)");
-  hilo.agente_activo = d0.agente;
-  hilo.agente_historial.push({ agente: d0.agente, desde: (/* @__PURE__ */ new Date()).toISOString(), motivo: d0.motivo });
-  const d1 = await rutear(hilo, entrada("necesito una reparacion"), "ventas");
-  assert.equal(d1.agente, "mantenimiento", "el bot dedicado NO puede devolver el hilo a ventas");
-  assert.equal(d1.motivo, "frase:mantenimiento");
-  const transferido = estadoVacio();
-  transferido.agente_activo = "ventas";
-  transferido.agente_historial.push({ agente: "ventas", desde: (/* @__PURE__ */ new Date()).toISOString(), motivo: "bot dedicado (entrada)" });
-  transferir(transferido, "mantenimiento", "tool:transferir_a");
-  const d2 = await rutear(transferido, entrada("si, en el bano del fondo"), "ventas");
-  assert.equal(d2.agente, "mantenimiento", "la transferencia sobrevive al turno siguiente");
-  assert.equal(d2.motivo, "pegajosidad", "y no cuesta una llamada al modelo");
-  const fuente = readFileSync(new URL("../base44/functions/agenteInbound/entry.ts", import.meta.url), "utf8");
-  const cuerpo = fuente.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
-  assert.ok(
-    cuerpo.includes("const decision = await decidirAgente("),
-    "el router debe decidir SIEMPRE, sin condicional delante"
-  );
-  assert.ok(
-    !/agenteBot\s*&&/.test(cuerpo),
-    "agenteBot volvio a condicionar el ruteo: ?agente= solo elige el bot de salida"
-  );
-  assert.ok(
-    cuerpo.includes("tgToken:     tokenDeAgente(agenteBot)"),
-    "agenteBot sigue haciendo falta para saber por que bot se contesta"
-  );
-  const gateViejo = (agenteBot) => agenteBot ? { agente: agenteBot, motivo: "bot dedicado" } : null;
-  const bug = gateViejo("ventas");
-  assert.equal(bug.agente, "ventas");
-  exigeFallo(
-    "bot dedicado fijando el agente en cada turno",
-    () => assert.equal(bug.agente, "mantenimiento")
-  );
-}
-assert.equal(mutantes.length, 4, "se esperan 4 chequeos de sensibilidad; alguno se perdio");
-console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 ${mutantes.join(" | ")}`);
-{
-  const escrituras = [];
-  const db = {
-    list: async () => [],
-    crear: async (entidad2, datos2) => {
-      escrituras.push({ entidad: entidad2, datos: datos2 });
-      return { id: "orden-1", ...datos2 };
-    }
-  };
-  const ctx = {
-    db,
-    estado: estadoVacio(),
-    entrada: entrada("quiero hablar con una persona"),
-    ctxAgente: {},
-    config: {},
-    salida: { globos: [], finTurno: false },
-    efectos: { transferir: null, escalado: null, notificar: [] }
-  };
-  ctx.estado.agente_activo = "cartera";
-  ctx.estado.compartido.nombre = "Luis Pardo";
-  ctx.estado.identidad.contrato_id = "ctr-9";
-  const r = await escalarAHumano.ejecutar({ motivo: "reclama un pago que no aparece", prioridad: "alta" }, ctx);
-  assert.equal(r.ok, true);
-  assert.equal(escrituras.length, 1, "el escalamiento escribe UNA fila, no dos");
-  const [{ entidad, datos }] = escrituras;
-  assert.equal(entidad, "OrdenAsistencia", "ya no crea Tarea: la agenda personal no es la bandeja de asistidos");
-  assert.equal(datos.estado, "Abierta");
-  assert.equal(datos.origen_tipo, "Escalamiento");
-  assert.equal(datos.solicitante_nombre, "Luis Pardo", "el nombre viaja para poder leer la orden sin joins");
-  assert.equal(datos.solicitante_telefono, "573001112233", "la llave del historial por persona");
-  assert.equal(datos.contrato_id, "ctr-9", "queda enganchada al contrato cuando se sabe cual es");
-  assert.equal(datos.prioridad, "Alta", "la escala del escalamiento se normaliza a la de la entidad");
-  assert.equal(datos.fecha_asistencia, void 0, "nace SIN asistir: ese es el dato que faltaba");
-  assert.match(r.orden, /^ORD-\d{4}-\d{6}-[A-Z0-9]{4}$/);
-  assert.ok(ctx.efectos.notificar[0].includes(r.orden), "el aviso al equipo lleva el numero de orden");
-  const fijo = /* @__PURE__ */ new Date("2026-08-11T10:00:00Z");
-  const azarReal = Math.random;
-  Math.random = () => 0.111;
-  const ordenA = numeroOrden(fijo);
-  Math.random = () => 0.999;
-  const ordenB = numeroOrden(fijo);
-  Math.random = azarReal;
-  assert.notEqual(ordenA, ordenB, "dos ordenes del mismo milisegundo se distinguen por el sufijo");
-  const ctxRoto = { ...ctx, db: { list: async () => [], crear: async () => null } };
-  assert.equal(await abrirAsistencia(ctxRoto, { origen_tipo: "PQR", asunto: "x" }), "");
-}
-{
-  assert.deepEqual(
-    consultarHistorialSolicitudes.def.input_schema.properties,
-    {},
-    "no recibe identificadores: el sujeto lo pone el servidor"
-  );
-  let filtro = null;
-  const db = {
-    list: async (_e, f) => {
-      filtro = f;
-      return [
-        { numero_orden: "ORD-2026-000001-AAAA", origen_tipo: "Reparacion", origen_radicado: "REP-1", asunto: "fuga en el bano", estado: "Cerrada", fecha_solicitud: "2026-01-05T10:00:00Z", fecha_asistencia: "2026-01-05T11:00:00Z", resultado: "fue el plomero", detalle: "brief interno con datos del cliente" },
-        { numero_orden: "ORD-2026-000002-BBBB", origen_tipo: "Escalamiento", asunto: "pide hablar con alguien", estado: "Abierta", fecha_solicitud: "2026-02-01T10:00:00Z", detalle: "brief interno con datos del cliente" }
-      ];
-    }
-  };
-  const c = { db, estado: estadoVacio(), entrada: entrada("es sobre lo de la otra vez"), ctxAgente: {} };
-  const r = await consultarHistorialSolicitudes.ejecutar({}, c);
-  assert.equal(filtro.solicitante_telefono, "573001112233");
-  assert.equal(r.total, 2);
-  assert.equal(r.abiertas, 1);
-  assert.equal(r.solicitudes[0].orden, "ORD-2026-000002-BBBB", "lo mas reciente primero");
-  assert.equal(r.solicitudes[0].atendida, false, "sin fecha_asistencia no se puede decir que alguien lo esta viendo");
-  assert.equal(r.solicitudes[1].resultado, "fue el plomero");
-  assert.ok(!JSON.stringify(r).includes("brief interno"), "el detalle interno no viaja al modelo");
-  const vacio = await consultarHistorialSolicitudes.ejecutar({}, { ...c, db: { list: async () => [] } });
-  assert.equal(vacio.total, 0);
-  assert.match(vacio.instruccion, /otro numero/);
-}
-{
-  const conHistorial = ["recepcion", "mantenimiento", "avaluos", "pqr", "matricula"];
-  for (const a of conHistorial) {
-    assert.ok(
-      "consultar_historial_solicitudes" in toolsDe(a),
-      `${a} no recibe consultar_historial_solicitudes: la tool existe pero no la tiene nadie`
-    );
-  }
-  for (const a of ["ventas", "consignacion"]) {
-    assert.ok(!("consultar_historial_solicitudes" in toolsDe(a)), `${a} no deberia tenerla`);
-  }
-  assert.ok(
-    "enviar_certificado_propietario" in toolsDe("cartera"),
-    "cartera no recibe enviar_certificado_propietario"
-  );
-  for (const a of ["ventas", "mantenimiento", "pqr"]) {
-    assert.ok(!("enviar_certificado_propietario" in toolsDe(a)), `${a} no deberia entregar certificados`);
-  }
-  assert.ok(!("calificar_lead" in toolsDe("cartera")), "cartera no puede calificar leads");
-  assert.ok("calificar_lead" in toolsDe("ventas"), "ventas si califica");
-}
-{
-  const doc = (n) => ({ id: n, numero_documento: `100200${n}` });
-  assert.notEqual(
-    doc("A").numero_documento.slice(-4),
-    doc("B").numero_documento.slice(-4),
-    "el escenario exige documentos distintos"
-  );
-  const fuente = readFileSync("base44/functions/_core/identidad.ts", "utf8");
-  assert.match(
-    fuente,
-    /arrendatario_id: rolArrendatario \?/,
-    "verificar() debe poblar arrendatario_id solo si coincidio ese rol"
-  );
-  assert.match(
-    fuente,
-    /propietario_id: rolPropietario \?/,
-    "verificar() debe poblar propietario_id solo si coincidio ese rol"
-  );
-  assert.match(
-    fuente,
-    /p\.numero_documento \|\| p\.cedula_nit/,
-    "Propietario guarda el documento en cedula_nit: sin esto ningun propietario puede verificarse"
-  );
-}
-{
+console.log("\n=== armarSystem SIN RAG (solo identidad+prompt), por agente ===");
+for (const a of AGENTES) {
+  const estado = estadoVacio();
+  estado.agente_activo = a;
   const base = {
     config: {},
     prompt: null,
-    identidadMarca: "Eres Diana.",
-    rag: "=== CONOCIMIENTO ===\nAlgo que la casa sabe.",
+    identidadMarca: "",
+    rag: "",
     ragTitulos: [],
     ragChars: 0,
     promptOrigen: "codigo",
@@ -3901,39 +2455,37 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
     ragDescartados: [],
     ragActivos: 0
   };
-  const ctx = { zonas_disponibles: ["Los Rosales", "Chico"] };
-  const primero = estadoVacio();
-  const segundo = estadoVacio();
-  segundo.compartido.nombre = "Massimo";
-  segundo.historial.push({ role: "user", content: "hola" }, { role: "assistant", content: "que tal" });
-  segundo.identidad.verificado = true;
-  const a = armarSystem(base, "ventas", primero, ctx);
-  const b = armarSystem(base, "ventas", segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: "Massimo" });
-  assert.equal(a[0].cache_control?.type, "ephemeral", "el bloque estable lleva la marca de cacheo");
-  assert.equal(a[0].cache_control?.ttl, "1h", "el cache tiene que durar una hora");
-  assert.equal(b[1].cache_control, void 0, "el bloque volatil NO la lleva");
-  assert.equal(a[0].text, b[0].text, "el prefijo cacheado cambio entre turnos: no se cacheara nada");
-  assert.notEqual(a[1].text, b[1].text, "el bloque volatil deberia reflejar el estado del turno");
-  assert.doesNotMatch(b[0].text, /Massimo/, "un dato del cliente en el prefijo mata el cache");
-  assert.match(a[0].text, /Los Rosales/, "el mapa de zonas va en la mitad cacheada");
+  const bloques = armarSystem(base, a, estado, {});
+  const estable = bloques[0].text;
+  const volatil = bloques[1].text;
+  console.log(`${a.padEnd(14)} estable ${String(estable.length).padStart(6)}ch (~${tok(estable)}tok) cache=${!!bloques[0].cache_control}  volatil ${String(volatil.length).padStart(5)}ch (~${tok(volatil)}tok) cache=${!!bloques[1].cache_control}`);
 }
+console.log("\n=== PRUEBA: entra el mapa de zonas en el system? ===");
 {
-  const malas = [];
-  for (const ag of AGENTES) {
-    for (const t of Object.values(toolsDe(ag))) {
-      const props = t.def.input_schema.properties || {};
-      for (const [campo, def] of Object.entries(props)) {
-        const tipoCompuesto = Array.isArray(def?.type);
-        if (def?.enum && tipoCompuesto) {
-          malas.push(`${ag}/${t.def.name}.${campo}: enum con type compuesto`);
-        }
-        if (Array.isArray(def?.enum) && def.enum.some((v) => v === null)) {
-          malas.push(`${ag}/${t.def.name}.${campo}: null dentro del enum`);
-        }
-      }
-    }
-  }
-  assert.deepEqual(malas, [], `esquemas que la API rechazaria:
-  ${malas.join("\n  ")}`);
+  const estado = estadoVacio();
+  estado.agente_activo = "ventas";
+  const base = {
+    config: {},
+    prompt: null,
+    identidadMarca: "",
+    rag: "",
+    ragTitulos: [],
+    ragChars: 0,
+    promptOrigen: "codigo",
+    promptVersion: null,
+    marcaOrigen: "codigo",
+    ragDetalle: [],
+    ragDescartados: [],
+    ragActivos: 0
+  };
+  const ctxComoLoDevuelveElCargador = {
+    campana: null,
+    zonas: Array.from({ length: 517 }, (_, i) => ({ nombre: `Zona ${i}`, normalizado: `zona ${i}` }))
+  };
+  const bloques = armarSystem(base, "ventas", estado, ctxComoLoDevuelveElCargador);
+  const hay = bloques.some((b) => b.text.includes("ZONAS CON INVENTARIO"));
+  console.log(`  con ctx.zonas (lo real):            bloque de zonas presente = ${hay}  estable=${bloques[0].text.length}ch`);
+  const bloques2 = armarSystem(base, "ventas", estado, { zonas_disponibles: Array.from({ length: 517 }, (_, i) => `Zona ${i}`) });
+  const hay2 = bloques2.some((b) => b.text.includes("ZONAS CON INVENTARIO"));
+  console.log(`  con ctx.zonas_disponibles (lo que lee): bloque presente = ${hay2}  estable=${bloques2[0].text.length}ch`);
 }
-console.log("agent-core: OK");

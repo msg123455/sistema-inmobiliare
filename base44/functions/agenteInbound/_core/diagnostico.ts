@@ -65,5 +65,25 @@ export function informeChunks(d: DiagTurno | null | undefined): string {
   // mostrando el turno anterior — y esa discrepancia ES la senal.
   l.push(`ESTADO  ${miles(d.guardado_chars)} chars`);
 
+  // EL GASTO DEL TURNO. Va en el informe y no solo en el log porque el fallo de
+  // cacheo no da error: si el prefijo se invalida, todo se cobra entero y lo
+  // unico que cambia es la factura a fin de mes.
+  //
+  // Que mirar: `leidos` en cero durante varios turnos seguidos, con `escritos`
+  // alto, significa que el cache se escribe y nunca se aprovecha. Casi siempre
+  // es que alguien metio un dato variable por encima de la marca en armarSystem.
+  if (d.gasto) {
+    const g = d.gasto;
+    const cobrado = g.entrada + g.cache_escritos;
+    l.push('');
+    l.push(`GASTO   ${g.llamadas} llamada(s) al modelo`);
+    l.push(`        entrada ${miles(g.entrada)} · cache leidos ${miles(g.cache_leidos)} `
+      + `· escritos ${miles(g.cache_escritos)} · salida ${miles(g.salida)}`);
+    l.push(g.cache_leidos
+      ? `        el cache ahorro ${miles(g.cache_leidos)} tokens a precio completo`
+      : '        SIN LECTURA DE CACHE: se esta pagando todo entero');
+    l.push(`        entrada a precio completo: ${miles(cobrado)}`);
+  }
+
   return l.join('\n');
 }
