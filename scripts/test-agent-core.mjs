@@ -117,8 +117,13 @@ const nuevoCtx = (props = catalogoDemo, cae = false) => ({
 const ctxCaido = () => nuevoCtx(catalogoDemo, true);
 const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   operacion: 'arriendo', barrio: null, tipo: null,
-  presupuesto_max: null, habitaciones_min: null, ...input,
+  presupuesto_max: null, habitaciones_min: null, banos_min: null, caracteristicas: [], ...input,
 }, ctx);
+
+// Buscar YA CALIFICADO: como si el cliente ya hubiera dicho su presupuesto. La
+// mayoria de las pruebas quieren ejercitar lo que pasa DESPUES de calificar, no
+// la puerta de entrada; esa tiene su propio bloque mas abajo.
+const buscarConPresupuesto = (input, ctx) => buscar({ presupuesto_max: 99e9, ...input }, ctx);
 
 // ── El fallo que rompio la confianza de un cliente real ─────────────────────
 //
@@ -144,7 +149,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.match(primera.instruccion, /UNA sola pregunta/);
   // El plural se arma bien porque esta frase la oye el cliente tal cual: en
   // castellano "local" hace "locales", no "locals".
-  const conLocales = await buscar({ barrio: 'Chapinero' }, nuevoCtx([
+  const conLocales = await buscarConPresupuesto({ barrio: 'Chapinero' }, nuevoCtx([
     ...catalogoDemo,
     { id: 'l1', operacion: 'Arriendo', estado: 'Disponible', barrio: 'Chapinero', tipo: 'Local', canon_arriendo: 5e6 },
     { id: 'l2', operacion: 'Arriendo', estado: 'Disponible', barrio: 'Chapinero', tipo: 'Local', canon_arriendo: 6e6 },
@@ -156,7 +161,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   //    y `total` van separados a proposito — antes solo existia `encontrados`,
   //    que se calculaba DESPUES de cortar a cinco. De ahi salio, literal,
   //    "solo esos dos que ya te mande".
-  const conTipo = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  const conTipo = await buscarConPresupuesto({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
   assert.equal(conTipo.resultado, 'hay');
   assert.equal(conTipo.total, 8);
   assert.equal(conTipo.mostrados, 5);
@@ -172,12 +177,12 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   // 3. El tipo NO se pregunta dos veces. Si el cliente no lo contesta y el
   //    modelo vuelve a buscar, se le muestra lo que hay: insistir con la misma
   //    pregunta es exactamente como suena un formulario.
-  const otraVez = await buscar({ barrio: 'rosales' }, ctx);
+  const otraVez = await buscarConPresupuesto({ barrio: 'rosales' }, ctx);
   assert.equal(otraVez.resultado, 'hay');
   assert.equal(otraVez.total, 11, 'sin tipo, encajan los 11');
 
   // 4. Y si en la zona solo hay de un tipo, no se pregunta: seria teatro.
-  const soloUno = await buscar({ barrio: 'Chapinero' }, nuevoCtx());
+  const soloUno = await buscarConPresupuesto({ barrio: 'Chapinero' }, nuevoCtx());
   assert.equal(soloUno.resultado, 'hay');
   assert.equal(soloUno.total, 1);
 }
@@ -187,7 +192,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 // Es la rama que mas importa. Con 11 en la zona, "no hay nada" es mentira: lo
 // que no hay es nada BAJO ESE FILTRO.
 {
-  const caro = await buscar({
+  const caro = await buscarConPresupuesto({
     barrio: 'rosales', tipo: 'Apartamento', presupuesto_max: 1_000,
   }, nuevoCtx());
   assert.equal(caro.resultado, 'cero_bajo_el_filtro');
@@ -201,7 +206,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   // cliente— asi que 'apartamento'.includes('apartamentos') daba false y un
   // simple plural descartaba las 2737 filas.
   for (const dicho of ['apartamentos', 'apto', 'apartaestudio', 'penthouse', 'Apartamento']) {
-    const r = await buscar({ barrio: 'rosales', tipo: dicho }, nuevoCtx());
+    const r = await buscarConPresupuesto({ barrio: 'rosales', tipo: dicho }, nuevoCtx());
     assert.equal(r.resultado, 'hay', `"${dicho}" no puede dar cero`);
     assert.equal(r.total, 8);
   }
@@ -214,14 +219,14 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   // habitaciones 0 legitimamente: pedir 2 cuartos no puede borrarlas.
   const conCuartos = await buscar({ barrio: 'rosales', habitaciones_min: 2 }, nuevoCtx());
   assert.equal(conCuartos.resultado, 'falta_tipo');
-  const cuartosYTipo = await buscar({
+  const cuartosYTipo = await buscarConPresupuesto({
     barrio: 'rosales', tipo: 'Oficina', habitaciones_min: 2,
   }, nuevoCtx());
   assert.equal(cuartosYTipo.total, 2, 'una oficina no se descarta por no tener cuartos');
 
   // Un precio en 0 es un dato que falta, no un inmueble gratis. Se descarta del
   // presupuesto pero se CUENTA y se dice, en vez de desaparecer en silencio.
-  const enVenta = await buscar({
+  const enVenta = await buscarConPresupuesto({
     operacion: 'venta', barrio: 'rosales', tipo: 'Casa', presupuesto_max: 2_000_000_000,
   }, nuevoCtx());
   assert.equal(enVenta.resultado, 'cero_bajo_el_filtro');
@@ -257,7 +262,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 
   // La UNICA negacion permitida: se consulto, la zona existe y no hay nada de
   // esa operacion. Va acotada a esa zona y esa operacion.
-  const vacia = await buscar({ operacion: 'venta', barrio: 'Chapinero' }, nuevoCtx());
+  const vacia = await buscarConPresupuesto({ operacion: 'venta', barrio: 'Chapinero' }, nuevoCtx());
   assert.equal(vacia.resultado, 'cero_en_la_zona');
   assert.match(vacia.instruccion, /Esto SI lo puedes afirmar/);
   assert.match(vacia.instruccion, /registrar_interes/);
@@ -266,7 +271,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 // ── enviar_ficha resuelve contra lo que se mostro, y nunca improvisa ────────
 {
   const ctx = nuevoCtx();
-  const res = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  const res = await buscarConPresupuesto({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
   // El modelo YA NO recibe la URL de la ficha, y es deliberado: eran 45 de los
   // 148 tokens de cada inmueble, este resultado se reenvia en cada llamada del
   // turno, y el modelo no la necesita porque enviar_fichas la resuelve sola por
@@ -322,7 +327,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   // un dato inventado, y el modelo no gasta salida redactando cinco fichas.
   {
     const c2 = nuevoCtx();
-    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c2);
+    await buscarConPresupuesto({ barrio: 'rosales', tipo: 'Apartamento' }, c2);
     c2.salida.globos.length = 0;
 
     const varias = await enviarFichas.ejecutar(
@@ -343,7 +348,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 
     // Un tope, porque nadie lee ocho fichas seguidas.
     const c3 = nuevoCtx();
-    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c3);
+    await buscarConPresupuesto({ barrio: 'rosales', tipo: 'Apartamento' }, c3);
     c3.salida.globos.length = 0;
     await enviarFichas.ejecutar(
       { inmueble_ids: ['ros-apto-0', 'ros-apto-1', 'ros-apto-2', 'ros-apto-3', 'ros-apto-4', 'chapi-25'] }, c3);
@@ -352,7 +357,7 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
     // Y si alguna falla, se dice CUALES. Devolver ok a secas hace que el modelo
     // de por enviadas las cinco y siga hablando de una que el cliente no vio.
     const c4 = nuevoCtx();
-    await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, c4);
+    await buscarConPresupuesto({ barrio: 'rosales', tipo: 'Apartamento' }, c4);
     c4.salida.globos.length = 0;
     const mixto = await enviarFichas.ejecutar({ inmueble_ids: ['ros-apto-0', 'no-existe'] }, c4);
     assert.equal(mixto.ok, true);
@@ -1471,6 +1476,68 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   for (const f of ['Hola', 'Buenas tardes', 'Gracias']) {
     assert.equal(porFrase(f), null, `"${f}" no deberia decidir nada`);
   }
+}
+
+// ── Calificar antes de volcar inventario ────────────────────────────────────
+//
+// Paso en produccion: el cliente escribio "Busco oficina en arriendo en
+// chapinero" y Diana contesto "te mande las 5 que mas se ajustan". No hay nada a
+// lo que ajustarse: no dio ni un criterio. Eso no es asesorar, es volcar
+// inventario, y ademas es mentira.
+//
+// El asesor necesita recibir tres datos —nombre, zona y presupuesto— asi que
+// preguntar el presupuesto no es un peaje: es el trabajo.
+{
+  const ctx = nuevoCtx();
+  const sinPresupuesto = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  assert.equal(sinPresupuesto.resultado, 'falta_presupuesto');
+  // La pregunta va con un dato util delante, o suena a formulario.
+  assert.ok(sinPresupuesto.desde && sinPresupuesto.hasta, 'trae el rango real de la zona');
+  assert.match(sinPresupuesto.instruccion, /UNA sola pregunta/);
+
+  // Y se pregunta UNA vez. Si el cliente no contesta y se busca de nuevo, se le
+  // muestra lo que hay: repetir la misma pregunta es como suena un formulario.
+  const segunda = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
+  assert.equal(segunda.resultado, 'hay', 'a la segunda ya no insiste');
+
+  // LA FRASE FALSA. Sin criterios, la herramienta lo dice y prohibe la promesa.
+  assert.deepEqual(segunda.criterios_aplicados, ['tipo apartamento'],
+    'solo el tipo, porque es lo unico que dio');
+  const nada = nuevoCtx();
+  nada.ctxAgente.presupuesto_preguntado = true;
+  nada.ctxAgente.tipo_preguntado = true;
+  const aCiegas = await buscar({ barrio: 'rosales' }, nada);
+  assert.deepEqual(aCiegas.criterios_aplicados, [], 'no se filtro por nada');
+  assert.match(aCiegas.nota, /PROHIBIDO decir "los que mas se ajustan"/);
+}
+
+// ── Filtrar por comodidades ─────────────────────────────────────────────────
+//
+// SIMI manda `caracteristicas` en el 96% del inventario, pero escritas de mil
+// formas: "Terraza", "Terraza Bbq", "Balcón", "LavanderÍa", "Pisos CerÁmica".
+// Por eso se compara normalizado y por subcadena, no elemento a elemento.
+{
+  const conTerraza = { ...catalogoDemo[0], id: 'terr', caracteristicas: ['Closet', 'Terraza Bbq', 'Ascensor'] };
+  const sinNada = { ...catalogoDemo[0], id: 'pelado', caracteristicas: ['Closet'] };
+  const ctx = { ...nuevoCtx([conTerraza, sinNada]) };
+  ctx.ctxAgente.presupuesto_preguntado = true;
+
+  const conBbq = await buscar({ barrio: 'rosales', tipo: 'Apartamento', caracteristicas: ['bbq'] }, ctx);
+  assert.equal(conBbq.total, 1, 'solo el que tiene bbq');
+  assert.equal(conBbq.inmuebles[0].id, 'terr');
+  assert.match(conBbq.criterios_aplicados.join(' '), /bbq/);
+
+  // La tilde no puede dejar fuera un inmueble que si la tiene.
+  const ctx2 = { ...nuevoCtx([{ ...conTerraza, caracteristicas: ['Balcón'] }, sinNada]) };
+  ctx2.ctxAgente.presupuesto_preguntado = true;
+  const conBalcon = await buscar({ barrio: 'rosales', tipo: 'Apartamento', caracteristicas: ['balcon'] }, ctx2);
+  assert.equal(conBalcon.total, 1, '"balcon" tiene que encontrar "Balcón"');
+
+  // Pedir dos comodidades exige LAS DOS, no cualquiera de ellas.
+  const ctx3 = { ...nuevoCtx([conTerraza, sinNada]) };
+  ctx3.ctxAgente.presupuesto_preguntado = true;
+  const dos = await buscar({ barrio: 'rosales', tipo: 'Apartamento', caracteristicas: ['terraza', 'piscina'] }, ctx3);
+  assert.equal(dos.resultado, 'cero_bajo_el_filtro', 'ninguno tiene las dos');
 }
 
 console.log('agent-core: OK');

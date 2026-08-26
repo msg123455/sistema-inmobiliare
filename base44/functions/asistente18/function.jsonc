@@ -1,5 +1,5 @@
 {
-  "name": "asistente17",
+  "name": "asistente18",
   "entry": "bundle.ts",
   "description": "LA funcion conversacional. Sirve WhatsApp (Meta Cloud API) y Telegram olfateando el payload. Reemplaza webhookWhatsApp y webhookTelegram."
 }

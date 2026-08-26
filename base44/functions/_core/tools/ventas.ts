@@ -379,6 +379,15 @@ export const buscarInmuebles: Tool = {
       ),
       presupuesto_max: numOpc('Tope en pesos. null si no lo ha dicho.'),
       habitaciones_min: numOpc('Minimo de habitaciones. null si no aplica.'),
+      banos_min: numOpc('Minimo de banos. null si no lo ha pedido.'),
+      // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
+      // trae el 96% del inventario. Se buscan por texto suelto porque vienen
+      // escritas de mil formas ("Terraza", "Terraza Bbq", "Balcón").
+      caracteristicas: lista(
+        'Comodidades que el cliente pidio, en palabras sueltas: terraza, bbq, balcon, chimenea, '
+        + 'ascensor, estudio, patio, deposito, vigilancia, gimnasio, piscina, amoblado. '
+        + 'Lista vacia si no ha pedido ninguna. NO inventes: solo lo que el cliente dijo.',
+      ),
     },
     { retorna: true },
   ),
@@ -387,6 +396,13 @@ export const buscarInmuebles: Tool = {
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
+    const banos = Number(input.banos_min) || 0;
+    // Se normalizan igual que los barrios: minusculas y sin tildes, porque
+    // SIMI escribe "Balcón", "LavanderÍa" y "Pisos CerÁmica" con la
+    // capitalizacion que le da la gana.
+    const comodidades = (Array.isArray(input.caracteristicas) ? input.caracteristicas : [])
+      .map((x: unknown) => normalizarZona(x))
+      .filter(Boolean);
 
     // ── 1. Sin zona no se busca ────────────────────────────────────────────
     //
@@ -520,6 +536,38 @@ export const buscarInmuebles: Tool = {
       };
     }
 
+    // ── 5b. SIN PRESUPUESTO NO SE LISTA ────────────────────────────────────
+    //
+    // Es lo que separa asesorar de volcar inventario. Un cliente que solo dijo
+    // "busco oficina en chapinero" no ha dado NADA con lo que priorizar, y
+    // mandarle cinco cualesquiera y decirle que son "las que mas se ajustan" es
+    // mentira: no hay nada a lo que ajustarse. Eso paso en produccion.
+    //
+    // Ademas el presupuesto es uno de los tres datos que el asesor necesita
+    // recibir (nombre, zona, presupuesto), asi que preguntarlo aqui no es un
+    // peaje: es el trabajo.
+    //
+    // Se pregunta UNA vez. Si el cliente no lo da y vuelve a insistir, se le
+    // muestra lo que hay: repetir la misma pregunta es exactamente como suena un
+    // formulario, y ya se aprendio esa leccion con el tipo.
+    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+      c.ctxAgente.presupuesto_preguntado = true;
+      const precios = enLaZona.map((p: any) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      return {
+        resultado: 'falta_presupuesto',
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        desde: precios.length ? fmtCOP(precios[0]) : null,
+        hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
+        instruccion: precios.length
+          ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} `
+            + `hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra `
+            + 'se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola '
+            + 'pregunta y sin listar inmuebles todavia.'
+          : 'Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta.',
+      };
+    }
+
     // ── 6. El resto de filtros, contando lo que se cae y por que ───────────
     let sinPrecioPublicado = 0;
     const encajan = enLaZona.filter((p: any) => {
@@ -527,6 +575,18 @@ export const buscarInmuebles: Tool = {
       if (tipo && suTipo !== tipo) return false;
 
       if (habs && CON_HABITACIONES.has(suTipo) && Number(p.habitaciones || 0) < habs) return false;
+      if (banos && Number(p.banos || 0) < banos) return false;
+
+      // Las comodidades se comparan sobre el texto de `caracteristicas`, que
+      // SIMI manda como lista y escribe de mil formas: "Terraza", "Terraza Bbq",
+      // "Balcón", "Parqueaderos Cubierto". Por eso se busca subcadena sobre todo
+      // el bloque normalizado en vez de comparar elemento a elemento.
+      if (comodidades.length) {
+        const suyas = normalizarZona(
+          [...(Array.isArray(p.caracteristicas) ? p.caracteristicas : []), p.descripcion || ''].join(' '),
+        );
+        if (!comodidades.every((q) => suyas.includes(q))) return false;
+      }
 
       if (tope) {
         const precio = precioDe(p, esArr);
@@ -548,6 +608,8 @@ export const buscarInmuebles: Tool = {
       tipo ? `tipo ${tipo.toLowerCase()}` : '',
       tope ? `hasta ${fmtCOP(tope)}` : '',
       habs ? `${habs} o mas habitaciones` : '',
+      banos ? `${banos} o mas banos` : '',
+      comodidades.length ? `con ${comodidades.join(', ')}` : '',
     ].filter(Boolean);
 
     // ── 7. Hay en la zona, pero ninguno cumple el filtro ───────────────────
@@ -614,6 +676,12 @@ export const buscarInmuebles: Tool = {
       por_tipo: porTipo,
       sin_precio_publicado: sinPrecioPublicado,
       otros_sin_clasificar: otrosSinClasificar,
+      // QUE SE FILTRO DE VERDAD. Va aqui porque sin esto el modelo dice "te
+      // mande las 5 que mas se ajustan" cuando el cliente no dio ni un criterio:
+      // paso en produccion con "busco oficina en arriendo en chapinero". No hay
+      // nada a lo que ajustarse, y prometerlo es la clase de frase que hace que
+      // el cliente deje de creer lo demas.
+      criterios_aplicados: filtros,
       inmuebles: visibles.map((p: any) => resumirProp(p, esArr)),
       nota: (encajan.length > visibles.length
         ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero `
@@ -622,7 +690,12 @@ export const buscarInmuebles: Tool = {
         + (dudoso
           ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. '
           : '')
-        + 'Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes: '
+        + (filtros.length
+          ? `Filtraste por ${filtros.join(' y ')}: eso SI puedes decir que lo tuviste en cuenta. `
+          : 'NO filtraste por nada mas que la zona. PROHIBIDO decir "los que mas se ajustan", "los '
+            + 'que mejor encajan" o cualquier cosa que sugiera que los elegiste para el: no te dio '
+            + 'ningun criterio. Di que son los primeros y preguntale que necesita para afinar. ')
+        + 'Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes:'
         + 'dile que se lo confirma el asesor, no lo completes.',
     };
   },

@@ -2164,7 +2164,14 @@ var buscarInmuebles = {
         TIPOS_OFRECIBLES
       ),
       presupuesto_max: numOpc("Tope en pesos. null si no lo ha dicho."),
-      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica.")
+      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica."),
+      banos_min: numOpc("Minimo de banos. null si no lo ha pedido."),
+      // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
+      // trae el 96% del inventario. Se buscan por texto suelto porque vienen
+      // escritas de mil formas ("Terraza", "Terraza Bbq", "Balcón").
+      caracteristicas: lista(
+        "Comodidades que el cliente pidio, en palabras sueltas: terraza, bbq, balcon, chimenea, ascensor, estudio, patio, deposito, vigilancia, gimnasio, piscina, amoblado. Lista vacia si no ha pedido ninguna. NO inventes: solo lo que el cliente dijo."
+      )
     },
     { retorna: true }
   ),
@@ -2173,6 +2180,8 @@ var buscarInmuebles = {
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
+    const banos = Number(input.banos_min) || 0;
+    const comodidades = (Array.isArray(input.caracteristicas) ? input.caracteristicas : []).map((x) => normalizarZona(x)).filter(Boolean);
     if (!String(input.barrio || "").trim()) {
       return {
         resultado: "falta_zona",
@@ -2228,11 +2237,30 @@ var buscarInmuebles = {
         instruccion: `En ${zona.nombre} en ${operacionTxt} tenemos ${dudoso ? "mas de " : ""}${enLaZona.length}: ${enPalabras(porTipo)}. Dilo asi de corto y cierra preguntandole que tipo busca. UNA sola pregunta, y no listes inmuebles todavia: acabas de darle un dato real, no le estas haciendo un cuestionario.`
       };
     }
+    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+      c.ctxAgente.presupuesto_preguntado = true;
+      const precios = enLaZona.map((p) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      return {
+        resultado: "falta_presupuesto",
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        desde: precios.length ? fmtCOP(precios[0]) : null,
+        hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
+        instruccion: precios.length ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y sin listar inmuebles todavia.` : "Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta."
+      };
+    }
     let sinPrecioPublicado = 0;
     const encajan = enLaZona.filter((p) => {
       const suTipo = normalizarTipo(p.tipo);
       if (tipo && suTipo !== tipo) return false;
       if (habs && CON_HABITACIONES.has(suTipo) && Number(p.habitaciones || 0) < habs) return false;
+      if (banos && Number(p.banos || 0) < banos) return false;
+      if (comodidades.length) {
+        const suyas = normalizarZona(
+          [...Array.isArray(p.caracteristicas) ? p.caracteristicas : [], p.descripcion || ""].join(" ")
+        );
+        if (!comodidades.every((q) => suyas.includes(q))) return false;
+      }
       if (tope) {
         const precio = precioDe(p, esArr);
         if (!precio) {
@@ -2247,7 +2275,9 @@ var buscarInmuebles = {
     const filtros = [
       tipo ? `tipo ${tipo.toLowerCase()}` : "",
       tope ? `hasta ${fmtCOP(tope)}` : "",
-      habs ? `${habs} o mas habitaciones` : ""
+      habs ? `${habs} o mas habitaciones` : "",
+      banos ? `${banos} o mas banos` : "",
+      comodidades.length ? `con ${comodidades.join(", ")}` : ""
     ].filter(Boolean);
     if (!encajan.length) {
       return {
@@ -2286,8 +2316,14 @@ var buscarInmuebles = {
       por_tipo: porTipo,
       sin_precio_publicado: sinPrecioPublicado,
       otros_sin_clasificar: otrosSinClasificar,
+      // QUE SE FILTRO DE VERDAD. Va aqui porque sin esto el modelo dice "te
+      // mande las 5 que mas se ajustan" cuando el cliente no dio ni un criterio:
+      // paso en produccion con "busco oficina en arriendo en chapinero". No hay
+      // nada a lo que ajustarse, y prometerlo es la clase de frase que hace que
+      // el cliente deje de creer lo demas.
+      criterios_aplicados: filtros,
       inmuebles: visibles.map((p) => resumirProp(p, esArr)),
-      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes: dile que se lo confirma el asesor, no lo completes."
+      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + (filtros.length ? `Filtraste por ${filtros.join(" y ")}: eso SI puedes decir que lo tuviste en cuenta. ` : 'NO filtraste por nada mas que la zona. PROHIBIDO decir "los que mas se ajustan", "los que mejor encajan" o cualquier cosa que sugiera que los elegiste para el: no te dio ningun criterio. Di que son los primeros y preguntale que necesita para afinar. ') + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes:dile que se lo confirma el asesor, no lo completes."
     };
   }
 };

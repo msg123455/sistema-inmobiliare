@@ -1242,7 +1242,14 @@ var buscarInmuebles = {
         TIPOS_OFRECIBLES
       ),
       presupuesto_max: numOpc("Tope en pesos. null si no lo ha dicho."),
-      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica.")
+      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica."),
+      banos_min: numOpc("Minimo de banos. null si no lo ha pedido."),
+      // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
+      // trae el 96% del inventario. Se buscan por texto suelto porque vienen
+      // escritas de mil formas ("Terraza", "Terraza Bbq", "Balcón").
+      caracteristicas: lista(
+        "Comodidades que el cliente pidio, en palabras sueltas: terraza, bbq, balcon, chimenea, ascensor, estudio, patio, deposito, vigilancia, gimnasio, piscina, amoblado. Lista vacia si no ha pedido ninguna. NO inventes: solo lo que el cliente dijo."
+      )
     },
     { retorna: true }
   ),
@@ -1251,6 +1258,8 @@ var buscarInmuebles = {
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
+    const banos = Number(input.banos_min) || 0;
+    const comodidades = (Array.isArray(input.caracteristicas) ? input.caracteristicas : []).map((x) => normalizarZona(x)).filter(Boolean);
     if (!String(input.barrio || "").trim()) {
       return {
         resultado: "falta_zona",
@@ -1306,11 +1315,30 @@ var buscarInmuebles = {
         instruccion: `En ${zona.nombre} en ${operacionTxt} tenemos ${dudoso ? "mas de " : ""}${enLaZona.length}: ${enPalabras(porTipo)}. Dilo asi de corto y cierra preguntandole que tipo busca. UNA sola pregunta, y no listes inmuebles todavia: acabas de darle un dato real, no le estas haciendo un cuestionario.`
       };
     }
+    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+      c.ctxAgente.presupuesto_preguntado = true;
+      const precios = enLaZona.map((p) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      return {
+        resultado: "falta_presupuesto",
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        desde: precios.length ? fmtCOP(precios[0]) : null,
+        hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
+        instruccion: precios.length ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y sin listar inmuebles todavia.` : "Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta."
+      };
+    }
     let sinPrecioPublicado = 0;
     const encajan = enLaZona.filter((p) => {
       const suTipo = normalizarTipo(p.tipo);
       if (tipo && suTipo !== tipo) return false;
       if (habs && CON_HABITACIONES.has(suTipo) && Number(p.habitaciones || 0) < habs) return false;
+      if (banos && Number(p.banos || 0) < banos) return false;
+      if (comodidades.length) {
+        const suyas = normalizarZona(
+          [...Array.isArray(p.caracteristicas) ? p.caracteristicas : [], p.descripcion || ""].join(" ")
+        );
+        if (!comodidades.every((q) => suyas.includes(q))) return false;
+      }
       if (tope) {
         const precio = precioDe(p, esArr);
         if (!precio) {
@@ -1325,7 +1353,9 @@ var buscarInmuebles = {
     const filtros = [
       tipo ? `tipo ${tipo.toLowerCase()}` : "",
       tope ? `hasta ${fmtCOP(tope)}` : "",
-      habs ? `${habs} o mas habitaciones` : ""
+      habs ? `${habs} o mas habitaciones` : "",
+      banos ? `${banos} o mas banos` : "",
+      comodidades.length ? `con ${comodidades.join(", ")}` : ""
     ].filter(Boolean);
     if (!encajan.length) {
       return {
@@ -1364,8 +1394,14 @@ var buscarInmuebles = {
       por_tipo: porTipo,
       sin_precio_publicado: sinPrecioPublicado,
       otros_sin_clasificar: otrosSinClasificar,
+      // QUE SE FILTRO DE VERDAD. Va aqui porque sin esto el modelo dice "te
+      // mande las 5 que mas se ajustan" cuando el cliente no dio ni un criterio:
+      // paso en produccion con "busco oficina en arriendo en chapinero". No hay
+      // nada a lo que ajustarse, y prometerlo es la clase de frase que hace que
+      // el cliente deje de creer lo demas.
+      criterios_aplicados: filtros,
       inmuebles: visibles.map((p) => resumirProp(p, esArr)),
-      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes: dile que se lo confirma el asesor, no lo completes."
+      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + (filtros.length ? `Filtraste por ${filtros.join(" y ")}: eso SI puedes decir que lo tuviste en cuenta. ` : 'NO filtraste por nada mas que la zona. PROHIBIDO decir "los que mas se ajustan", "los que mejor encajan" o cualquier cosa que sugiera que los elegiste para el: no te dio ningun criterio. Di que son los primeros y preguntale que necesita para afinar. ') + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes:dile que se lo confirma el asesor, no lo completes."
     };
   }
 };
@@ -3135,8 +3171,11 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   tipo: null,
   presupuesto_max: null,
   habitaciones_min: null,
+  banos_min: null,
+  caracteristicas: [],
   ...input
 }, ctx);
+var buscarConPresupuesto = (input, ctx) => buscar({ presupuesto_max: 99e9, ...input }, ctx);
 {
   const ctx = nuevoCtx();
   const primera = await buscar({ barrio: "rosales" }, ctx);
@@ -3146,13 +3185,13 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.deepEqual(primera.por_tipo, { Apartamento: 8, Oficina: 2, Casa: 1 });
   assert.match(primera.instruccion, /11: 8 apartamentos, 2 oficinas, 1 casa/);
   assert.match(primera.instruccion, /UNA sola pregunta/);
-  const conLocales = await buscar({ barrio: "Chapinero" }, nuevoCtx([
+  const conLocales = await buscarConPresupuesto({ barrio: "Chapinero" }, nuevoCtx([
     ...catalogoDemo,
     { id: "l1", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 5e6 },
     { id: "l2", operacion: "Arriendo", estado: "Disponible", barrio: "Chapinero", tipo: "Local", canon_arriendo: 6e6 }
   ]));
   assert.match(conLocales.instruccion, /2 locales/);
-  const conTipo = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
+  const conTipo = await buscarConPresupuesto({ barrio: "rosales", tipo: "Apartamento" }, ctx);
   assert.equal(conTipo.resultado, "hay");
   assert.equal(conTipo.total, 8);
   assert.equal(conTipo.mostrados, 5);
@@ -3161,15 +3200,15 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.match(conTipo.nota, /el numero es 8, no 5/);
   assert.equal(conTipo.inmuebles[0].id, "ros-apto-0");
   assert.equal(conTipo.inmuebles[0].precio, "$4.000.000 al mes");
-  const otraVez = await buscar({ barrio: "rosales" }, ctx);
+  const otraVez = await buscarConPresupuesto({ barrio: "rosales" }, ctx);
   assert.equal(otraVez.resultado, "hay");
   assert.equal(otraVez.total, 11, "sin tipo, encajan los 11");
-  const soloUno = await buscar({ barrio: "Chapinero" }, nuevoCtx());
+  const soloUno = await buscarConPresupuesto({ barrio: "Chapinero" }, nuevoCtx());
   assert.equal(soloUno.resultado, "hay");
   assert.equal(soloUno.total, 1);
 }
 {
-  const caro = await buscar({
+  const caro = await buscarConPresupuesto({
     barrio: "rosales",
     tipo: "Apartamento",
     presupuesto_max: 1e3
@@ -3180,7 +3219,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.match(caro.instruccion, /PROHIBIDO decir "no hay nada"/);
   assert.match(caro.instruccion, /SI tenemos 11/);
   for (const dicho of ["apartamentos", "apto", "apartaestudio", "penthouse", "Apartamento"]) {
-    const r = await buscar({ barrio: "rosales", tipo: dicho }, nuevoCtx());
+    const r = await buscarConPresupuesto({ barrio: "rosales", tipo: dicho }, nuevoCtx());
     assert.equal(r.resultado, "hay", `"${dicho}" no puede dar cero`);
     assert.equal(r.total, 8);
   }
@@ -3188,13 +3227,13 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.equal(raro.resultado, "falta_tipo", 'un tipo ilegible se trata como "todavia no lo se"');
   const conCuartos = await buscar({ barrio: "rosales", habitaciones_min: 2 }, nuevoCtx());
   assert.equal(conCuartos.resultado, "falta_tipo");
-  const cuartosYTipo = await buscar({
+  const cuartosYTipo = await buscarConPresupuesto({
     barrio: "rosales",
     tipo: "Oficina",
     habitaciones_min: 2
   }, nuevoCtx());
   assert.equal(cuartosYTipo.total, 2, "una oficina no se descarta por no tener cuartos");
-  const enVenta = await buscar({
+  const enVenta = await buscarConPresupuesto({
     operacion: "venta",
     barrio: "rosales",
     tipo: "Casa",
@@ -3219,14 +3258,14 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.equal(caida.resultado, "no_pude_consultar");
   assert.match(caida.instruccion, /PROHIBIDO decirle que no hay inmuebles/);
   assert.ok(sinBase.efectos.escalado, "un fallo de la base deja avisado a un humano");
-  const vacia = await buscar({ operacion: "venta", barrio: "Chapinero" }, nuevoCtx());
+  const vacia = await buscarConPresupuesto({ operacion: "venta", barrio: "Chapinero" }, nuevoCtx());
   assert.equal(vacia.resultado, "cero_en_la_zona");
   assert.match(vacia.instruccion, /Esto SI lo puedes afirmar/);
   assert.match(vacia.instruccion, /registrar_interes/);
 }
 {
   const ctx = nuevoCtx();
-  const res = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
+  const res = await buscarConPresupuesto({ barrio: "rosales", tipo: "Apartamento" }, ctx);
   assert.equal(res.inmuebles[0].ficha, void 0, "la URL no viaja al modelo");
   assert.equal(res.inmuebles[0].titulo, void 0, "titulo es tipo + barrio otra vez");
   assert.equal(res.inmuebles[0].video, void 0, "video en null no se manda");
@@ -3256,7 +3295,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   assert.match(fueraDeMercado.instruccion, /ya no esta disponible/);
   {
     const c2 = nuevoCtx();
-    await buscar({ barrio: "rosales", tipo: "Apartamento" }, c2);
+    await buscarConPresupuesto({ barrio: "rosales", tipo: "Apartamento" }, c2);
     c2.salida.globos.length = 0;
     const varias = await enviarFichas.ejecutar(
       { inmueble_ids: ["ros-apto-0", "ros-apto-1", "ros-apto-2"] },
@@ -3276,7 +3315,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
     assert.match(t, /\$/, "el precio");
     assert.match(t, /https:\/\//, "el link");
     const c3 = nuevoCtx();
-    await buscar({ barrio: "rosales", tipo: "Apartamento" }, c3);
+    await buscarConPresupuesto({ barrio: "rosales", tipo: "Apartamento" }, c3);
     c3.salida.globos.length = 0;
     await enviarFichas.ejecutar(
       { inmueble_ids: ["ros-apto-0", "ros-apto-1", "ros-apto-2", "ros-apto-3", "ros-apto-4", "chapi-25"] },
@@ -3284,7 +3323,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
     );
     assert.ok(c3.salida.globos.length <= 5, "como mucho cinco");
     const c4 = nuevoCtx();
-    await buscar({ barrio: "rosales", tipo: "Apartamento" }, c4);
+    await buscarConPresupuesto({ barrio: "rosales", tipo: "Apartamento" }, c4);
     c4.salida.globos.length = 0;
     const mixto = await enviarFichas.ejecutar({ inmueble_ids: ["ros-apto-0", "no-existe"] }, c4);
     assert.equal(mixto.ok, true);
@@ -4126,5 +4165,43 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   for (const f of ["Hola", "Buenas tardes", "Gracias"]) {
     assert.equal(porFrase(f), null, `"${f}" no deberia decidir nada`);
   }
+}
+{
+  const ctx = nuevoCtx();
+  const sinPresupuesto = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
+  assert.equal(sinPresupuesto.resultado, "falta_presupuesto");
+  assert.ok(sinPresupuesto.desde && sinPresupuesto.hasta, "trae el rango real de la zona");
+  assert.match(sinPresupuesto.instruccion, /UNA sola pregunta/);
+  const segunda = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
+  assert.equal(segunda.resultado, "hay", "a la segunda ya no insiste");
+  assert.deepEqual(
+    segunda.criterios_aplicados,
+    ["tipo apartamento"],
+    "solo el tipo, porque es lo unico que dio"
+  );
+  const nada = nuevoCtx();
+  nada.ctxAgente.presupuesto_preguntado = true;
+  nada.ctxAgente.tipo_preguntado = true;
+  const aCiegas = await buscar({ barrio: "rosales" }, nada);
+  assert.deepEqual(aCiegas.criterios_aplicados, [], "no se filtro por nada");
+  assert.match(aCiegas.nota, /PROHIBIDO decir "los que mas se ajustan"/);
+}
+{
+  const conTerraza = { ...catalogoDemo[0], id: "terr", caracteristicas: ["Closet", "Terraza Bbq", "Ascensor"] };
+  const sinNada = { ...catalogoDemo[0], id: "pelado", caracteristicas: ["Closet"] };
+  const ctx = { ...nuevoCtx([conTerraza, sinNada]) };
+  ctx.ctxAgente.presupuesto_preguntado = true;
+  const conBbq = await buscar({ barrio: "rosales", tipo: "Apartamento", caracteristicas: ["bbq"] }, ctx);
+  assert.equal(conBbq.total, 1, "solo el que tiene bbq");
+  assert.equal(conBbq.inmuebles[0].id, "terr");
+  assert.match(conBbq.criterios_aplicados.join(" "), /bbq/);
+  const ctx2 = { ...nuevoCtx([{ ...conTerraza, caracteristicas: ["Balc\xF3n"] }, sinNada]) };
+  ctx2.ctxAgente.presupuesto_preguntado = true;
+  const conBalcon = await buscar({ barrio: "rosales", tipo: "Apartamento", caracteristicas: ["balcon"] }, ctx2);
+  assert.equal(conBalcon.total, 1, '"balcon" tiene que encontrar "Balc\xF3n"');
+  const ctx3 = { ...nuevoCtx([conTerraza, sinNada]) };
+  ctx3.ctxAgente.presupuesto_preguntado = true;
+  const dos = await buscar({ barrio: "rosales", tipo: "Apartamento", caracteristicas: ["terraza", "piscina"] }, ctx3);
+  assert.equal(dos.resultado, "cero_bajo_el_filtro", "ninguno tiene las dos");
 }
 console.log("agent-core: OK");

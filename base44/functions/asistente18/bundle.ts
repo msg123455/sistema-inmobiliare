@@ -15,7 +15,7 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// base44/functions/asistente17/_core/db.ts
+// base44/functions/asistente18/_core/db.ts
 function crearDb(apiKey, baseUrl) {
   const base = (baseUrl || Deno.env.get("BASE44_APP_URL") || "").replace(/\/+$/, "");
   if (!base) throw new Error("BASE44_APP_URL no configurada");
@@ -122,7 +122,7 @@ function crearDb(apiKey, baseUrl) {
   return { base, consultar, list, uno, crear, actualizar, guardar, fallos };
 }
 
-// base44/functions/asistente17/_core/cola.ts
+// base44/functions/asistente18/_core/cola.ts
 async function entregarYa(db, item, env, canales, tokenTelegram) {
   if (!item?.id) return false;
   const globos = Array.isArray(item.globos) ? item.globos : [];
@@ -211,7 +211,7 @@ async function notificarEquipo(config, telCliente, mensajes) {
   }
 }
 
-// base44/functions/asistente17/_core/prompts.ts
+// base44/functions/asistente18/_core/prompts.ts
 var TELEFONO_CONTINGENCIA = "3102109308";
 var IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
@@ -532,7 +532,7 @@ certificado de tradicion o por la matricula de un inmueble, NO pidas datos ni ab
 solicitud: transfiere a recepcion.`
 };
 
-// base44/functions/asistente17/_core/habiles.ts
+// base44/functions/asistente18/_core/habiles.ts
 function pascua(anio) {
   const a = anio % 19;
   const b = Math.floor(anio / 100);
@@ -626,7 +626,7 @@ function sumarHabiles(desde, dias) {
   return new Date(f.getTime() + dia - 1e3);
 }
 
-// base44/functions/asistente17/_core/horario.ts
+// base44/functions/asistente18/_core/horario.ts
 var OFFSET_BOGOTA_H = -5;
 var HORARIO_DEFECTO = { dias: [1, 2, 3, 4, 5], desde: 9, hasta: 17 };
 function horarioDe(config) {
@@ -663,7 +663,7 @@ function instruccionHorario(ahora, config = {}) {
   return `FUERA DE HORARIO. El equipo atiende de lunes a viernes, de ${h.desde}:00 a ${h.hasta}:00. Eso NO significa que despaches al cliente: resuelve todo lo que puedas tu mismo y deja el siguiente paso agendado. Agenda la visita o la llamada con la herramienta que corresponda, registra lo que haya que registrar, y solo si de verdad no puedes avanzar dile que un asesor lo contacta el siguiente dia habil. Nunca uses eso como primera salida.`;
 }
 
-// base44/functions/asistente17/_core/protocol.ts
+// base44/functions/asistente18/_core/protocol.ts
 var AGENTES = [
   "recepcion",
   "ventas",
@@ -711,7 +711,7 @@ var enumStr = (description, valores) => ({ type: "string", description, enum: va
 var enumStrOpc = (description, valores) => ({ description, anyOf: [{ type: "string", enum: valores }, { type: "null" }] });
 var lista = (description, items = { type: "string" }) => ({ type: "array", description, items });
 
-// base44/functions/asistente17/_core/state.ts
+// base44/functions/asistente18/_core/state.ts
 var claveDe = (canal, tel) => `${canal === "telegram" ? "tg" : "wa"}:${String(tel).replace(/\D/g, "")}`;
 function identidadVacia() {
   return {
@@ -879,7 +879,7 @@ async function guardarEstado(db, memoriaId, canal, tel, estado, extra = {}) {
   return null;
 }
 
-// base44/functions/asistente17/_core/identidad.ts
+// base44/functions/asistente18/_core/identidad.ts
 var HORAS_VIGENCIA = 24;
 var MAX_INTENTOS = 3;
 var BLOQUEO_MIN = 60;
@@ -1055,7 +1055,7 @@ async function crearSesionPortal(db, entrada, estado, tipo) {
   return `${app}/portal/entrar?t=${token}`;
 }
 
-// base44/functions/asistente17/_core/contexto.ts
+// base44/functions/asistente18/_core/contexto.ts
 var MAX_RAG_CHARS = 18e3;
 function destinosDe(ch) {
   return String(ch.agentes || "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1302,7 +1302,7 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
   ];
 }
 
-// base44/functions/asistente17/_core/diagnostico.ts
+// base44/functions/asistente18/_core/diagnostico.ts
 var miles = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 function informeChunks(d) {
   if (!d) {
@@ -1348,7 +1348,7 @@ function informeChunks(d) {
   return l.join("\n");
 }
 
-// base44/functions/asistente17/_core/llm.ts
+// base44/functions/asistente18/_core/llm.ts
 var API = "https://api.anthropic.com/v1/messages";
 function paramsModelo(modelo, effort) {
   if (/haiku/.test(modelo)) return {};
@@ -1505,7 +1505,7 @@ async function correrAgente(opts) {
   return { globos: opts.ctx.salida.globos, finTurno: false, pendiente: null, llamadas, gasto };
 }
 
-// base44/functions/asistente17/_core/router.ts
+// base44/functions/asistente18/_core/router.ts
 var normalizar = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 var POR_BOTON = {
   "flujo:consignacion": "consignacion",
@@ -1639,7 +1639,7 @@ ${entrada.texto.slice(0, 600)}`
   };
 }
 
-// base44/functions/asistente17/_core/tools/asistidos.ts
+// base44/functions/asistente18/_core/tools/asistidos.ts
 var PRIORIDAD = {
   baja: "Baja",
   media: "Media",
@@ -1716,7 +1716,7 @@ var ASISTIDOS = {
   consultar_historial_solicitudes: consultarHistorialSolicitudes
 };
 
-// base44/functions/asistente17/_core/brief.ts
+// base44/functions/asistente18/_core/brief.ts
 var ETIQUETAS = {
   operacion: "Operacion",
   tipo_prop: "Tipo de inmueble",
@@ -1777,7 +1777,7 @@ function briefLead(estado, tel, canal, extra = []) {
   return lineas.join("\n");
 }
 
-// base44/functions/asistente17/_core/tools/comunes.ts
+// base44/functions/asistente18/_core/tools/comunes.ts
 var COMPARTIDOS = /* @__PURE__ */ new Set(["nombre", "email", "documento", "direccion_inmueble"]);
 var NUMERICOS = /* @__PURE__ */ new Set(["presupuesto", "canon_esperado", "valor_esperado", "area_m2", "habitaciones", "nps_score"]);
 var responder = {
@@ -1918,7 +1918,7 @@ var enviarMenu = {
   }
 };
 
-// base44/functions/asistente17/_core/tools/identificacion.ts
+// base44/functions/asistente18/_core/tools/identificacion.ts
 var identificarTitular = {
   ...definirTool(
     "identificar_titular",
@@ -1966,7 +1966,7 @@ var identificarTitular = {
   }
 };
 
-// base44/functions/asistente17/_core/scoring.ts
+// base44/functions/asistente18/_core/scoring.ts
 var ETAPA = {
   Lead: 10,
   Visita_Agendada: 35,
@@ -2019,7 +2019,7 @@ function calificar(s) {
   };
 }
 
-// base44/functions/asistente17/_core/tools/ventas.ts
+// base44/functions/asistente18/_core/tools/ventas.ts
 var normalizarZona = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^(los|las|el|la)\s+/, "").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
 async function asignarAsesor(db, criterios) {
   const activos = await db.list("Asesor", { estado: "Activo", limit: 100 });
@@ -2164,7 +2164,14 @@ var buscarInmuebles = {
         TIPOS_OFRECIBLES
       ),
       presupuesto_max: numOpc("Tope en pesos. null si no lo ha dicho."),
-      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica.")
+      habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica."),
+      banos_min: numOpc("Minimo de banos. null si no lo ha pedido."),
+      // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
+      // trae el 96% del inventario. Se buscan por texto suelto porque vienen
+      // escritas de mil formas ("Terraza", "Terraza Bbq", "Balcón").
+      caracteristicas: lista(
+        "Comodidades que el cliente pidio, en palabras sueltas: terraza, bbq, balcon, chimenea, ascensor, estudio, patio, deposito, vigilancia, gimnasio, piscina, amoblado. Lista vacia si no ha pedido ninguna. NO inventes: solo lo que el cliente dijo."
+      )
     },
     { retorna: true }
   ),
@@ -2173,6 +2180,8 @@ var buscarInmuebles = {
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
     const habs = Number(input.habitaciones_min) || 0;
+    const banos = Number(input.banos_min) || 0;
+    const comodidades = (Array.isArray(input.caracteristicas) ? input.caracteristicas : []).map((x) => normalizarZona(x)).filter(Boolean);
     if (!String(input.barrio || "").trim()) {
       return {
         resultado: "falta_zona",
@@ -2228,11 +2237,30 @@ var buscarInmuebles = {
         instruccion: `En ${zona.nombre} en ${operacionTxt} tenemos ${dudoso ? "mas de " : ""}${enLaZona.length}: ${enPalabras(porTipo)}. Dilo asi de corto y cierra preguntandole que tipo busca. UNA sola pregunta, y no listes inmuebles todavia: acabas de darle un dato real, no le estas haciendo un cuestionario.`
       };
     }
+    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+      c.ctxAgente.presupuesto_preguntado = true;
+      const precios = enLaZona.map((p) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      return {
+        resultado: "falta_presupuesto",
+        zona: zona.nombre,
+        en_la_zona: enLaZona.length,
+        desde: precios.length ? fmtCOP(precios[0]) : null,
+        hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
+        instruccion: precios.length ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y sin listar inmuebles todavia.` : "Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta."
+      };
+    }
     let sinPrecioPublicado = 0;
     const encajan = enLaZona.filter((p) => {
       const suTipo = normalizarTipo(p.tipo);
       if (tipo && suTipo !== tipo) return false;
       if (habs && CON_HABITACIONES.has(suTipo) && Number(p.habitaciones || 0) < habs) return false;
+      if (banos && Number(p.banos || 0) < banos) return false;
+      if (comodidades.length) {
+        const suyas = normalizarZona(
+          [...Array.isArray(p.caracteristicas) ? p.caracteristicas : [], p.descripcion || ""].join(" ")
+        );
+        if (!comodidades.every((q) => suyas.includes(q))) return false;
+      }
       if (tope) {
         const precio = precioDe(p, esArr);
         if (!precio) {
@@ -2247,7 +2275,9 @@ var buscarInmuebles = {
     const filtros = [
       tipo ? `tipo ${tipo.toLowerCase()}` : "",
       tope ? `hasta ${fmtCOP(tope)}` : "",
-      habs ? `${habs} o mas habitaciones` : ""
+      habs ? `${habs} o mas habitaciones` : "",
+      banos ? `${banos} o mas banos` : "",
+      comodidades.length ? `con ${comodidades.join(", ")}` : ""
     ].filter(Boolean);
     if (!encajan.length) {
       return {
@@ -2286,8 +2316,14 @@ var buscarInmuebles = {
       por_tipo: porTipo,
       sin_precio_publicado: sinPrecioPublicado,
       otros_sin_clasificar: otrosSinClasificar,
+      // QUE SE FILTRO DE VERDAD. Va aqui porque sin esto el modelo dice "te
+      // mande las 5 que mas se ajustan" cuando el cliente no dio ni un criterio:
+      // paso en produccion con "busco oficina en arriendo en chapinero". No hay
+      // nada a lo que ajustarse, y prometerlo es la clase de frase que hace que
+      // el cliente deje de creer lo demas.
+      criterios_aplicados: filtros,
       inmuebles: visibles.map((p) => resumirProp(p, esArr)),
-      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes: dile que se lo confirma el asesor, no lo completes."
+      nota: (encajan.length > visibles.length ? `Le muestras ${visibles.length} de ${encajan.length}. Si pregunta cuantos hay, el numero es ${encajan.length}, no ${visibles.length}. ` : "") + (dudoso ? 'OJO: la consulta pudo venir recortada, asi que di "mas de" antes del numero, o no lo des. ' : "") + (filtros.length ? `Filtraste por ${filtros.join(" y ")}: eso SI puedes decir que lo tuviste en cuenta. ` : 'NO filtraste por nada mas que la zona. PROHIBIDO decir "los que mas se ajustan", "los que mejor encajan" o cualquier cosa que sugiera que los elegiste para el: no te dio ningun criterio. Di que son los primeros y preguntale que necesita para afinar. ') + "Solo puedes afirmar los datos que aparecen aqui. Un campo en null es un dato que NO tienes:dile que se lo confirma el asesor, no lo completes."
     };
   }
 };
@@ -2599,7 +2635,7 @@ var VENTAS = {
   agendar_visita: agendarVisita
 };
 
-// base44/functions/asistente17/_core/tools/cartera.ts
+// base44/functions/asistente18/_core/tools/cartera.ts
 var verificarIdentidad = {
   ...definirTool(
     "verificar_identidad",
@@ -2802,7 +2838,7 @@ var CARTERA = {
   enviar_certificado_propietario: enviarCertificadoPropietario
 };
 
-// base44/functions/asistente17/_core/tools/mantenimiento.ts
+// base44/functions/asistente18/_core/tools/mantenimiento.ts
 var registrarReparacion = {
   ...definirTool(
     "registrar_reparacion",
@@ -2914,7 +2950,7 @@ var MANTENIMIENTO = {
   consultar_estado_reparacion: consultarEstadoReparacion
 };
 
-// base44/functions/asistente17/_core/tools/consignacion.ts
+// base44/functions/asistente18/_core/tools/consignacion.ts
 var registrarConsignacion = {
   ...definirTool(
     "registrar_consignacion",
@@ -3005,7 +3041,7 @@ var CONSIGNACION = {
   agendar_avaluo_previo: agendarAvaluoPrevio
 };
 
-// base44/functions/asistente17/_core/tools/avaluos.ts
+// base44/functions/asistente18/_core/tools/avaluos.ts
 var registrarSolicitudAvaluo = {
   ...definirTool(
     "registrar_solicitud_avaluo",
@@ -3075,7 +3111,7 @@ var AVALUOS = {
   cotizar_avaluo: cotizarAvaluo
 };
 
-// base44/functions/asistente17/_core/tools/pqr.ts
+// base44/functions/asistente18/_core/tools/pqr.ts
 var LEGAL = /\b(tutela|demanda|demandar|abogad|superintendencia|sic\b|fiscal[ií]a|juzgado|proceso legal|accion de proteccion)\b/i;
 var DIAS_DEFECTO = {
   Peticion: 15,
@@ -3180,7 +3216,7 @@ var PQR = {
   consultar_estado_pqr: consultarEstadoPqr
 };
 
-// base44/functions/asistente17/_core/tools/matricula.ts
+// base44/functions/asistente18/_core/tools/matricula.ts
 var iniciarMatricula = {
   ...definirTool(
     "iniciar_matricula",
@@ -3312,7 +3348,7 @@ var MATRICULA = {
   enviar_link_portal: enviarLinkDocumentos
 };
 
-// base44/functions/asistente17/_core/tools/index.ts
+// base44/functions/asistente18/_core/tools/index.ts
 var IDENT = { identificar_titular: identificarTitular };
 var HIST = ASISTIDOS;
 var EXTRA = {
@@ -3332,7 +3368,7 @@ function toolsDe(agente, habilitadas) {
   return Object.fromEntries(Object.entries(todas).filter(([n]) => permitidas.has(n)));
 }
 
-// base44/functions/asistente17/_core/canales/whatsapp.ts
+// base44/functions/asistente18/_core/canales/whatsapp.ts
 var whatsapp_exports = {};
 __export(whatsapp_exports, {
   enviar: () => enviar,
@@ -3341,7 +3377,7 @@ __export(whatsapp_exports, {
   normalizar: () => normalizar2
 });
 
-// base44/functions/asistente17/_core/canales/media.ts
+// base44/functions/asistente18/_core/canales/media.ts
 async function transcribir(buf, mimeType, openaiKey) {
   const fd = new FormData();
   fd.append("file", new Blob([buf], { type: mimeType }), "audio.ogg");
@@ -3389,7 +3425,7 @@ async function describirImagen(buf, mimeType, openaiKey, caption) {
   return ((await r.json()).choices?.[0]?.message?.content || "").trim() || null;
 }
 
-// base44/functions/asistente17/_core/canales/whatsapp.ts
+// base44/functions/asistente18/_core/canales/whatsapp.ts
 var GRAPH = "https://graph.facebook.com/v19.0";
 var esWhatsApp = (body) => !!body?.entry?.[0]?.changes;
 var conIndicativo = (t) => {
@@ -3481,7 +3517,7 @@ async function marcarEscribiendo(msgId, env) {
   }
 }
 
-// base44/functions/asistente17/_core/canales/telegram.ts
+// base44/functions/asistente18/_core/canales/telegram.ts
 var telegram_exports = {};
 __export(telegram_exports, {
   enviar: () => enviar2,
@@ -3571,7 +3607,7 @@ async function marcarEscribiendo2(destino, env) {
   }
 }
 
-// base44/functions/asistente17/_core/canales/bots.ts
+// base44/functions/asistente18/_core/canales/bots.ts
 var VAR_POR_AGENTE = {
   recepcion: "TELEGRAM_BOT_RECEPCION",
   ventas: "TELEGRAM_BOT_VENTAS",
@@ -3592,7 +3628,7 @@ function agenteDeUrl(url) {
   return v && esAgente(v) ? v : null;
 }
 
-// base44/functions/asistente17/_core/webhook.ts
+// base44/functions/asistente18/_core/webhook.ts
 async function firmaMetaValida(rawBody, header, secret) {
   if (!header?.startsWith("sha256=") || !secret) return false;
   const hex = header.slice("sha256=".length);
@@ -3625,7 +3661,7 @@ function secretoIgual(recibido, esperado) {
   return diferencia === 0;
 }
 
-// base44/functions/asistente17/entry.ts
+// base44/functions/asistente18/entry.ts
 var SALUDO = "Hola, soy Diana de INMOBILIARE Julio Corredor.";
 function puedeDiagnosticar(entrada) {
   if (entrada.canal === "telegram") return true;
