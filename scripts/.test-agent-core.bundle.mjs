@@ -1242,6 +1242,14 @@ var buscarInmuebles = {
         TIPOS_OFRECIBLES
       ),
       presupuesto_max: numOpc("Tope en pesos. null si no lo ha dicho."),
+      // El rango de abajo importa tanto como el de arriba, y se perdia. Un
+      // cliente que dice "de 6 a 8 millones" esta diciendo las DOS cosas: que
+      // puede pagar 8 y que por debajo de 6 no le interesa, porque sabe que ahi
+      // el inmueble no tiene lo que busca. Sin este campo se le mandaba uno de
+      // 4,2 millones de 49 m2 y una habitacion, que cumple el tope y no sirve.
+      presupuesto_min: numOpc(
+        'Piso en pesos, cuando el cliente da un rango ("de 6 a 8 millones" -> 6000000). null si solo dio un tope o nada.'
+      ),
       habitaciones_min: numOpc("Minimo de habitaciones. null si no aplica."),
       banos_min: numOpc("Minimo de banos. null si no lo ha pedido."),
       // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
@@ -1257,6 +1265,7 @@ var buscarInmuebles = {
     const esArr = input.operacion === "arriendo";
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
+    const piso = Number(input.presupuesto_min) || 0;
     const habs = Number(input.habitaciones_min) || 0;
     const banos = Number(input.banos_min) || 0;
     const comodidades = (Array.isArray(input.caracteristicas) ? input.caracteristicas : []).map((x) => normalizarZona(x)).filter(Boolean);
@@ -1315,16 +1324,28 @@ var buscarInmuebles = {
         instruccion: `En ${zona.nombre} en ${operacionTxt} tenemos ${dudoso ? "mas de " : ""}${enLaZona.length}: ${enPalabras(porTipo)}. Dilo asi de corto y cierra preguntandole que tipo busca. UNA sola pregunta, y no listes inmuebles todavia: acabas de darle un dato real, no le estas haciendo un cuestionario.`
       };
     }
-    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+    if (!tope && !piso && !c.ctxAgente.presupuesto_preguntado) {
       c.ctxAgente.presupuesto_preguntado = true;
-      const precios = enLaZona.map((p) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      const delTipo = tipo ? enLaZona.filter((p) => normalizarTipo(p.tipo) === tipo) : enLaZona;
+      const precios = delTipo.map((p) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+      if (!delTipo.length) {
+        return {
+          resultado: "cero_bajo_el_filtro",
+          zona: zona.nombre,
+          en_la_zona: enLaZona.length,
+          total_es_exacto: !dudoso,
+          por_tipo: porTipo,
+          instruccion: `En ${zona.nombre} SI hay ${enLaZona.length} en ${operacionTxt}, pero de ese tipo ninguno: ${enPalabras(porTipo)}. Dile las dos cosas y ofrecele otro tipo o otra zona. PROHIBIDO decir que no tenemos nada ahi.`
+        };
+      }
       return {
         resultado: "falta_presupuesto",
         zona: zona.nombre,
+        del_tipo: delTipo.length,
         en_la_zona: enLaZona.length,
         desde: precios.length ? fmtCOP(precios[0]) : null,
         hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
-        instruccion: precios.length ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y sin listar inmuebles todavia.` : "Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta."
+        instruccion: precios.length ? `En ${zona.nombre} tienes ${delTipo.length} de ese tipo, y van desde ${fmtCOP(precios[0])} hasta ${fmtCOP(precios[precios.length - 1])}. Ese numero es SOLO de ese tipo: no digas el total de la zona, que incluye otros. Dile el rango y preguntale en que cifra se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y sin listar inmuebles todavia.` : `Tienes ${delTipo.length} de ese tipo pero ninguno con precio publicado. Preguntale que presupuesto maneja. UNA sola pregunta.`
       };
     }
     let sinPrecioPublicado = 0;
@@ -1339,20 +1360,21 @@ var buscarInmuebles = {
         );
         if (!comodidades.every((q) => suyas.includes(q))) return false;
       }
-      if (tope) {
+      if (tope || piso) {
         const precio = precioDe(p, esArr);
         if (!precio) {
           sinPrecioPublicado++;
           return false;
         }
-        if (precio > tope) return false;
+        if (tope && precio > tope) return false;
+        if (piso && precio < piso * 0.85) return false;
       }
       return true;
     });
     const otrosSinClasificar = tipo ? porTipo.Otro || 0 : 0;
     const filtros = [
       tipo ? `tipo ${tipo.toLowerCase()}` : "",
-      tope ? `hasta ${fmtCOP(tope)}` : "",
+      piso && tope ? `entre ${fmtCOP(piso)} y ${fmtCOP(tope)}` : tope ? `hasta ${fmtCOP(tope)}` : "",
       habs ? `${habs} o mas habitaciones` : "",
       banos ? `${banos} o mas banos` : "",
       comodidades.length ? `con ${comodidades.join(", ")}` : ""
@@ -1374,7 +1396,7 @@ var buscarInmuebles = {
       const pb = precioDe(b, esArr);
       return (pa ? 0 : 1) - (pb ? 0 : 1) || pa - pb;
     });
-    const visibles = orden.slice(0, MOSTRAR);
+    const visibles = orden.length <= MOSTRAR ? orden : Array.from({ length: MOSTRAR }, (_, i) => orden[Math.round(i * (orden.length - 1) / (MOSTRAR - 1))]);
     const antes = Array.isArray(c.ctxAgente.mostrados) ? c.ctxAgente.mostrados : [];
     const nuevos = visibles.map((p) => paraMostrar(p, esArr));
     const vistos = new Set(nuevos.map((m) => m.id));
@@ -3170,6 +3192,7 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
   barrio: null,
   tipo: null,
   presupuesto_max: null,
+  presupuesto_min: null,
   habitaciones_min: null,
   banos_min: null,
   caracteristicas: [],
@@ -4172,6 +4195,63 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   assert.equal(sinPresupuesto.resultado, "falta_presupuesto");
   assert.ok(sinPresupuesto.desde && sinPresupuesto.hasta, "trae el rango real de la zona");
   assert.match(sinPresupuesto.instruccion, /UNA sola pregunta/);
+  const mezcla = nuevoCtx([
+    {
+      id: "a1",
+      codigo_externo: "90-1",
+      operacion: "Arriendo",
+      estado: "Disponible",
+      tipo: "Apartamento",
+      barrio: "Los Rosales",
+      ciudad: "Bogota",
+      canon_arriendo: 5e6,
+      area_m2: 90,
+      habitaciones: 2
+    },
+    {
+      id: "o1",
+      codigo_externo: "90-2",
+      operacion: "Arriendo",
+      estado: "Disponible",
+      tipo: "Oficina",
+      barrio: "Los Rosales",
+      ciudad: "Bogota",
+      canon_arriendo: 6e7,
+      area_m2: 400
+    },
+    {
+      id: "o2",
+      codigo_externo: "90-3",
+      operacion: "Arriendo",
+      estado: "Disponible",
+      tipo: "Oficina",
+      barrio: "Los Rosales",
+      ciudad: "Bogota",
+      canon_arriendo: 9e5,
+      area_m2: 30
+    }
+  ]);
+  const soloAptos = await buscar({ barrio: "rosales", tipo: "Apartamento" }, mezcla);
+  assert.equal(soloAptos.del_tipo, 1, "un apartamento, no los tres de la zona");
+  assert.equal(soloAptos.en_la_zona, 3, "el total de la zona se sigue sabiendo, aparte");
+  assert.match(soloAptos.instruccion, /tienes 1 de ese tipo/);
+  assert.doesNotMatch(soloAptos.instruccion, /60\.000\.000|900\.000/);
+  const nadaDelTipo = nuevoCtx([
+    {
+      id: "o9",
+      codigo_externo: "90-9",
+      operacion: "Arriendo",
+      estado: "Disponible",
+      tipo: "Oficina",
+      barrio: "Los Rosales",
+      ciudad: "Bogota",
+      canon_arriendo: 3e6,
+      area_m2: 50
+    }
+  ]);
+  const sinEseTipo = await buscar({ barrio: "rosales", tipo: "Casa" }, nadaDelTipo);
+  assert.equal(sinEseTipo.resultado, "cero_bajo_el_filtro");
+  assert.match(sinEseTipo.instruccion, /PROHIBIDO decir que no tenemos nada/);
   const segunda = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
   assert.equal(segunda.resultado, "hay", "a la segunda ya no insiste");
   assert.deepEqual(
@@ -4203,5 +4283,72 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   ctx3.ctxAgente.presupuesto_preguntado = true;
   const dos = await buscar({ barrio: "rosales", tipo: "Apartamento", caracteristicas: ["terraza", "piscina"] }, ctx3);
   assert.equal(dos.resultado, "cero_bajo_el_filtro", "ninguno tiene las dos");
+}
+{
+  const enChico = (id, precio, area, hab) => ({
+    id,
+    codigo_externo: "90-" + id,
+    titulo: "Apto",
+    operacion: "Arriendo",
+    estado: "Disponible",
+    tipo: "Apartamento",
+    barrio: "Los Rosales",
+    ciudad: "Bogota",
+    canon_arriendo: precio,
+    area_m2: area,
+    habitaciones: hab,
+    banos: 2
+  });
+  const inventario = [
+    enChico("barato", 42e5, 49, 1),
+    enChico("bajo", 61e5, 90, 2),
+    enChico("medio", 7e6, 120, 3),
+    enChico("alto", 79e5, 160, 3),
+    enChico("caro", 12e6, 200, 4)
+  ];
+  const ctx = nuevoCtx(inventario);
+  const r = await buscar({
+    barrio: "rosales",
+    tipo: "Apartamento",
+    presupuesto_min: 6e6,
+    presupuesto_max: 8e6
+  }, ctx);
+  const ids = r.inmuebles.map((i) => i.id);
+  assert.ok(!ids.includes("barato"), "el de 4,2 millones NO puede salir con un piso de 6");
+  assert.ok(!ids.includes("caro"), "ni el de 12, que se pasa del tope");
+  assert.deepEqual(ids.sort(), ["alto", "bajo", "medio"]);
+  assert.match(r.criterios_aplicados.join(" "), /entre .* y /);
+  const ctx2 = nuevoCtx([enChico("rozando", 54e5, 100, 3), enChico("barato", 42e5, 49, 1)]);
+  const r2 = await buscar({
+    barrio: "rosales",
+    tipo: "Apartamento",
+    presupuesto_min: 6e6,
+    presupuesto_max: 8e6
+  }, ctx2);
+  assert.deepEqual(r2.inmuebles.map((i) => i.id), ["rozando"], "entra el que roza, no el que no");
+}
+{
+  const muchos = Array.from({ length: 20 }, (_, i) => ({
+    id: "p" + i,
+    codigo_externo: "90-" + i,
+    titulo: "Apto",
+    operacion: "Arriendo",
+    estado: "Disponible",
+    tipo: "Apartamento",
+    barrio: "Los Rosales",
+    ciudad: "Bogota",
+    canon_arriendo: 1e6 * (i + 1),
+    area_m2: 50 + i * 10,
+    habitaciones: 2
+  }));
+  const r = await buscar({ barrio: "rosales", tipo: "Apartamento", presupuesto_max: 99e9 }, nuevoCtx(muchos));
+  assert.equal(r.total, 20);
+  assert.equal(r.mostrados, 5);
+  const ids = r.inmuebles.map((i) => i.id);
+  assert.equal(ids[0], "p0", "el suelo");
+  assert.equal(ids[4], "p19", "el techo");
+  assert.notDeepEqual(ids, ["p0", "p1", "p2", "p3", "p4"]);
+  const otra = await buscar({ barrio: "rosales", tipo: "Apartamento", presupuesto_max: 99e9 }, nuevoCtx(muchos));
+  assert.deepEqual(otra.inmuebles.map((i) => i.id), ids, "el orden es estable");
 }
 console.log("agent-core: OK");

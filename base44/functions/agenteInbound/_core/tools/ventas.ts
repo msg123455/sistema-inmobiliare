@@ -378,6 +378,15 @@ export const buscarInmuebles: Tool = {
         TIPOS_OFRECIBLES,
       ),
       presupuesto_max: numOpc('Tope en pesos. null si no lo ha dicho.'),
+      // El rango de abajo importa tanto como el de arriba, y se perdia. Un
+      // cliente que dice "de 6 a 8 millones" esta diciendo las DOS cosas: que
+      // puede pagar 8 y que por debajo de 6 no le interesa, porque sabe que ahi
+      // el inmueble no tiene lo que busca. Sin este campo se le mandaba uno de
+      // 4,2 millones de 49 m2 y una habitacion, que cumple el tope y no sirve.
+      presupuesto_min: numOpc(
+        'Piso en pesos, cuando el cliente da un rango ("de 6 a 8 millones" -> 6000000). '
+        + 'null si solo dio un tope o nada.',
+      ),
       habitaciones_min: numOpc('Minimo de habitaciones. null si no aplica.'),
       banos_min: numOpc('Minimo de banos. null si no lo ha pedido.'),
       // Las comodidades salen del campo `caracteristicas` que manda SIMI, y las
@@ -395,6 +404,7 @@ export const buscarInmuebles: Tool = {
     const esArr = input.operacion === 'arriendo';
     const tipo = normalizarTipo(input.tipo);
     const tope = Number(input.presupuesto_max) || 0;
+    const piso = Number(input.presupuesto_min) || 0;
     const habs = Number(input.habitaciones_min) || 0;
     const banos = Number(input.banos_min) || 0;
     // Se normalizan igual que los barrios: minusculas y sin tildes, porque
@@ -550,21 +560,54 @@ export const buscarInmuebles: Tool = {
     // Se pregunta UNA vez. Si el cliente no lo da y vuelve a insistir, se le
     // muestra lo que hay: repetir la misma pregunta es exactamente como suena un
     // formulario, y ya se aprendio esa leccion con el tipo.
-    if (!tope && !c.ctxAgente.presupuesto_preguntado) {
+    if (!tope && !piso && !c.ctxAgente.presupuesto_preguntado) {
       c.ctxAgente.presupuesto_preguntado = true;
-      const precios = enLaZona.map((p: any) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+
+      // EL CONTEO Y EL RANGO SON DEL TIPO QUE PIDIO, no de toda la zona.
+      //
+      // Aqui yo mismo metí el fallo de siempre. Decia "en Chico Norte tienes 54
+      // de ese tipo, van desde 1,4 hasta 263 millones" contando enLaZona, que
+      // solo filtra por operacion. Los 54 eran oficinas, casas y locales: de
+      // APARTAMENTOS en arriendo hay DOS. Y el rango de 1,4 a 263 millones
+      // mezclaba un local con una casa.
+      //
+      // Un numero dicho con seguridad que no es el que el cliente pregunto hace
+      // exactamente el dano que llevamos todo el dia arreglando.
+      const delTipo = tipo
+        ? enLaZona.filter((p: any) => normalizarTipo(p.tipo) === tipo)
+        : enLaZona;
+      const precios = delTipo.map((p: any) => precioDe(p, esArr)).filter(Boolean).sort((a, b) => a - b);
+
+      // Sin ninguno del tipo pedido no hay rango que ofrecer, y preguntar el
+      // presupuesto seria hacerle perder el tiempo: se le dice ya.
+      if (!delTipo.length) {
+        return {
+          resultado: 'cero_bajo_el_filtro',
+          zona: zona.nombre,
+          en_la_zona: enLaZona.length,
+          total_es_exacto: !dudoso,
+          por_tipo: porTipo,
+          instruccion: `En ${zona.nombre} SI hay ${enLaZona.length} en ${operacionTxt}, pero de ese tipo `
+            + `ninguno: ${enPalabras(porTipo)}. Dile las dos cosas y ofrecele otro tipo o otra zona. `
+            + 'PROHIBIDO decir que no tenemos nada ahi.',
+        };
+      }
+
       return {
         resultado: 'falta_presupuesto',
         zona: zona.nombre,
+        del_tipo: delTipo.length,
         en_la_zona: enLaZona.length,
         desde: precios.length ? fmtCOP(precios[0]) : null,
         hasta: precios.length ? fmtCOP(precios[precios.length - 1]) : null,
         instruccion: precios.length
-          ? `En ${zona.nombre} tienes ${enLaZona.length} de ese tipo, y van desde ${fmtCOP(precios[0])} `
-            + `hasta ${fmtCOP(precios[precios.length - 1])}. Dile ese rango y preguntale en que cifra `
-            + 'se quiere mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola '
-            + 'pregunta y sin listar inmuebles todavia.'
-          : 'Preguntale que presupuesto maneja antes de mostrarle nada. UNA sola pregunta.',
+          ? `En ${zona.nombre} tienes ${delTipo.length} de ese tipo, y van desde ${fmtCOP(precios[0])} `
+            + `hasta ${fmtCOP(precios[precios.length - 1])}. Ese numero es SOLO de ese tipo: no digas el `
+            + 'total de la zona, que incluye otros. Dile el rango y preguntale en que cifra se quiere '
+            + 'mover. Le estas dando un dato util, no haciendole un cuestionario: UNA sola pregunta y '
+            + 'sin listar inmuebles todavia.'
+          : `Tienes ${delTipo.length} de ese tipo pero ninguno con precio publicado. Preguntale que `
+            + 'presupuesto maneja. UNA sola pregunta.',
       };
     }
 
@@ -588,14 +631,18 @@ export const buscarInmuebles: Tool = {
         if (!comodidades.every((q) => suyas.includes(q))) return false;
       }
 
-      if (tope) {
+      if (tope || piso) {
         const precio = precioDe(p, esArr);
         // Un precio en 0 NO es un inmueble gratis: el importador guarda 0 cuando
         // la celda venia vacia. No se puede prometer que cabe en el presupuesto,
         // pero tampoco desaparece en silencio como antes: se cuenta y se dice
         // que existen para que el asesor los confirme.
         if (!precio) { sinPrecioPublicado++; return false; }
-        if (precio > tope) return false;
+        if (tope && precio > tope) return false;
+        // El piso se aplica con holgura: quien dice "de 6 a 8" no rechaza uno de
+        // 5,8 si es el bueno, pero si rechaza el de 4,2. Un 15% por debajo deja
+        // pasar lo que roza el rango sin abrir la puerta a otra categoria.
+        if (piso && precio < piso * 0.85) return false;
       }
       return true;
     });
@@ -606,7 +653,8 @@ export const buscarInmuebles: Tool = {
 
     const filtros = [
       tipo ? `tipo ${tipo.toLowerCase()}` : '',
-      tope ? `hasta ${fmtCOP(tope)}` : '',
+      piso && tope ? `entre ${fmtCOP(piso)} y ${fmtCOP(tope)}`
+        : tope ? `hasta ${fmtCOP(tope)}` : '',
       habs ? `${habs} o mas habitaciones` : '',
       banos ? `${banos} o mas banos` : '',
       comodidades.length ? `con ${comodidades.join(', ')}` : '',
@@ -637,19 +685,40 @@ export const buscarInmuebles: Tool = {
       };
     }
 
-    // ── 8. Hay ────────────────────────────────────────────────────────────
+    // ── 8. Hay. Cuales de todos ellos se le ensenan ────────────────────────
     //
-    // Orden estable y explicable: primero los que tienen precio publicado (no se
-    // puede ofrecer lo que no se sabe cuanto vale) y dentro de esos, el mas
-    // barato. No hay ninguna senal de calidad en la base para ordenar mejor, y
-    // un orden arbitrario es lo que hacia que "revise de nuevo" pudiera devolver
-    // cosas distintas sin que nada hubiera cambiado.
+    // ANTES: los cinco mas baratos. Y eso fallo en produccion de la peor manera.
+    // El cliente dijo "de 6 a 8 millones" y recibio uno de $4.200.000, de 49 m2
+    // y una habitacion: cumplia el tope y era el mas barato, asi que gano. Para
+    // el cliente eso no es una opcion, es una senal de que no lo escucharon.
+    //
+    // AHORA se le ensena un ABANICO del rango que encaja, no la esquina barata.
+    // Se ordena por precio y se toman cinco repartidos: el mas bajo, el mas
+    // alto y tres intermedios. Asi ve de que va el rango y puede decir "mas
+    // como el segundo", que es como avanza una conversacion de verdad.
+    //
+    // POR QUE UN ABANICO Y NO UNA PUNTUACION DE CALIDAD. Porque no hay ninguna
+    // senal de calidad en la base: no hay valoraciones, ni fotos puntuadas, ni
+    // estado del acabado. Inventar un ranking a partir de area y habitaciones
+    // seria decidir por el cliente con datos que no dicen eso. El abanico no
+    // finge saber cual es mejor: le ensena el rango y deja que elija.
+    //
+    // El orden sigue siendo estable y explicable: mismo criterio, misma entrada,
+    // mismo resultado. Eso es lo que impide que "revisa otra vez" devuelva cosas
+    // distintas sin que nada haya cambiado.
     const orden = [...encajan].sort((a: any, b: any) => {
       const pa = precioDe(a, esArr);
       const pb = precioDe(b, esArr);
       return (pa ? 0 : 1) - (pb ? 0 : 1) || pa - pb;
     });
-    const visibles = orden.slice(0, MOSTRAR);
+
+    const visibles = orden.length <= MOSTRAR
+      ? orden
+      // Reparto uniforme sobre la lista ordenada. Con 54 que encajan y 5 huecos
+      // salen las posiciones 0, 13, 26, 39 y 53: el mas barato, el mas caro y
+      // tres que cubren el medio.
+      : Array.from({ length: MOSTRAR }, (_, i) =>
+        orden[Math.round((i * (orden.length - 1)) / (MOSTRAR - 1))]);
 
     // Lo que se le mostro, para que enviar_fichas y agendar_visita resuelvan el
     // id despues. Se guardan CUATRO campos, no la fila entera: esto persiste en

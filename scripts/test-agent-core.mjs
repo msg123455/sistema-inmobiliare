@@ -117,7 +117,8 @@ const nuevoCtx = (props = catalogoDemo, cae = false) => ({
 const ctxCaido = () => nuevoCtx(catalogoDemo, true);
 const buscar = (input, ctx) => buscarInmuebles.ejecutar({
   operacion: 'arriendo', barrio: null, tipo: null,
-  presupuesto_max: null, habitaciones_min: null, banos_min: null, caracteristicas: [], ...input,
+  presupuesto_max: null, presupuesto_min: null, habitaciones_min: null, banos_min: null,
+  caracteristicas: [], ...input,
 }, ctx);
 
 // Buscar YA CALIFICADO: como si el cliente ya hubiera dicho su presupuesto. La
@@ -1495,6 +1496,35 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   assert.ok(sinPresupuesto.desde && sinPresupuesto.hasta, 'trae el rango real de la zona');
   assert.match(sinPresupuesto.instruccion, /UNA sola pregunta/);
 
+  // EL CONTEO ES DEL TIPO QUE PIDIO, no de toda la zona. Esto fallo en
+  // produccion: dijo "en Chico Norte tienes 54 de ese tipo" contando oficinas,
+  // casas y locales, cuando de APARTAMENTOS en arriendo habia dos. Y el rango
+  // "de 1,4 a 263 millones" mezclaba un local con una casa.
+  const mezcla = nuevoCtx([
+    { id: 'a1', codigo_externo: '90-1', operacion: 'Arriendo', estado: 'Disponible', tipo: 'Apartamento',
+      barrio: 'Los Rosales', ciudad: 'Bogota', canon_arriendo: 5_000_000, area_m2: 90, habitaciones: 2 },
+    { id: 'o1', codigo_externo: '90-2', operacion: 'Arriendo', estado: 'Disponible', tipo: 'Oficina',
+      barrio: 'Los Rosales', ciudad: 'Bogota', canon_arriendo: 60_000_000, area_m2: 400 },
+    { id: 'o2', codigo_externo: '90-3', operacion: 'Arriendo', estado: 'Disponible', tipo: 'Oficina',
+      barrio: 'Los Rosales', ciudad: 'Bogota', canon_arriendo: 900_000, area_m2: 30 },
+  ]);
+  const soloAptos = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, mezcla);
+  assert.equal(soloAptos.del_tipo, 1, 'un apartamento, no los tres de la zona');
+  assert.equal(soloAptos.en_la_zona, 3, 'el total de la zona se sigue sabiendo, aparte');
+  assert.match(soloAptos.instruccion, /tienes 1 de ese tipo/);
+  // El rango NO puede venir de la oficina de 60 millones ni de la de 900 mil.
+  assert.doesNotMatch(soloAptos.instruccion, /60\.000\.000|900\.000/);
+
+  // Y si de ese tipo no hay ninguno, se dice ya en vez de preguntar el
+  // presupuesto para nada. Sin negar que la zona tenga inventario.
+  const nadaDelTipo = nuevoCtx([
+    { id: 'o9', codigo_externo: '90-9', operacion: 'Arriendo', estado: 'Disponible', tipo: 'Oficina',
+      barrio: 'Los Rosales', ciudad: 'Bogota', canon_arriendo: 3_000_000, area_m2: 50 },
+  ]);
+  const sinEseTipo = await buscar({ barrio: 'rosales', tipo: 'Casa' }, nadaDelTipo);
+  assert.equal(sinEseTipo.resultado, 'cero_bajo_el_filtro');
+  assert.match(sinEseTipo.instruccion, /PROHIBIDO decir que no tenemos nada/);
+
   // Y se pregunta UNA vez. Si el cliente no contesta y se busca de nuevo, se le
   // muestra lo que hay: repetir la misma pregunta es como suena un formulario.
   const segunda = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
@@ -1538,6 +1568,77 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   ctx3.ctxAgente.presupuesto_preguntado = true;
   const dos = await buscar({ barrio: 'rosales', tipo: 'Apartamento', caracteristicas: ['terraza', 'piscina'] }, ctx3);
   assert.equal(dos.resultado, 'cero_bajo_el_filtro', 'ninguno tiene las dos');
+}
+
+// ── "De 6 a 8 millones" y le mandan uno de 4,2 ──────────────────────────────
+//
+// Paso en produccion, en Chico Norte. El cliente dijo su rango, el filtro solo
+// miraba el TOPE, y el orden era "el mas barato primero": gano un apartamento de
+// $4.200.000, 49 m2 y una habitacion. Cumplia el tope y no servia. Para el
+// cliente eso no es una opcion, es la senal de que no lo escucharon.
+{
+  const enChico = (id, precio, area, hab) => ({
+    id, codigo_externo: '90-' + id, titulo: 'Apto', operacion: 'Arriendo', estado: 'Disponible',
+    tipo: 'Apartamento', barrio: 'Los Rosales', ciudad: 'Bogota',
+    canon_arriendo: precio, area_m2: area, habitaciones: hab, banos: 2,
+  });
+  const inventario = [
+    enChico('barato', 4_200_000, 49, 1),
+    enChico('bajo', 6_100_000, 90, 2),
+    enChico('medio', 7_000_000, 120, 3),
+    enChico('alto', 7_900_000, 160, 3),
+    enChico('caro', 12_000_000, 200, 4),
+  ];
+  const ctx = nuevoCtx(inventario);
+  const r = await buscar({
+    barrio: 'rosales', tipo: 'Apartamento',
+    presupuesto_min: 6_000_000, presupuesto_max: 8_000_000,
+  }, ctx);
+
+  const ids = r.inmuebles.map((i) => i.id);
+  assert.ok(!ids.includes('barato'), 'el de 4,2 millones NO puede salir con un piso de 6');
+  assert.ok(!ids.includes('caro'), 'ni el de 12, que se pasa del tope');
+  assert.deepEqual(ids.sort(), ['alto', 'bajo', 'medio']);
+  // El rango completo se nombra, no solo el tope.
+  assert.match(r.criterios_aplicados.join(' '), /entre .* y /);
+
+  // La holgura del 15% por debajo: quien dice "de 6 a 8" no rechaza uno de 5,8
+  // si es el bueno, pero si el de 4,2.
+  const ctx2 = nuevoCtx([enChico('rozando', 5_400_000, 100, 3), enChico('barato', 4_200_000, 49, 1)]);
+  const r2 = await buscar({
+    barrio: 'rosales', tipo: 'Apartamento',
+    presupuesto_min: 6_000_000, presupuesto_max: 8_000_000,
+  }, ctx2);
+  assert.deepEqual(r2.inmuebles.map((i) => i.id), ['rozando'], 'entra el que roza, no el que no');
+}
+
+// ── Se ensena el abanico del rango, no la esquina barata ────────────────────
+//
+// Con 54 que encajan y 5 huecos, mandar los 5 mas baratos le da al cliente una
+// idea falsa de lo que hay. El abanico le ensena el suelo, el techo y el medio,
+// para que pueda decir "mas como el tercero", que es como avanza de verdad una
+// conversacion.
+{
+  const muchos = Array.from({ length: 20 }, (_, i) => ({
+    id: 'p' + i, codigo_externo: '90-' + i, titulo: 'Apto', operacion: 'Arriendo',
+    estado: 'Disponible', tipo: 'Apartamento', barrio: 'Los Rosales', ciudad: 'Bogota',
+    canon_arriendo: 1_000_000 * (i + 1), area_m2: 50 + i * 10, habitaciones: 2,
+  }));
+  const r = await buscar({ barrio: 'rosales', tipo: 'Apartamento', presupuesto_max: 99e9 }, nuevoCtx(muchos));
+
+  assert.equal(r.total, 20);
+  assert.equal(r.mostrados, 5);
+  const ids = r.inmuebles.map((i) => i.id);
+  // El mas barato y el mas caro SIEMPRE estan: son los bordes del rango.
+  assert.equal(ids[0], 'p0', 'el suelo');
+  assert.equal(ids[4], 'p19', 'el techo');
+  // Y no son los cinco baratos pegados.
+  assert.notDeepEqual(ids, ['p0', 'p1', 'p2', 'p3', 'p4']);
+
+  // Mismo criterio, misma entrada, mismo resultado: "revisa otra vez" no puede
+  // devolver cosas distintas sin que nada haya cambiado.
+  const otra = await buscar({ barrio: 'rosales', tipo: 'Apartamento', presupuesto_max: 99e9 }, nuevoCtx(muchos));
+  assert.deepEqual(otra.inmuebles.map((i) => i.id), ids, 'el orden es estable');
 }
 
 console.log('agent-core: OK');
