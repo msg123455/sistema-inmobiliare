@@ -1,540 +1,394 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  Upload, FolderOpen, FileSpreadsheet, CheckCircle2, AlertTriangle,
-  Loader2, ShieldCheck, ExternalLink, Barcode,
+  FileSpreadsheet, Loader2, ShieldCheck, AlertTriangle, PlayCircle, Download, ArrowRight,
+  HardDrive, ExternalLink, ClipboardCopy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { parsearCSV, filasAObjetos } from '@/lib/csv';
-import { leerArchivo } from '@/lib/archivos';
 import { callFunction, FUNCIONES } from '@/lib/backend';
-import { conciliar, construirDirectorio, leerNombreArchivo } from '@/lib/conciliar';
+import { aCSV, aTSV, construirDirectorio, rellenarLinks } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
-import { base44 } from '@/api/base44Client';
-import PasoCampana from '@/components/cartera/PasoCampana';
+import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 
 /**
- * Codigos de barras del mes: de la carpeta de SIMI al correo, sin copiar URLs.
+ * Codigos de barras del mes: entra el listado sin links, sale con ellos.
  *
- * Lo que reemplaza: alguien abria Mailchimp, buscaba la URL de cada codigo, la
- * copiaba y la pegaba en la fila del inquilino. Seiscientas veces. La revision
- * manual existia porque un codigo en la fila equivocada hace que un inquilino
- * pague la cuenta de otro.
+ * El trabajo que reemplaza: alguien abria Mailchimp, buscaba la URL de cada
+ * codigo, la copiaba y la pegaba en la fila del inquilino. Seiscientas veces.
  *
- * Los pasos van en este orden y no se pueden saltar, porque todo lo reversible
- * ocurre ANTES de lo irreversible: se lee, se concilia y lo revisa una persona;
- * solo entonces se sube algo a Mailchimp. Si hay un contrato duplicado, se para
- * sin haber tocado la carpeta del mes.
+ * La oficina sube los PDFs a la carpeta del mes en Mailchimp, como siempre. Esta
+ * pantalla NO pide esos archivos: los lee de la carpeta. Lo unico que se sube
+ * aqui es el listado de inquilinos, que es lo que Mailchimp no sabe.
+ *
+ * NO ENVIA NADA. Lee la carpeta y el listado, y devuelve el listado completo.
+ * No toca audiencias, no crea campanas, y en todo el sistema no existe una linea
+ * capaz de mandar un correo a un inquilino.
+ *
+ * Si el listado que se sube YA trae los links —el de un mes ya enviado— se
+ * aprovecha para comprobar el resultado contra lo que de verdad se envio. Sobre
+ * agosto: 592 de 592 identicos. Sirve para ensenar la pantalla sin arriesgar
+ * nada, porque hay respuesta correcta con la que comparar.
  */
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
   'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-const LOTE_SUBIDA = 25;   // archivos por llamada; el backend corta por reloj
-
-function Alerta({ children, tono = 'error' }) {
-  const clase = tono === 'error'
-    ? 'text-destructive bg-destructive/10'
-    : 'text-amber-700 dark:text-amber-400 bg-amber-500/10';
-  return (
-    <div className={`flex items-start gap-2.5 text-sm rounded-xl p-4 ${clase}`}>
-      <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-      <div className="min-w-0">{children}</div>
-    </div>
-  );
-}
-
-function Paso({ n, titulo, hecho, children, deshabilitado }) {
-  return (
-    <Card className={`rounded-2xl border-border/60 ${deshabilitado ? 'opacity-50 pointer-events-none' : ''}`}>
-      <CardContent className="p-5 space-y-3">
-        <div className="flex items-center gap-2.5">
-          <span className={`w-6 h-6 rounded-full grid place-items-center text-xs font-semibold
-            ${hecho ? 'bg-green-600 text-white' : 'bg-muted text-muted-foreground'}`}>
-            {hecho ? '✓' : n}
-          </span>
-          <h2 className="text-sm font-semibold">{titulo}</h2>
-        </div>
-        {children}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** Cubo de excepciones con exportacion, para que nada quede solo en pantalla. */
-function Cubo({ titulo, items, describe, tono = 'aviso' }) {
-  if (!items?.length) return null;
-  const exportar = () => {
-    const csv = ['detalle', ...items.map((x) => `"${String(describe(x)).replace(/"/g, '""')}"`)].join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    a.download = `${titulo.toLowerCase().replace(/\s+/g, '-')}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
-  return (
-    <div className={`rounded-lg p-3 text-xs ${tono === 'error' ? 'bg-destructive/10' : 'bg-muted/50'}`}>
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className={`font-medium ${tono === 'error' ? 'text-destructive' : ''}`}>
-          {titulo}: {items.length}
-        </span>
-        <button onClick={exportar} className="text-primary hover:underline presionable">exportar</button>
-      </div>
-      <ul className="space-y-0.5 max-h-32 overflow-y-auto text-muted-foreground">
-        {items.slice(0, 40).map((x, i) => <li key={i} className="truncate">{describe(x)}</li>)}
-        {items.length > 40 && <li className="italic">…y {items.length - 40} mas (usa exportar)</li>}
-      </ul>
-    </div>
-  );
-}
-
 export default function CodigosMensuales() {
-  const refCarpeta = useRef(null);
   const refCsv = useRef(null);
-
+  // El mes corriente, no uno quemado: en septiembre la pantalla debe abrir en
+  // septiembre sola.
   const hoy = new Date();
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
-
-  const [estado, setEstado] = useState(null);       // resultado de la sonda
-  const [archivos, setArchivos] = useState([]);     // { nombre, file }
-  const [directorio, setDirectorio] = useState(null);
-  const [revisado, setRevisado] = useState(false);
+  const [entrada, setEntrada] = useState(null);
   const [corriendo, setCorriendo] = useState(false);
-  const [progreso, setProgreso] = useState(null);
-  const [resultado, setResultado] = useState(null);
-  const [paraCampana, setParaCampana] = useState(null);
+  const [fase, setFase] = useState('');
+  const [res, setRes] = useState(null);
+  const [subiendo, setSubiendo] = useState(false);
+  const drive = useGoogleDrive();
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
-  // La sonda va primero y bloquea el resto. Base44 descarta en silencio los
-  // campos que no existen: sin esta comprobacion la subida "funcionaria" y los
-  // sha256 se perderian en las 600 filas sin un solo error visible.
-  useEffect(() => {
-    callFunction(FUNCIONES.codigos, { modo: 'sonda' })
-      .then(setEstado)
-      .catch((e) => setEstado({ error: e.message }));
-  }, []);
-
-  const listo = estado?.listo === true;
-
-  const elegirCarpeta = (lista) => {
-    const pdfs = [...(lista || [])].filter((f) => /\.pdf$/i.test(f.name));
-    if (!pdfs.length) { toast.error('Esa carpeta no tiene PDFs'); return; }
-    setArchivos(pdfs.map((f) => ({ nombre: f.name, file: f })));
-    setResultado(null);
-    setRevisado(false);
-    // El mes sale de los propios archivos: es mas fiable que la fecha de hoy,
-    // que el 1 de septiembre apuntaria al mes equivocado.
-    const detectado = pdfs.map((f) => leerNombreArchivo(f.name)).find(Boolean);
-    if (detectado) setMes(detectado.mes);
-    toast.success(`${pdfs.length} PDFs leidos`);
-  };
-
-  const leerListado = async (file) => {
+  const leer = async (file) => {
     if (!file) return;
     try {
       const { filas } = filasAObjetos(parsearCSV(await file.text()));
-      const dir = construirDirectorio(filas);
-      if (!dir.entradas.length) { toast.error('No se reconocio ningun contrato en ese archivo'); return; }
-      setDirectorio(dir);
-      setResultado(null);
-      setRevisado(false);
-      toast.success(`${dir.entradas.length} contratos aprendidos`);
-    } catch (e) {
-      toast.error(`No se pudo leer: ${e.message}`);
-    }
+      const utiles = filas.filter((r) => r.Id || r.Nombre || r.Correo);
+      if (!utiles.length) { toast.error('Ese archivo no tiene filas con datos'); return; }
+      setEntrada({ nombre: file.name, filas: utiles, traeLinks: utiles.some((r) => r.Archivo) });
+      setRes(null);
+      toast.success(`${utiles.length} filas leídas`);
+    } catch (e) { toast.error(`No se pudo leer: ${e.message}`); }
   };
 
-  // Conciliacion en vivo: es una funcion pura, no toca red, asi que recalcular
-  // en cada cambio no cuesta nada y el informe siempre refleja lo que hay.
-  const conciliacion = useMemo(() => {
-    if (!archivos.length || !directorio) return null;
-    return conciliar({
-      archivos: archivos.map((a) => ({ nombre: a.nombre, url: '' })),
-      directorio: directorio.entradas,
-      opciones: { mesEsperado: mes },
-    });
-  }, [archivos, directorio, mes]);
-
-  const bloqueado = (conciliacion?.bloqueos?.length || 0) > 0;
-  const puedeCorrer = listo && conciliacion && !bloqueado && revisado && !corriendo;
-
-  const ejecutar = async () => {
-    setCorriendo(true);
-    setResultado(null);
-    const acum = { subidos: 0, verificados: 0, errores: [], fallidos: [] };
-
+  const correr = async () => {
+    setCorriendo(true); setRes(null);
     try {
-      const prep = await callFunction(FUNCIONES.codigos, { modo: 'preparar', periodo });
-      const yaSubidos = new Set(prep.ya_subidos || []);
+      setFase('Leyendo la carpeta del mes en Mailchimp');
+      let desde = 0; let vueltas = 0; const archivos = []; let carpeta = null;
+      while (desde !== null && vueltas < 16) {
+        const r = await callFunction(FUNCIONES.codigos, { modo: 'indexarMes', periodo, desde });
+        carpeta = r.carpeta;
+        archivos.push(...(r.encontrados || []));
+        setFase(`Leyendo Mailchimp… ${archivos.length} códigos encontrados`);
+        desde = r.siguiente; vueltas++;
+      }
 
-      // Solo lo que falta: si una corrida anterior murio en el archivo 400, esta
-      // sube los 200 que quedaron y no repite los primeros.
-      const pendientes = conciliacion.emparejados.filter((e) => !yaSubidos.has(e.codigo));
-      if (yaSubidos.size) toast.info(`${yaSubidos.size} ya estaban subidos, se omiten`);
+      setFase('Emparejando');
+      // Si el archivo trae links, sirven de segunda llave. Si no, se empareja
+      // solo por orden, que es lo que ocurre con un mes de verdad.
+      const directorio = entrada.traeLinks ? construirDirectorio(entrada.filas).entradas : [];
+      const out = rellenarLinks({ filas: entrada.filas, archivos, directorio });
 
-      const porNombre = new Map(archivos.map((a) => [a.nombre, a.file]));
-      let hechos = 0;
-
-      for (let i = 0; i < pendientes.length; i += LOTE_SUBIDA) {
-        const grupo = pendientes.slice(i, i + LOTE_SUBIDA);
-        setProgreso({ fase: 'Subiendo', hechas: hechos, total: pendientes.length });
-
-        // Los bytes se leen aqui, justo antes de mandarlos, para no tener 600
-        // PDFs en memoria a la vez.
-        const items = [];
-        for (const e of grupo) {
-          const file = porNombre.get(e.archivo);
-          if (!file) { acum.errores.push(`${e.codigo}: no se encontro el archivo`); continue; }
-          const { sha256, base64 } = await leerArchivo(file);
-          items.push({ codigo: e.codigo, archivo: e.archivo, base64, sha256, email: e.email, nombre: e.nombre });
+      // Comprobacion, solo posible con un mes ya enviado.
+      let verif = null;
+      if (out.ok && entrada.traeLinks) {
+        let iguales = 0; const distintos = [];
+        for (const f of out.filas) {
+          const real = String(entrada.filas.find((r) => String(r.Id).trim() === f.documento && r.Archivo)?.Archivo || '');
+          if (!real) continue;
+          if (real === f.url) iguales++; else distintos.push(f);
         }
-
-        let desde = 0;
-        while (desde !== null) {
-          const r = await callFunction(FUNCIONES.codigos, {
-            modo: 'subir', periodo, folder_id: prep.folder_id, items, desde,
-          });
-          acum.subidos += r.subidos || 0;
-          if (r.errores?.length) acum.errores.push(...r.errores);
-          desde = r.siguiente;
-        }
-        hechos += grupo.length;
+        verif = { iguales, distintos };
       }
 
-      // Verificacion de ida y vuelta: descarga cada URL y recalcula la huella.
-      // Es lo que prueba que la URL del correo de un inquilino sirve exactamente
-      // su recibo, byte a byte.
-      let desde = 0;
-      while (desde !== null) {
-        setProgreso({ fase: 'Verificando', hechas: acum.verificados, total: pendientes.length });
-        const r = await callFunction(FUNCIONES.codigos, { modo: 'verificar', periodo, desde });
-        acum.verificados += r.verificados || 0;
-        if (r.fallidos?.length) acum.fallidos.push(...r.fallidos);
-        desde = r.siguiente;
-      }
-
-      // Las URL para la campana se leen de CodigoBarras, no de lo que devolvio
-      // la subida: si una corrida anterior ya habia subido parte del mes, esas
-      // URL solo viven en la tabla. El libro mayor es la fuente, no la sesion.
-      setProgreso({ fase: 'Leyendo las URL guardadas', hechas: 0, total: 1 });
-      const filas = (await base44.entities.CodigoBarras.list())
-        .filter((f) => f.periodo === periodo && f.url_pdf);
-      const urlPorCodigo = new Map(filas.map((f) => [String(f.codigo), f.url_pdf]));
-
-      // Se reagrupa por correo con las URL puestas: quien tiene un inmueble va a
-      // la campana masiva y quien tiene varios a un correo con todos, que es lo
-      // que evita que se le pierda uno en silencio.
-      const porCorreo = new Map();
-      for (const e of conciliacion.emparejados) {
-        const url = urlPorCodigo.get(e.codigo);
-        if (!url || !e.enviable) continue;
-        const k = e.email.toLowerCase();
-        if (!porCorreo.has(k)) porCorreo.set(k, []);
-        porCorreo.get(k).push({ ...e, url });
-      }
-      const uno = []; const varios = [];
-      for (const [email, grupo] of porCorreo) {
-        if (grupo.length === 1) uno.push(grupo[0]);
-        else varios.push({ email, nombre: grupo[0].nombre, codigos: grupo });
-      }
-      setParaCampana({ campana: uno, multiContrato: varios });
-
-      setResultado(acum);
-      setProgreso(null);
-      if (acum.fallidos.length) toast.error(`${acum.fallidos.length} no verificaron`);
-      else toast.success(`${acum.subidos} codigos subidos y verificados`);
+      setRes({ carpeta, archivos: archivos.length, out, verif });
+      if (!out.ok) toast.error(out.mensaje);
+      else toast.success(`${out.resumen.conLink} inquilinos con su link`);
     } catch (e) {
-      setResultado({ ...acum, error: e.message });
+      toast.error(e.message);
+      setRes({ error: e.message });
+    } finally { setCorriendo(false); setFase(''); }
+  };
+
+  const nombreArchivo = `codigos-${periodo}-con-links`;
+
+  /**
+   * Copia el listado al portapapeles en TSV. Es el camino mas corto a Sheets:
+   * abrir una hoja en blanco y pegar. Sin descargas, sin importar, sin conectar
+   * ninguna cuenta.
+   *
+   * navigator.clipboard exige contexto seguro (https) y a veces permiso; el
+   * fallback con textarea + execCommand funciona donde eso falla, que suele ser
+   * justo el navegador de la oficina.
+   */
+  const copiarParaSheets = async () => {
+    const tsv = aTSV(res.out.filas);
+    try {
+      await navigator.clipboard.writeText(tsv);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = tsv;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (!ok) { toast.error('El navegador no dejó copiar. Usa el botón de descargar.'); return; }
+    }
+    toast.success(`${res.out.filas.length} filas copiadas · abre una hoja en Sheets y pega`);
+  };
+
+  const descargar = () => {
+    const csv = aCSV(res.out.filas);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${nombreArchivo}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast.success('Descargado');
+  };
+
+  /**
+   * Sube el MISMO CSV que descarga el boton de al lado. El BOM lo quita la
+   * funcion backend: aqui hace falta para que Excel respete los acentos, y solo
+   * estorba al convertir a Sheets.
+   *
+   * El enlace resultante se guarda DENTRO de `res`, no en un estado aparte: hay
+   * cuatro sitios que hacen setRes(null) y olvidar uno dejaria en pantalla un
+   * enlace a la hoja del mes anterior.
+   */
+  const subirADrive = async () => {
+    setSubiendo(true);
+    try {
+      if (!drive.conectado) {
+        const quedo = await drive.conectar();
+        if (!quedo) { toast.error('No quedó conectado. Inténtalo otra vez.'); return; }
+      }
+      const r = await drive.subirCsvComoHoja({ csv: aCSV(res.out.filas), nombre: nombreArchivo });
+      if (!r.ok) { toast.error(r.detalle ? `${r.mensaje} (${r.detalle})` : r.mensaje); return; }
+      setRes((prev) => ({ ...prev, hoja: r }));
+      toast.success(r.creado ? 'Hoja creada en tu Drive' : 'Hoja actualizada en tu Drive');
+    } catch (e) {
       toast.error(e.message);
     } finally {
-      setCorriendo(false);
+      setSubiendo(false);
     }
   };
 
-  // Muestra de auditoria: 10 filas para revisar a ojo antes de dejar correr nada.
-  const muestra = useMemo(() => {
-    if (!conciliacion?.emparejados?.length) return [];
-    const t = conciliacion.emparejados;
-    const paso = Math.max(1, Math.floor(t.length / 10));
-    return t.filter((_, i) => i % paso === 0).slice(0, 10);
-  }, [conciliacion]);
+  const r = res?.out;
 
   return (
     <div className="space-y-5">
       <EncabezadoModulo
         titulo="Códigos de barras del mes"
-        resumen="Sube la carpeta de SIMI y el sistema empareja cada código con su inquilino. Las URL se capturan al subirlas a Mailchimp: no hay que copiar ninguna."
+        resumen="Sube el listado de inquilinos y el sistema le pone a cada uno el link de su código, leyéndolo de la carpeta del mes en Mailchimp."
       />
 
-      {/* 1. Estado */}
-      <Paso n={1} titulo="Estado del sistema" hecho={listo}>
-        {!estado ? (
-          <p className="text-xs text-muted-foreground">Comprobando…</p>
-        ) : estado.error && !estado.ping ? (
-          <Alerta>
-            <p className="font-medium">No se puede conectar con Mailchimp</p>
-            <p className="mt-1 text-muted-foreground break-words">{estado.error}</p>
-          </Alerta>
-        ) : estado.campos_faltantes?.length ? (
-          <Alerta>
-            <p className="font-medium">Faltan {estado.campos_faltantes.length} campos en CodigoBarras</p>
-            <p className="mt-1">
-              Sin <strong>{estado.campos_faltantes.join(', ')}</strong> no hay verificación ni auditoría.
-              Base44 los descarta en silencio, así que la subida parecería funcionar sin guardar nada.
+      <div className="flex items-start gap-2.5 text-sm bg-muted/50 rounded-xl p-4">
+        <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+        <div>
+          <p className="font-medium">No le llega nada a ningún inquilino</p>
+          <p className="text-muted-foreground mt-0.5">
+            Los PDFs los suben ustedes a Mailchimp como siempre; aquí solo se leen. Esta pantalla
+            no toca audiencias, no crea campañas y no envía correo. Puedes correrla las veces que
+            quieras.
+          </p>
+        </div>
+      </div>
+
+      <Card className="rounded-2xl border-border/60">
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center gap-2 text-sm flex-wrap">
+            <span className="text-muted-foreground">Mes:</span>
+            <select value={mes} onChange={(e) => { setMes(Number(e.target.value)); setRes(null); }}
+                    className="bg-muted rounded-md px-2 py-1 text-sm">
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <input type="number" value={anio} onChange={(e) => { setAnio(Number(e.target.value)); setRes(null); }}
+                   className="bg-muted rounded-md px-2 py-1 w-24 text-sm" />
+            <span className="text-xs text-muted-foreground">
+              → carpeta «{MESES[mes - 1]} {anio}» de Mailchimp
+            </span>
+          </div>
+
+          <input ref={refCsv} type="file" accept=".csv,.tsv,.txt" className="hidden"
+                 onChange={(e) => leer(e.target.files?.[0])} />
+          <div onClick={() => refCsv.current?.click()}
+               className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+            <FileSpreadsheet className="w-7 h-7 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm font-medium">
+              {entrada ? entrada.nombre : 'Sube el listado de inquilinos del mes (CSV)'}
             </p>
-            <p className="mt-1 text-muted-foreground">Créalos en Base44 → Datos → CodigoBarras, todos de tipo texto.</p>
-          </Alerta>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="default" className="text-[11px]">Mailchimp conectado</Badge>
-            <Badge variant="default" className="text-[11px]">Acepta PDF</Badge>
-            {estado.hash_coincide && <Badge variant="default" className="text-[11px]">Verificación por huella</Badge>}
-            <Badge variant="default" className="text-[11px]">Esquema completo</Badge>
-          </div>
-        )}
-      </Paso>
-
-      {/* 2. Carpeta */}
-      <Paso n={2} titulo="Carpeta de códigos descargada de SIMI" hecho={archivos.length > 0} deshabilitado={!listo}>
-        <input
-          ref={refCarpeta} type="file" webkitdirectory="" multiple
-          accept="application/pdf" className="hidden"
-          onChange={(e) => elegirCarpeta(e.target.files)}
-        />
-        <div
-          onClick={() => refCarpeta.current?.click()}
-          className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-        >
-          <FolderOpen className="w-7 h-7 mx-auto text-muted-foreground mb-2" />
-          <p className="text-sm font-medium">
-            {archivos.length ? `${archivos.length} PDFs seleccionados` : 'Elige la carpeta con los códigos'}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Los archivos no salen de tu computador hasta que apruebes el informe
-          </p>
-        </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-muted-foreground">Periodo:</span>
-          <select value={mes} onChange={(e) => setMes(Number(e.target.value))}
-                  className="bg-muted rounded-md px-2 py-1 text-xs">
-            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
-          <input type="number" value={anio} onChange={(e) => setAnio(Number(e.target.value))}
-                 className="bg-muted rounded-md px-2 py-1 w-20 text-xs" />
-          <span className="text-muted-foreground">→ carpeta «{MESES[mes - 1]} {anio}» en Mailchimp</span>
-        </div>
-      </Paso>
-
-      {/* 3. Directorio */}
-      <Paso n={3} titulo="Listado de inquilinos" hecho={!!directorio} deshabilitado={!archivos.length}>
-        <input ref={refCsv} type="file" accept=".csv,.tsv,.txt" className="hidden"
-               onChange={(e) => leerListado(e.target.files?.[0])} />
-        <div
-          onClick={() => refCsv.current?.click()}
-          className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
-        >
-          <FileSpreadsheet className="w-7 h-7 mx-auto text-muted-foreground mb-2" />
-          <p className="text-sm font-medium">
-            {directorio ? `${directorio.entradas.length} contratos aprendidos` : 'Sube el listado de un mes anterior (CSV)'}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            El que ya tiene las URL. De ahí se aprende qué contrato es de quién.
-          </p>
-        </div>
-        {directorio?.conflictos?.length > 0 && (
-          <Alerta tono="aviso">
-            {directorio.conflictos.length} contratos aparecen con dos inquilinos distintos. Se usó el primero.
-          </Alerta>
-        )}
-      </Paso>
-
-      {/* 4. Conciliacion */}
-      {conciliacion && (
-        <Paso n={4} titulo="Conciliación" hecho={!bloqueado}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Metrica etiqueta="Emparejados" valor={conciliacion.resumen.emparejados} tono="exito" />
-            <Metrica etiqueta="A campaña" valor={conciliacion.resumen.campana} />
-            <Metrica etiqueta="Correo aparte" valor={conciliacion.resumen.multiContrato}
-                     tono={conciliacion.resumen.multiContrato ? 'curso' : 'neutro'} />
-            <Metrica etiqueta="Bloqueos" valor={conciliacion.bloqueos.length}
-                     tono={bloqueado ? 'peligro' : 'exito'} />
-          </div>
-
-          {bloqueado && (
-            <Alerta>
-              <p className="font-medium">No se puede continuar: {conciliacion.bloqueos.length} problemas sin resolver</p>
-              <ul className="mt-1.5 space-y-1 text-xs">
-                {conciliacion.bloqueos.slice(0, 8).map((b, i) => <li key={i}>· {b.detalle}</li>)}
-              </ul>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Son casos donde no hay forma de saber qué código le toca a quién. Adivinar es
-                exactamente el error que este proceso existe para evitar.
-              </p>
-            </Alerta>
-          )}
-
-          {conciliacion.resumen.multiContrato > 0 && (
-            <Alerta tono="aviso">
-              <p className="font-medium">
-                {conciliacion.resumen.multiContrato} inquilinos tienen más de un inmueble
-                ({conciliacion.resumen.codigosEnMultiContrato} códigos)
-              </p>
-              <p className="mt-1 text-xs">
-                Salen de la campaña masiva: un contacto de Mailchimp guarda un solo valor por
-                campo, así que recibirían uno de sus códigos y el otro se perdería sin aviso.
-                Van en un correo aparte con todos.
-              </p>
-            </Alerta>
-          )}
-
-          <div className="grid md:grid-cols-2 gap-2">
-            <Cubo titulo="Códigos sin inquilino conocido" items={conciliacion.excepciones.archivoSinInquilino}
-                  describe={(x) => `${x.archivo} (contrato ${x.codigo})`} />
-            <Cubo titulo="Inquilinos sin código este mes" items={conciliacion.excepciones.inquilinoSinArchivo}
-                  describe={(x) => `${x.nombre || x.email} (contrato ${x.clave})`} />
-            <Cubo titulo="Nombre de archivo no reconocido" items={conciliacion.excepciones.nombreNoReconocido}
-                  describe={(x) => x.nombre} />
-            <Cubo titulo="De otro mes" items={conciliacion.excepciones.mesDistinto}
-                  describe={(x) => `${x.archivo} (mes ${x.mes})`} tono="error" />
-            <Cubo titulo="Correo inválido" items={conciliacion.excepciones.correoInvalido}
-                  describe={(x) => `${x.email} — ${x.nombre}`} tono="error" />
-            <Cubo titulo="Sin correo" items={conciliacion.excepciones.sinCorreo}
-                  describe={(x) => `${x.nombre} (contrato ${x.clave})`} tono="error" />
-          </div>
-
-          {conciliacion.senales.rupturasDeOrden > 2 && (
-            <p className="text-xs text-muted-foreground">
-              Aviso: {conciliacion.senales.rupturasDeOrden} archivos rompen el orden creciente de
-              contrato. Suele indicar que la carpeta mezcla meses.
+            <p className="text-xs text-muted-foreground mt-1">
+              {entrada
+                ? `${entrada.filas.length} filas${entrada.traeLinks ? ' · ya trae links, se usarán para comprobar el resultado' : ' · sin links, es lo normal'}`
+                : 'El que les manda la oficina. Desde Excel: Archivo → Descargar → CSV'}
             </p>
-          )}
-        </Paso>
-      )}
-
-      {/* 5. Muestra de auditoria */}
-      {conciliacion && !bloqueado && (
-        <Paso n={5} titulo="Revisión antes de enviar" hecho={revisado}>
-          <p className="text-xs text-muted-foreground">
-            Diez emparejamientos al azar. Confirma que el contrato corresponde al inquilino.
-          </p>
-          <div className="rounded-lg border border-border/60 overflow-hidden">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-3 py-1.5 font-medium">Contrato</th>
-                  <th className="text-left px-3 py-1.5 font-medium">Inquilino</th>
-                  <th className="text-left px-3 py-1.5 font-medium">Correo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {muestra.map((m) => (
-                  <tr key={m.clave} className="border-t border-border/40">
-                    <td className="px-3 py-1.5 tabular font-medium">{m.codigo}</td>
-                    <td className="px-3 py-1.5 truncate max-w-[220px]">{m.nombre}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[220px]">{m.email}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={revisado} onChange={(e) => setRevisado(e.target.checked)}
-                   className="w-4 h-4 rounded" />
-            Revisé la muestra y los emparejamientos son correctos
-          </label>
-        </Paso>
-      )}
 
-      {/* 6. Ejecutar */}
-      {conciliacion && !bloqueado && (
-        <Paso n={6} titulo="Subir a Mailchimp" hecho={!!resultado && !resultado.error}>
-          <Button disabled={!puedeCorrer} onClick={ejecutar} className="rounded-lg gap-1.5">
-            {corriendo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            Subir {conciliacion.resumen.emparejados} códigos
+          <Button disabled={!entrada || corriendo} onClick={correr} className="rounded-lg gap-1.5">
+            {corriendo ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />}
+            Poner los links
           </Button>
-          {!revisado && !corriendo && (
-            <p className="text-xs text-muted-foreground">Marca la revisión del paso 5 para continuar.</p>
-          )}
+          {corriendo && <p className="text-xs text-muted-foreground">{fase}…</p>}
+        </CardContent>
+      </Card>
 
-          {progreso && (
-            <div>
-              <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                <span>{progreso.fase}…</span>
-                <span>{progreso.hechas} / {progreso.total}</span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-300"
-                     style={{ width: `${Math.round((progreso.hechas / Math.max(progreso.total, 1)) * 100)}%` }} />
-              </div>
-            </div>
-          )}
+      {res?.error && (
+        <div className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 rounded-xl p-4">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span className="break-words">{res.error}</span>
+        </div>
+      )}
 
-          {resultado && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                {resultado.error || resultado.fallidos.length
-                  ? <AlertTriangle className="w-4 h-4 text-destructive" />
-                  : <CheckCircle2 className="w-4 h-4 text-green-600" />}
-                <span className="text-sm font-semibold">
-                  {resultado.error ? 'No se pudo completar' : 'Subida terminada'}
-                </span>
+      {r && !r.ok && (
+        <div className="flex items-start gap-2.5 text-sm text-destructive bg-destructive/10 rounded-xl p-4">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">No se puede emparejar</p>
+            <p className="mt-1">{r.mensaje}</p>
+          </div>
+        </div>
+      )}
+
+      {r?.ok && (
+        <>
+          <Card className="rounded-2xl border-border/60">
+            <CardContent className="p-5 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Metrica etiqueta="códigos en la carpeta" valor={res.archivos} />
+                <Metrica etiqueta="inquilinos con link" valor={r.resumen.conLink} tono="exito" />
+                <Metrica etiqueta="filas sin cédula" valor={r.resumen.descartadasSinCedula} />
+                <Metrica etiqueta="discrepancias" valor={r.resumen.discrepan}
+                         tono={r.resumen.discrepan ? 'peligro' : 'exito'} />
               </div>
-              {resultado.error && (
-                <div className="text-sm bg-destructive/10 rounded-xl p-4 text-muted-foreground break-words">
-                  {resultado.error}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={copiarParaSheets} className="rounded-lg gap-1.5">
+                  <ClipboardCopy className="w-4 h-4" /> Copiar para Sheets
+                </Button>
+
+                <Button onClick={descargar} variant="outline" className="rounded-lg gap-1.5">
+                  <Download className="w-4 h-4" /> Descargar CSV
+                </Button>
+
+                <Button
+                  onClick={subirADrive}
+                  disabled={subiendo || drive.sesion === false || drive.sesion === null}
+                  className="rounded-lg gap-1.5"
+                >
+                  {subiendo ? <Loader2 className="w-4 h-4 animate-spin" /> : <HardDrive className="w-4 h-4" />}
+                  {subiendo ? 'Subiendo…'
+                    : drive.conectado ? 'Subir a Google Drive'
+                      : 'Conectar Drive y subir'}
+                </Button>
+
+                {drive.sesion !== false && (
+                  <span className="text-xs text-muted-foreground w-full">
+                    «Copiar para Sheets» es lo más rápido: abre una hoja en blanco y pega.
+                  </span>
+                )}
+
+                {drive.sesion === false && (
+                  <span className="text-xs text-muted-foreground">
+                    Inicia sesión para subir a tu Drive
+                  </span>
+                )}
+              </div>
+
+              {res.hoja && (
+                <div className="flex items-start gap-2 text-sm bg-primary/10 rounded-lg p-3">
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
+                  <div className="min-w-0">
+                    <p className="font-medium">
+                      {res.hoja.creado ? 'Hoja creada' : 'Hoja actualizada'}
+                      {res.hoja.carpeta ? ` en «${res.hoja.carpeta}»` : ' en la raíz de tu Drive'}
+                    </p>
+                    <a href={res.hoja.url} target="_blank" rel="noreferrer noopener"
+                       className="text-primary hover:underline inline-flex items-center gap-1 mt-0.5 presionable">
+                      <ExternalLink className="w-3.5 h-3.5" /> Abrir en Google Sheets
+                    </a>
+                  </div>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-3">
-                <Metrica etiqueta="subidos" valor={resultado.subidos} tono="exito" />
-                <Metrica etiqueta="verificados" valor={resultado.verificados}
-                         tono={resultado.verificados === resultado.subidos ? 'exito' : 'curso'} />
-                <Metrica etiqueta="con problema" valor={resultado.errores.length + resultado.fallidos.length}
-                         tono={resultado.errores.length + resultado.fallidos.length ? 'peligro' : 'neutro'} />
-              </div>
-              {resultado.verificados === resultado.subidos && resultado.subidos > 0 && (
-                <div className="flex items-start gap-2 text-xs bg-green-500/10 text-green-700 dark:text-green-400 rounded-lg p-3">
-                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-px" />
+
+              {res.verif && (
+                <div className={`flex items-start gap-2 text-sm rounded-lg p-3
+                  ${res.verif.distintos.length ? 'bg-destructive/10 text-destructive' : 'bg-green-500/10 text-green-700 dark:text-green-400'}`}>
+                  <ShieldCheck className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>
-                    Las {resultado.verificados} URL se descargaron y su huella coincide con el archivo
-                    subido. Queda probado que cada inquilino recibirá exactamente su recibo.
+                    {res.verif.distintos.length === 0
+                      ? `Comprobado: los ${res.verif.iguales} links que puso el sistema son exactamente
+                         los mismos que se enviaron a mano ese mes. Ni una diferencia.`
+                      : `${res.verif.distintos.length} links no coinciden con los que se enviaron.`}
                   </span>
                 </div>
               )}
-              <Cubo titulo="Errores al subir" items={resultado.errores} describe={(x) => x} tono="error" />
-              <Cubo titulo="No verificaron" items={resultado.fallidos} describe={(x) => x} tono="error" />
-              <a href="/cartera/envios" className="text-xs text-primary hover:underline flex items-center gap-1">
-                <ExternalLink className="w-3 h-3" /> Ver los códigos en Envíos
-              </a>
-            </div>
+            </CardContent>
+          </Card>
+
+          {/* La tabla es la demostracion: se ve el nombre, el correo y su link. */}
+          <Card className="rounded-2xl border-border/60">
+            <CardContent className="p-5 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm font-semibold">Así queda el listado</h2>
+                <Badge variant="secondary" className="text-[11px]">
+                  primeras 25 de {r.filas.length}
+                </Badge>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-border/60">
+                <table className="w-full text-xs min-w-[38rem]">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium">Cédula / NIT</th>
+                      <th className="text-left px-3 py-2 font-medium">Nombre</th>
+                      <th className="text-left px-3 py-2 font-medium">Correo</th>
+                      <th className="text-left px-3 py-2 font-medium">Código de barras</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.filas.slice(0, 25).map((f) => (
+                      <tr key={`${f.documento}-${f.contrato}`} className="border-t border-border/40">
+                        <td className="px-3 py-1.5 tabular">{f.documento}</td>
+                        <td className="px-3 py-1.5 truncate max-w-[15rem]">{f.nombre}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[14rem]">{f.email}</td>
+                        <td className="px-3 py-1.5">
+                          <a href={f.url} target="_blank" rel="noreferrer noopener"
+                             className="text-primary hover:underline inline-flex items-center gap-1">
+                            {f.archivo} <ArrowRight className="w-3 h-3" />
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Abre cualquiera: es el código de barras de ese inquilino, ya emparejado.
+              </p>
+            </CardContent>
+          </Card>
+
+          {(r.sinCedula.length > 0 || r.sinCorreo.length > 0 || r.correoInvalido.length > 0) && (
+            <Card className="rounded-2xl border-border/60">
+              <CardContent className="p-5 space-y-2 text-xs">
+                <h2 className="text-sm font-semibold">Lo que quedó fuera</h2>
+                {r.sinCedula.length > 0 && (
+                  <p className="text-muted-foreground">
+                    <strong>{r.sinCedula.length} filas sin cédula</strong> — se descartan porque no son
+                    inquilinos. En agosto eran cuatro empleados añadidos al final del listado.
+                  </p>
+                )}
+                {r.sinCorreo.length > 0 && (
+                  <p className="text-muted-foreground">
+                    <strong>{r.sinCorreo.length} sin correo</strong> — tienen su link, pero no hay a dónde mandárselo.
+                  </p>
+                )}
+                {r.correoInvalido.length > 0 && (
+                  <p className="text-muted-foreground">
+                    <strong>{r.correoInvalido.length} con correo inválido</strong>:{' '}
+                    {r.correoInvalido.map((x) => x.email).join(', ')}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           )}
-        </Paso>
-      )}
-
-      {/* 7. Campana. Aparece cuando ya hay URL: antes no hay nada que enviar. */}
-      {paraCampana && (
-        <Paso n={7} titulo="Armar la campaña" hecho={false}>
-          <p className="text-xs text-muted-foreground">
-            {paraCampana.campana.length} inquilinos en la campaña masiva
-            {paraCampana.multiContrato.length > 0
-              && ` · ${paraCampana.multiContrato.length} con varios inmuebles reciben todos sus códigos`}
-          </p>
-          <PasoCampana
-            periodo={periodo}
-            campana={paraCampana.campana}
-            multiContrato={paraCampana.multiContrato}
-          />
-        </Paso>
-      )}
-
-      {!archivos.length && listo && (
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-          <Barcode className="w-3.5 h-3.5" />
-          Nada se sube a Mailchimp hasta que la conciliación cierre y marques la revisión.
-        </p>
+        </>
       )}
     </div>
   );
