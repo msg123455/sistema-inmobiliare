@@ -24,7 +24,8 @@
     "publicar": "node scripts/publicar-asistente.mjs",
     "check:sueltas": "node scripts/check-funciones-sueltas.mjs",
     "test:simi": "node scripts/test-simi-mapeo.mjs",
-    "check:clones": "node scripts/check-clones.mjs"
+    "check:clones": "node scripts/check-clones.mjs",
+    "fichas": "node scripts/asignar-fichas.mjs"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.43",

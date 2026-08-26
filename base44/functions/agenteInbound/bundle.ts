@@ -2044,9 +2044,15 @@ function linkPropio(p, esArriendo) {
   return `https://www.inmobiliarelatam.com/inmueble/${slug}_${codigo}/`;
 }
 var linkFicha = (p, esArriendo = false) => String(
-  // Nuestra web primero, siempre. Los portales son el respaldo para lo que no
-  // se puede construir (tipo 'Otro', o falta el barrio o la ciudad).
-  linkPropio(p, esArriendo) || p?.link_web || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
+  // El orden importa y es este a proposito:
+  //
+  // 1. link_web  — la que asigno scripts/asignar-fichas.mjs, que la COMPROBO
+  //    contra el sitio antes de guardarla. Es la unica que sabemos que abre.
+  // 2. linkPropio — la misma URL construida al vuelo, sin comprobar. Cubre lo
+  //    que entro despues del ultimo barrido.
+  // 3. los portales — el respaldo para lo que no se puede construir (tipo
+  //    'Otro', o falta el barrio o la ciudad).
+  p?.link_web || linkPropio(p, esArriendo) || p?.portales?.metrocuadrado || p?.portales?.fincaraiz || p?.portales?.mercadolibre || p?.portales?.lahaus || p?.portales?.ciencuadras || p?.portales?.properati || ""
 ).trim();
 function paraMostrar(p, esArriendo) {
   return {

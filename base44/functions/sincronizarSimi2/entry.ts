@@ -473,6 +473,14 @@ type Resultado = { creados: number; actualizados: number; omitidos: number; erro
  * PUT reemplaza la fila entera, asi que se mezcla sobre lo existente. Sin eso
  * se borrarian link_web, link_instagram y todo lo que alguien haya editado
  * dentro de la app: el sync solo es autoridad de los campos que SIMI manda.
+ *
+ * link_web EN PARTICULAR lo pone scripts/asignar-fichas.mjs (npm run fichas), que
+ * arma la URL de la ficha en nuestra web a partir del codigo de SIMI y la
+ * COMPRUEBA antes de guardarla. Esta fusion es lo que hace que ese trabajo
+ * sobreviva a los siguientes syncs, asi que no la conviertas en un PUT a secas.
+ *
+ * Los inmuebles que entren entre dos barridos no se quedan sin ficha: linkFicha
+ * construye la misma URL al vuelo, solo que sin comprobar.
  */
 async function guardar(
   p: Record<string, unknown>,
