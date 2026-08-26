@@ -12,7 +12,7 @@ import {
   linkFicha, linkPropio,
 } from '../base44/functions/_core/tools/ventas.ts';
 import { firmaMetaValida, secretoIgual } from '../base44/functions/_core/webhook.ts';
-import { decidirAgente } from '../base44/functions/_core/router.ts';
+import { decidirAgente, porFrase } from '../base44/functions/_core/router.ts';
 import { esHabil, festivosColombia, sumarHabiles } from '../base44/functions/_core/habiles.ts';
 import { calificar } from '../base44/functions/_core/scoring.ts';
 import { briefLead } from '../base44/functions/_core/brief.ts';
@@ -1328,10 +1328,12 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   const b = armarSystem(base, 'ventas', segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: 'Massimo' });
 
   assert.equal(a[0].cache_control?.type, 'ephemeral', 'el bloque estable lleva la marca de cacheo');
-  // Una hora, no los 5 minutos por defecto: entre dos mensajes de un cliente
-  // real pasan mas de 5 minutos, y con el TTL corto cada turno reescribe el
-  // prefijo entero, que cuesta mas que procesarlo sin cache.
-  assert.equal(a[0].cache_control?.ttl, '1h', 'el cache tiene que durar una hora');
+  // 5 minutos, NO una hora, y esto se corrigio midiendo. Escribir con TTL de 1h
+  // cuesta 2x y con 5 min 1,25x. Con dos llamadas por turno, un turno que tiene
+  // que escribir sale a 2,10x con 1h contra 2,0x sin cache: PIERDE dinero. Con 5
+  // minutos sale a 1,35x. Medido en produccion: un turno de ventas costo $0,0985
+  // cuando sin cache habria costado $0,0948.
+  assert.equal(a[0].cache_control?.ttl, undefined, 'TTL por defecto (5 min), no 1h');
   assert.equal(b[1].cache_control, undefined, 'el bloque volatil NO la lleva');
   assert.equal(a[0].text, b[0].text, 'el prefijo cacheado cambio entre turnos: no se cacheara nada');
 
@@ -1419,6 +1421,56 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK — ${mu
   assert.match(linkFicha(conPortal, true), /inmobiliarelatam\.com/, 'nuestra web va primero');
   // Pero si no se puede construir, el portal sigue sirviendo de respaldo.
   assert.equal(linkFicha({ ...conPortal, tipo: 'Otro' }, true), 'https://metrocuadrado.com/x');
+}
+
+// ── El cliente que dice a que viene no pasa por recepcion ───────────────────
+//
+// La lista de frases del router NO tenia entrada para ventas. "Quiero comprar
+// un inmueble" no coincidia con nada, el hilo se quedaba pegado a recepcion,
+// recepcion corria ENTERA solo para llamar a transferir_a, y despues corria
+// ventas. Dos agentes por un mensaje.
+//
+// Y como cada agente tiene su propio prompt y sus propias herramientas, cada uno
+// escribe su PROPIO cache: unos $0,05 tirados en cada conversacion, mas la
+// espera de una vuelta extra al modelo.
+//
+// La otra mitad de la prueba importa igual: ventas va de ULTIMO en la lista, asi
+// que consignacion tiene que seguir llevandose a quien ofrece SU inmueble. Si
+// alguien reordena esa lista, "quiero arrendar mi apartamento" se convierte en
+// un lead de ventas y el propietario acaba en el agente que no es.
+{
+  const debenIrAVentas = [
+    'Quiero comprar un inmueble',
+    'Busco arriendo en rosales',
+    'Estoy buscando apartamento',
+    'Necesito comprar casa',
+    'Me interesa un apartamento en chapinero',
+    'Apartamentos en arriendo?',
+    'Que tienen disponible en usaquen',
+    'Informacion de un apartamento',
+  ];
+  for (const f of debenIrAVentas) {
+    assert.equal(porFrase(f), 'ventas', `"${f}" tendria que ir directo a ventas`);
+  }
+
+  const noSonVentas = [
+    ['Quiero arrendar mi apartamento', 'consignacion'],
+    ['Quiero vender mi casa', 'consignacion'],
+    ['Cuanto vale mi apartamento', 'avaluos'],
+    ['Se dano la nevera', 'mantenimiento'],
+    ['Necesito mi estado de cuenta', 'cartera'],
+    ['Estoy buscando mi recibo de pago', 'cartera'],
+    ['Tengo una queja', 'pqr'],
+  ];
+  for (const [f, esperado] of noSonVentas) {
+    assert.equal(porFrase(f), esperado, `"${f}" no puede caer en ventas`);
+  }
+
+  // Un saludo suelto NO se rutea por frase: no dice a que viene, y adivinar ahi
+  // es peor que preguntar.
+  for (const f of ['Hola', 'Buenas tardes', 'Gracias']) {
+    assert.equal(porFrase(f), null, `"${f}" no deberia decidir nada`);
+  }
 }
 
 console.log('agent-core: OK');

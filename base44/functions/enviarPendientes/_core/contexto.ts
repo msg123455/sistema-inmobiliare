@@ -452,28 +452,41 @@ export function armarSystem(
   // POR BLOQUE. El minimo cacheable de Sonnet son 1024 tokens y el prefijo
   // estable ronda los 7.500 (mas las definiciones de herramientas, que el API
   // renderiza ANTES del system y entran en el mismo cache), asi que sobra.
-  // TTL DE UNA HORA, NO LOS 5 MINUTOS POR DEFECTO.
+  // TTL DE 5 MINUTOS, Y ESTO SE CORRIGIO CON DATOS EN LA MANO.
   //
-  // El cache por defecto caduca en 5 minutos. Dentro de un mismo turno da igual
-  // —las llamadas van seguidas— pero entre un mensaje del cliente y el siguiente
-  // pasan casi siempre mas de 5 minutos. Con el TTL corto, cada turno vuelve a
-  // ESCRIBIR el prefijo entero, y escribir cuesta mas que procesar normal.
+  // Estaba en 1 hora con este razonamiento: entre dos mensajes de un cliente
+  // pasan mas de 5 minutos, asi que con el TTL corto cada turno reescribe el
+  // prefijo. Cierto, pero incompleto, porque ignoraba dos cosas.
   //
-  // Las cuentas con los numeros medidos de este sistema (prefijo 12.146 tokens,
-  // 3 llamadas por turno), en tokens equivalentes a precio pleno:
+  // PRIMERA: escribir con TTL de 1 hora cuesta 2x, y con 5 minutos 1,25x.
+  // SEGUNDA: el prefijo NO es uno por conversacion, es uno por AGENTE. Recepcion
+  // y ventas tienen prompts y herramientas distintos, asi que en cuanto la
+  // conversacion se transfiere hay que escribir un prefijo nuevo. Y cualquier
+  // edicion de AgentePrompt invalida todos los caches vivos.
   //
-  //   5 min, caducado entre turnos:  escritura 15.183 + 2 lecturas 2.429 = 17.612
-  //   1 hora, cache vivo:            3 lecturas                          =  3.644
-  //   1 hora, primer turno:          escritura 24.292 + 2 lecturas 2.429 = 26.721
+  // Medido en produccion, un turno de ventas con 2 llamadas que tuvo que
+  // escribir: coste real $0,0985, y SIN CACHE habria costado $0,0948. O sea que
+  // con 1 hora el cache estaba costando dinero en vez de ahorrarlo.
   //
-  // O sea: el primer turno cuesta mas caro y todos los demas cuestan una quinta
-  // parte. A partir del segundo mensaje de la conversacion ya sale a cuenta, y
-  // ninguna conversacion real se queda en uno.
+  // Las cuentas, en multiplos del prefijo, para un turno de 2 llamadas:
+  //
+  //                   escribe          lee     total   vs 2,0 sin cache
+  //   1 hora           2,00x         0,10x     2,10x   PIERDE
+  //   5 minutos        1,25x         0,10x     1,35x   gana 32%
+  //   ya caliente      0,00x    2 x 0,10x      0,20x   gana 90%
+  //
+  // Con 5 minutos el turno frio ya sale a cuenta, y los turnos seguidos de una
+  // conversacion activa siguen leyendo. Lo que se pierde es el cliente que tarda
+  // mas de 5 minutos en contestar: ahi se reescribe a 1,25x en vez de leer. Sale
+  // mejor que pagar 2x en cada cambio de agente.
+  //
+  // LO QUE DE VERDAD ABARATA ESTO es que el prefijo sea mas pequeno: 12.471
+  // tokens se pagan enteros en cada escritura, elija uno el TTL que elija.
   return [
     {
       type: 'text',
       text: estable.join('\n\n'),
-      cache_control: { type: 'ephemeral', ttl: '1h' },
+      cache_control: { type: 'ephemeral' },
     },
     { type: 'text', text: partes.join('\n\n') },
   ];

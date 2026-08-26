@@ -2663,7 +2663,7 @@ ${inmuebles.map((i2) => `  - ${i2.direccion}${i2.ciudad ? `, ${i2.ciudad}` : ""}
     {
       type: "text",
       text: estable.join("\n\n"),
-      cache_control: { type: "ephemeral", ttl: "1h" }
+      cache_control: { type: "ephemeral" }
     },
     { type: "text", text: partes.join("\n\n") }
   ];
@@ -2783,7 +2783,23 @@ var FRASES = [
   // Se exige que la palabra venga acompanada de algo del tramite. La palabra
   // sola cae al nivel 2, que pregunta en vez de adivinar, que es justo lo que
   // hay que hacer con un termino de doble sentido.
-  ["matricula", /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/]
+  ["matricula", /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/],
+  // VENTAS VA DE ULTIMO, Y ESO ES LO QUE LO HACE SEGURO.
+  //
+  // porFrase devuelve la PRIMERA que coincide, asi que consignacion ya se llevo
+  // "quiero arrendar MI apartamento" antes de llegar aqui. Lo que cae en esta
+  // linea es quien busca para si, no quien ofrece lo suyo.
+  //
+  // POR QUE HACE FALTA. Sin esta entrada, "quiero comprar un inmueble" no
+  // coincidia con nada: el hilo se quedaba pegado a recepcion, recepcion corria
+  // ENTERA solo para llamar a transferir_a, y despues corria ventas. Dos agentes
+  // por un mensaje, y como cada uno tiene su propio prompt y sus propias
+  // herramientas, cada uno escribe su propio cache. Medido: unos $0,05 tirados
+  // en cada conversacion, y una respuesta mas lenta.
+  //
+  // Se exige que la intencion venga con una palabra de inmueble o de operacion.
+  // "Estoy buscando" a secas no basta: lo dice igual quien busca su recibo.
+  ["ventas", /\b((quiero|busco|necesito|estoy buscando|me interesa|quisiera) (comprar|arrendar|alquilar|arriendo|venta|un |una |apartamento|apartaestudio|casa|oficina|local|bodega|lote|finca|inmueble)|(apartamento|casa|oficina|local|bodega|lote|finca|inmueble)s? (en|para) (arriendo|venta|alquiler)|(en|para) (arriendo|venta) en |que (tienes|tienen|hay) (disponible|en)|inmuebles disponibles|ver (un |el )?inmueble|informacion (de|sobre) (un |el )?(apartamento|casa|oficina|local|inmueble))\b/]
 ];
 function porFrase(texto) {
   const t = normalizar(texto);
@@ -4036,7 +4052,7 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   const a = armarSystem(base, "ventas", primero, ctx);
   const b = armarSystem(base, "ventas", segundo, { ...ctx, datos: { presupuesto: 8e6 }, titular_nombre: "Massimo" });
   assert.equal(a[0].cache_control?.type, "ephemeral", "el bloque estable lleva la marca de cacheo");
-  assert.equal(a[0].cache_control?.ttl, "1h", "el cache tiene que durar una hora");
+  assert.equal(a[0].cache_control?.ttl, void 0, "TTL por defecto (5 min), no 1h");
   assert.equal(b[1].cache_control, void 0, "el bloque volatil NO la lleva");
   assert.equal(a[0].text, b[0].text, "el prefijo cacheado cambio entre turnos: no se cacheara nada");
   assert.notEqual(a[1].text, b[1].text, "el bloque volatil deberia reflejar el estado del turno");
@@ -4080,5 +4096,35 @@ console.log(`agent-core: ${mutantes.length} chequeos de sensibilidad OK \u2014 $
   const conPortal = { ...base, operacion: "Arriendo", portales: { metrocuadrado: "https://metrocuadrado.com/x" } };
   assert.match(linkFicha(conPortal, true), /inmobiliarelatam\.com/, "nuestra web va primero");
   assert.equal(linkFicha({ ...conPortal, tipo: "Otro" }, true), "https://metrocuadrado.com/x");
+}
+{
+  const debenIrAVentas = [
+    "Quiero comprar un inmueble",
+    "Busco arriendo en rosales",
+    "Estoy buscando apartamento",
+    "Necesito comprar casa",
+    "Me interesa un apartamento en chapinero",
+    "Apartamentos en arriendo?",
+    "Que tienen disponible en usaquen",
+    "Informacion de un apartamento"
+  ];
+  for (const f of debenIrAVentas) {
+    assert.equal(porFrase(f), "ventas", `"${f}" tendria que ir directo a ventas`);
+  }
+  const noSonVentas = [
+    ["Quiero arrendar mi apartamento", "consignacion"],
+    ["Quiero vender mi casa", "consignacion"],
+    ["Cuanto vale mi apartamento", "avaluos"],
+    ["Se dano la nevera", "mantenimiento"],
+    ["Necesito mi estado de cuenta", "cartera"],
+    ["Estoy buscando mi recibo de pago", "cartera"],
+    ["Tengo una queja", "pqr"]
+  ];
+  for (const [f, esperado] of noSonVentas) {
+    assert.equal(porFrase(f), esperado, `"${f}" no puede caer en ventas`);
+  }
+  for (const f of ["Hola", "Buenas tardes", "Gracias"]) {
+    assert.equal(porFrase(f), null, `"${f}" no deberia decidir nada`);
+  }
 }
 console.log("agent-core: OK");

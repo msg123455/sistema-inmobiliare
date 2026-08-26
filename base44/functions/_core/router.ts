@@ -49,9 +49,28 @@ const FRASES: Array<[Agente, RegExp]> = [
   // sola cae al nivel 2, que pregunta en vez de adivinar, que es justo lo que
   // hay que hacer con un termino de doble sentido.
   ['matricula',     /\b(formulario 117|f117|codeudor|coarrendatario|estudio de credito|papeleria del contrato|matricula (del |de )?(contrato|arriendo|arrendamiento)|matricular (el |mi )?(contrato|arriendo))\b/],
+
+  // VENTAS VA DE ULTIMO, Y ESO ES LO QUE LO HACE SEGURO.
+  //
+  // porFrase devuelve la PRIMERA que coincide, asi que consignacion ya se llevo
+  // "quiero arrendar MI apartamento" antes de llegar aqui. Lo que cae en esta
+  // linea es quien busca para si, no quien ofrece lo suyo.
+  //
+  // POR QUE HACE FALTA. Sin esta entrada, "quiero comprar un inmueble" no
+  // coincidia con nada: el hilo se quedaba pegado a recepcion, recepcion corria
+  // ENTERA solo para llamar a transferir_a, y despues corria ventas. Dos agentes
+  // por un mensaje, y como cada uno tiene su propio prompt y sus propias
+  // herramientas, cada uno escribe su propio cache. Medido: unos $0,05 tirados
+  // en cada conversacion, y una respuesta mas lenta.
+  //
+  // Se exige que la intencion venga con una palabra de inmueble o de operacion.
+  // "Estoy buscando" a secas no basta: lo dice igual quien busca su recibo.
+  ['ventas',        /\b((quiero|busco|necesito|estoy buscando|me interesa|quisiera) (comprar|arrendar|alquilar|arriendo|venta|un |una |apartamento|apartaestudio|casa|oficina|local|bodega|lote|finca|inmueble)|(apartamento|casa|oficina|local|bodega|lote|finca|inmueble)s? (en|para) (arriendo|venta|alquiler)|(en|para) (arriendo|venta) en |que (tienes|tienen|hay) (disponible|en)|inmuebles disponibles|ver (un |el )?inmueble|informacion (de|sobre) (un |el )?(apartamento|casa|oficina|local|inmueble))\b/],
 ];
 
-function porFrase(texto: string): Agente | null {
+// Exportada para poder probarla sola: es la que decide si el cliente se ahorra
+// la vuelta por recepcion, y equivocarse aqui manda a alguien al agente que no es.
+export function porFrase(texto: string): Agente | null {
   const t = normalizar(texto);
   if (!t) return null;
   for (const [agente, re] of FRASES) if (re.test(t)) return agente;
