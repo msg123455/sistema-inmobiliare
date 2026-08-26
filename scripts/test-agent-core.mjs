@@ -267,7 +267,20 @@ const buscar = (input, ctx) => buscarInmuebles.ejecutar({
 {
   const ctx = nuevoCtx();
   const res = await buscar({ barrio: 'rosales', tipo: 'Apartamento' }, ctx);
-  assert.equal(res.inmuebles[0].ficha, 'https://www.metrocuadrado.com/ficha-0');
+  // El modelo YA NO recibe la URL de la ficha, y es deliberado: eran 45 de los
+  // 148 tokens de cada inmueble, este resultado se reenvia en cada llamada del
+  // turno, y el modelo no la necesita porque enviar_fichas la resuelve sola por
+  // el id. Dandosela ademas se arriesga a que la escriba el mismo en el mensaje,
+  // saltandose el formato de la tarjeta.
+  assert.equal(res.inmuebles[0].ficha, undefined, 'la URL no viaja al modelo');
+  assert.equal(res.inmuebles[0].titulo, undefined, 'titulo es tipo + barrio otra vez');
+  assert.equal(res.inmuebles[0].video, undefined, 'video en null no se manda');
+  // Lo que SI necesita para asesorar se queda.
+  assert.ok(res.inmuebles[0].precio, 'el precio si');
+  assert.equal(res.inmuebles[0].tipo, 'Apartamento');
+  // Y la ficha sigue estando donde tiene que estar: en lo que se recuerda para
+  // enviar_fichas, no en lo que ve el modelo.
+  assert.match(ctx.ctxAgente.mostrados[0].ficha, /^https?:\/\//);
   assert.equal(ctx.ctxAgente.mostrados.length, 5, 'queda lo mostrado, para el turno siguiente');
   // Nueve campos cortos, no la fila entera: esto persiste en MemoriaChat y meter
   // propiedades completas ahi es lo que reventaba la escritura del estado.

@@ -728,7 +728,11 @@ var TELEFONO_CONTINGENCIA = "3102109308";
 var IDENTIDAD_MARCA = `Trabajas para INMOBILIARE Julio Corredor (J.C.O Inversiones S.A.S), inmobiliaria de Bogota desde 1960.
 Manejamos venta, arriendo, administracion de inmuebles, recaudo de canones, avaluos,
 reparaciones, seguro de arrendamiento y relocation corporativo.
-Calle 81 # 8 - 95, Bogota. Telefono 485 3000. www.inmobiliarelatam.com
+Calle 81 # 8 - 95, Bogota. Telefono 485 3000. WhatsApp 318 215 2607.
+www.inmobiliarelatam.com. Mas de 30 asesores.
+Estos son los UNICOS datos de la empresa que puedes afirmar. Cualquier otra cosa que te
+pregunten (historia, duenos, cuantos inmuebles, politicas internas) no la inventes: di
+que lo confirmas y escala.
 
 IDENTIDAD PUBLICA
 - Te llamas DIANA y trabajas en INMOBILIARE. Es el unico nombre con el que te
@@ -743,6 +747,8 @@ COMO HABLAS
 - Colombiano de Bogota, tuteo con "tu". Jamas voseo: nada de "vos", "tenes", "queres".
 - Calido y directo, como alguien con oficio. Nunca infantil, nunca efusivo.
 - La calidez viene de la atencion y el conocimiento, no de las exclamaciones.
+- Nada de muletillas juveniles: "uy que bacano", "que chimba", "que rico". Un "jaja"
+  sutil solo si el cliente bromea primero.
 - SIN EMOJIS. SIN GUIONES LARGOS: usa punto o coma.
 - Maximo dos frases por globo. Si hay mucho que decir, di lo esencial y ofrece ampliar.
 - Varia el largo: a veces tres palabras, a veces dos frases. Nunca igual dos veces seguidas.
@@ -1162,10 +1168,9 @@ function paraMostrar(p, esArriendo) {
   };
 }
 function resumirProp(p, esArriendo) {
-  return {
+  const r = {
     id: p.id,
     codigo: p.codigo_externo || null,
-    titulo: p.titulo,
     tipo: p.tipo,
     barrio: p.barrio || p.ciudad,
     area_m2: p.area_m2 ?? null,
@@ -1173,10 +1178,10 @@ function resumirProp(p, esArriendo) {
     banos: p.banos ?? null,
     parqueaderos: p.parqueaderos ?? null,
     precio: esArriendo ? p.canon_arriendo ? fmtCOP(p.canon_arriendo) + " al mes" : null : p.precio_venta ? fmtCOP(p.precio_venta) : null,
-    administracion: p.valor_administracion ?? p.administracion ?? null,
-    ficha: linkFicha(p, esArriendo) || null,
-    video: p.link_instagram || null
+    administracion: p.valor_administracion ?? p.administracion ?? null
   };
+  if (p.link_instagram) r.video = p.link_instagram;
+  return r;
 }
 var TIPOS = ["Apartamento", "Casa", "Local", "Oficina", "Bodega", "Lote", "Finca", "Otro"];
 var TIPOS_OFRECIBLES = TIPOS.filter((t) => t !== "Otro");
@@ -3206,7 +3211,12 @@ var buscar = (input, ctx) => buscarInmuebles.ejecutar({
 {
   const ctx = nuevoCtx();
   const res = await buscar({ barrio: "rosales", tipo: "Apartamento" }, ctx);
-  assert.equal(res.inmuebles[0].ficha, "https://www.metrocuadrado.com/ficha-0");
+  assert.equal(res.inmuebles[0].ficha, void 0, "la URL no viaja al modelo");
+  assert.equal(res.inmuebles[0].titulo, void 0, "titulo es tipo + barrio otra vez");
+  assert.equal(res.inmuebles[0].video, void 0, "video en null no se manda");
+  assert.ok(res.inmuebles[0].precio, "el precio si");
+  assert.equal(res.inmuebles[0].tipo, "Apartamento");
+  assert.match(ctx.ctxAgente.mostrados[0].ficha, /^https?:\/\//);
   assert.equal(ctx.ctxAgente.mostrados.length, 5, "queda lo mostrado, para el turno siguiente");
   assert.deepEqual(
     Object.keys(ctx.ctxAgente.mostrados[0]),

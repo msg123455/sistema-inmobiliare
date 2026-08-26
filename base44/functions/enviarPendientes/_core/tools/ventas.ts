@@ -178,10 +178,9 @@ function paraMostrar(p: any, esArriendo: boolean) {
 // Los null son deliberados y el prompt se apoya en ellos: null significa "este
 // dato NO lo tienes", que es lo que impide que el modelo lo complete.
 export function resumirProp(p: any, esArriendo: boolean) {
-  return {
+  const r: Record<string, unknown> = {
     id: p.id,
     codigo: p.codigo_externo || null,
-    titulo: p.titulo,
     tipo: p.tipo,
     barrio: p.barrio || p.ciudad,
     area_m2: p.area_m2 ?? null,
@@ -192,9 +191,24 @@ export function resumirProp(p: any, esArriendo: boolean) {
       ? (p.canon_arriendo ? fmtCOP(p.canon_arriendo) + ' al mes' : null)
       : (p.precio_venta ? fmtCOP(p.precio_venta) : null),
     administracion: p.valor_administracion ?? p.administracion ?? null,
-    ficha: linkFicha(p, esArriendo) || null,
-    video: p.link_instagram || null,
   };
+
+  // NI ficha NI titulo NI un video en null, y es una decision de coste medida.
+  //
+  // Cada inmueble que ve el modelo pesaba 148 tokens, y este resultado se
+  // REENVIA entero en cada llamada siguiente del turno: con tres llamadas y
+  // cinco inmuebles son 2.200 tokens pagados a precio completo, tres veces.
+  //
+  // - `ficha` eran 45 de esos 148, y el modelo no la necesita: enviar_fichas
+  //   resuelve la URL sola a partir del id. Dandosela ademas se arriesga a que
+  //   la escriba el mismo en el mensaje, saltandose el formato de la tarjeta.
+  // - `titulo` es "Apartamento en Los Rosales", o sea tipo + barrio otra vez.
+  // - `video` venia null en practicamente todo el inventario.
+  //
+  // Lo que SI se queda: administracion, banos y parqueaderos, porque son
+  // exactamente lo que pregunta quien va a arrendar.
+  if (p.link_instagram) r.video = p.link_instagram;
+  return r;
 }
 
 // ── El tipo de inmueble ─────────────────────────────────────────────────────
