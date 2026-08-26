@@ -107,30 +107,47 @@ export default function CodigosMensuales() {
   const nombreArchivo = `codigos-${periodo}-con-links`;
 
   /**
-   * Copia el listado al portapapeles en TSV. Es el camino mas corto a Sheets:
-   * abrir una hoja en blanco y pegar. Sin descargas, sin importar, sin conectar
-   * ninguna cuenta.
+   * Copia el listado en TSV para pegarlo en una hoja de calculo.
    *
-   * navigator.clipboard exige contexto seguro (https) y a veces permiso; el
-   * fallback con textarea + execCommand funciona donde eso falla, que suele ser
-   * justo el navegador de la oficina.
+   * SIEMPRE muestra el contenido, copie o no. El intento automatico
+   * (navigator.clipboard, y execCommand de respaldo) falla de formas que no se
+   * ven: exige contexto seguro, a veces un permiso que nadie llega a conceder, y
+   * en algunos navegadores resuelve sin escribir nada. El sintoma es un boton
+   * que "no hace nada", que es exactamente lo que no puede pasar aqui.
+   *
+   * Asi que el cuadro con el texto seleccionado no es el plan B: es lo que
+   * siempre aparece. Si el copiado automatico funciono, sobra y se cierra; si no,
+   * queda Ctrl+C, que no depende de ningun permiso.
    */
   const copiarParaSheets = async () => {
-    const tsv = aTSV(res.out.filas);
+    let tsv;
+    try {
+      tsv = aTSV(res.out.filas);
+    } catch (e) {
+      toast.error(`No se pudo preparar el texto: ${e.message}`);
+      return;
+    }
+
+    let copiado = false;
     try {
       await navigator.clipboard.writeText(tsv);
+      copiado = true;
     } catch {
-      const ta = document.createElement('textarea');
-      ta.value = tsv;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (!ok) { toast.error('El navegador no dejó copiar. Usa el botón de descargar.'); return; }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = tsv;
+        ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        copiado = document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch { copiado = false; }
     }
-    toast.success(`${res.out.filas.length} filas copiadas · abre una hoja en Sheets y pega`);
+
+    setRes((prev) => ({ ...prev, tsv, copiado }));
+    if (copiado) toast.success(`${res.out.filas.length} filas copiadas · pega en una hoja de Sheets`);
+    else toast.message('Selecciona el cuadro de abajo y copia con Ctrl+C');
   };
 
   const descargar = () => {
@@ -290,6 +307,31 @@ export default function CodigosMensuales() {
                   </span>
                 )}
               </div>
+
+              {res.tsv && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <p className="text-sm font-medium">
+                      {res.copiado
+                        ? 'Copiado. Abre una hoja en blanco de Sheets y pega con Ctrl+V.'
+                        : 'Selecciona todo el cuadro y copia con Ctrl+C, luego pega en Sheets.'}
+                    </p>
+                    <button
+                      onClick={() => setRes((prev) => ({ ...prev, tsv: null }))}
+                      className="text-xs text-muted-foreground hover:text-foreground presionable"
+                    >
+                      ocultar
+                    </button>
+                  </div>
+                  <textarea
+                    readOnly
+                    value={res.tsv}
+                    onFocus={(e) => e.target.select()}
+                    ref={(el) => { if (el && !res.copiado) { el.focus(); el.select(); } }}
+                    className="w-full h-32 text-[11px] font-mono bg-muted/50 rounded-lg p-3 border border-border/60"
+                  />
+                </div>
+              )}
 
               {res.hoja && (
                 <div className="flex items-start gap-2 text-sm bg-primary/10 rounded-lg p-3">
