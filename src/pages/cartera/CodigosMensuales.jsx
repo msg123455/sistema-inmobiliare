@@ -7,9 +7,9 @@ import {
   HardDrive, ExternalLink, ClipboardCopy,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { parsearCSV, filasAObjetos } from '@/lib/csv';
+import { parsearCSV } from '@/lib/csv';
 import { callFunction, FUNCIONES } from '@/lib/backend';
-import { aCSV, aTSV, construirDirectorio, rellenarLinks } from '@/lib/conciliar';
+import { aCSV, aTSV, construirDirectorio, leerListado, rellenarLinks } from '@/lib/conciliar';
 import { EncabezadoModulo, Metrica } from '@/components/modulo';
 import { useGoogleDrive } from '@/hooks/useGoogleDrive';
 
@@ -52,15 +52,34 @@ export default function CodigosMensuales() {
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
+  /**
+   * Lee el listado del mes.
+   *
+   * Tolera que los encabezados vengan con otro nombre —Cedula en vez de Id,
+   * Email en vez de Correo, Arrendatario en vez de Nombre— porque el archivo lo
+   * arma una persona distinta cada mes y basta con que le cambie el titulo a una
+   * columna para que aqui no entrara nada.
+   *
+   * Y cuando aun asi no reconoce ninguna, DICE QUE COLUMNAS ENCONTRO. Antes solo
+   * decia "no tiene filas con datos", que es cierto y no sirve de nada: no hay
+   * forma de saber si el problema es el separador, el encabezado o el archivo.
+   */
   const leer = async (file) => {
     if (!file) return;
+    if (/\.(xlsx|xls)$/i.test(file.name)) {
+      toast.error('Eso es un Excel, no un CSV. Ábrelo y usa Archivo → Descargar → CSV.');
+      return;
+    }
     try {
-      const { filas } = filasAObjetos(parsearCSV(await file.text()));
-      const utiles = filas.filter((r) => r.Id || r.Nombre || r.Correo);
-      if (!utiles.length) { toast.error('Ese archivo no tiene filas con datos'); return; }
-      setEntrada({ nombre: file.name, filas: utiles, traeLinks: utiles.some((r) => r.Archivo) });
+      const l = leerListado(parsearCSV(await file.text()));
+      if (!l.filas.length) {
+        toast.error(`No reconocí filas de inquilinos. El archivo trae: ${l.columnas.join(', ')}`);
+        setEntrada({ nombre: file.name, filas: [], ...l });
+        return;
+      }
+      setEntrada({ nombre: file.name, ...l, traeLinks: l.traeUrl });
       setRes(null);
-      toast.success(`${utiles.length} filas leídas`);
+      toast.success(`${l.filas.length} inquilinos leídos${l.traeContrato ? ' · con número de contrato' : ''}`);
     } catch (e) { toast.error(`No se pudo leer: ${e.message}`); }
   };
 
@@ -80,7 +99,10 @@ export default function CodigosMensuales() {
       setFase('Emparejando');
       // Si el archivo trae links, sirven de segunda llave. Si no, se empareja
       // solo por orden, que es lo que ocurre con un mes de verdad.
-      const directorio = entrada.traeLinks ? construirDirectorio(entrada.filas).entradas : [];
+      const paraDirectorio = entrada.filas.map((f) => ({
+        Id: f.documento, Nombre: f.nombre, Correo: f.email, Archivo: f.url,
+      }));
+      const directorio = entrada.traeLinks ? construirDirectorio(paraDirectorio).entradas : [];
       const out = rellenarLinks({ filas: entrada.filas, archivos, directorio });
 
       // Comprobacion, solo posible con un mes ya enviado.
@@ -88,7 +110,7 @@ export default function CodigosMensuales() {
       if (out.ok && entrada.traeLinks) {
         let iguales = 0; const distintos = [];
         for (const f of out.filas) {
-          const real = String(entrada.filas.find((r) => String(r.Id).trim() === f.documento && r.Archivo)?.Archivo || '');
+          const real = String(entrada.filas.find((r) => r.documento === f.documento && r.url)?.url || '');
           if (!real) continue;
           if (real === f.url) iguales++; else distintos.push(f);
         }
@@ -223,7 +245,7 @@ export default function CodigosMensuales() {
             </span>
           </div>
 
-          <input ref={refCsv} type="file" accept=".csv,.tsv,.txt" className="hidden"
+          <input ref={refCsv} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden"
                  onChange={(e) => leer(e.target.files?.[0])} />
           <div onClick={() => refCsv.current?.click()}
                className="border-2 border-dashed border-border rounded-xl p-6 text-center cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
@@ -236,6 +258,27 @@ export default function CodigosMensuales() {
                 ? `${entrada.filas.length} filas${entrada.traeLinks ? ' · ya trae links, se usarán para comprobar el resultado' : ' · sin links, es lo normal'}`
                 : 'El que les manda la oficina. Desde Excel: Archivo → Descargar → CSV'}
             </p>
+            {entrada?.columnas && (
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                Columnas: {entrada.columnas.join(' · ')}
+                {entrada.mapeo && (
+                  <><br />Se usarán → {Object.entries(entrada.mapeo)
+                    .map(([k, v]) => `${k}: ${v}`).join('  ·  ')}</>
+                )}
+                {entrada.descartadas?.length > 0 && (
+                  <><br />Filas descartadas: {entrada.descartadas.length} ({entrada.descartadas[0]}…)</>
+                )}
+              </p>
+            )}
+            {entrada?.columnas && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Columnas del archivo: {entrada.columnas.join(' · ')}
+                {entrada.mapeo && (
+                  <><br />Se usarán: {Object.entries(entrada.mapeo)
+                    .filter(([, v]) => v).map(([k, v]) => `${k}←${v}`).join('  ')}</>
+                )}
+              </p>
+            )}
           </div>
 
           <Button disabled={!entrada || corriendo} onClick={correr} className="rounded-lg gap-1.5">

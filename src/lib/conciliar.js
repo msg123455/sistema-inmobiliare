@@ -544,6 +544,63 @@ export function rellenarLinks({ filas = [], archivos = [], directorio = [] } = {
 
   const ordenados = [...archivos].sort((a, b) => (Number(a.codigo) || 0) - (Number(b.codigo) || 0));
 
+  // ── Camino bueno: el listado trae el numero de contrato ────────────────────
+  //
+  // Cuando viene, se empareja EXACTO y se acabo la discusion. Nada de posiciones,
+  // nada de que las listas tengan que medir lo mismo: cada fila pide su contrato
+  // por numero y o esta o no esta.
+  //
+  // El listado de septiembre lo trae —en una columna sin encabezado, que es
+  // justo la que el parser viejo descartaba—, asi que este es el camino normal.
+  // El de agosto no lo traia, y para esos queda el emparejamiento por orden de
+  // mas abajo.
+  if (conCedula.some((f) => String(f.contrato ?? '').trim())) {
+    const porContratoArchivo = new Map(ordenados.map((a) => [normCodigo(a.codigo), a]));
+    const listas = [];
+    const sinArchivo = [];
+    const sinCorreo = [];
+    const correoInvalido = [];
+
+    for (const fila of conCedula) {
+      const clave = normCodigo(fila.contrato);
+      const a = clave ? porContratoArchivo.get(clave) : null;
+      if (!a) { sinArchivo.push(fila); continue; }
+
+      const salida = {
+        ...fila, contrato: a.codigo, archivo: a.archivo, url: a.url, verificado: true,
+      };
+      if (!fila.email) sinCorreo.push(salida);
+      else if (!correoValido(fila.email)) correoInvalido.push(salida);
+      listas.push(salida);
+    }
+
+    const usados = new Set(listas.map((x) => normCodigo(x.contrato)));
+    const archivoSinInquilino = ordenados.filter((a) => !usados.has(normCodigo(a.codigo)));
+
+    return {
+      ok: true,
+      metodo: 'contrato',
+      filas: listas,
+      sinCedula,
+      sinArchivo,
+      archivoSinInquilino,
+      discrepan: [],
+      sinCorreo,
+      correoInvalido,
+      resumen: {
+        entraron: filas.length,
+        conLink: listas.length,
+        descartadasSinCedula: sinCedula.length,
+        verificadasCon2Llaves: listas.length,
+        sinArchivo: sinArchivo.length,
+        archivoSinInquilino: archivoSinInquilino.length,
+        discrepan: 0,
+        sinCorreo: sinCorreo.length,
+        correoInvalido: correoInvalido.length,
+      },
+    };
+  }
+
   if (conCedula.length !== ordenados.length) {
     return {
       ok: false,
@@ -640,4 +697,106 @@ export function aTSV(filas) {
     f.documento, f.Mes ?? f.mes ?? '', f.contrato, f.nombre, f.email, f.url,
   ].map(limpio).join('\t'));
   return `${cab.join('\t')}\n${cuerpo.join('\n')}`;
+}
+
+/**
+ * Lee el listado del mes desde la matriz cruda del CSV.
+ *
+ * No usa filasAObjetos porque el archivo real trae dos cosas que ese parser no
+ * sobrevive, y las dos se ven en el listado de septiembre:
+ *
+ *   1. Una COLUMNA SIN ENCABEZADO. filasAObjetos descarta las columnas cuyo
+ *      titulo esta vacio, y justo esa es la que trae el numero de contrato
+ *      —22, 30, 34, 67…—, que es la llave. El archivo entraba sin ella y no
+ *      quedaba nada con que emparejar.
+ *   2. Una FILA DE TITULO entre el encabezado y los datos ("Impreso :
+ *      27/08/2026"), que entraba como si fuera un inquilino.
+ *
+ * Ademas los encabezados cambian de un mes a otro —Cedula en vez de Id,
+ * Arrendatario en vez de Nombre— porque el archivo lo arma una persona, asi que
+ * se buscan por varios nombres, sin acentos ni mayusculas.
+ */
+export function leerListado(matriz = []) {
+  const norm = (x) => String(x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[\s._-]/g, '');
+
+  const ALIAS = {
+    documento: ['cedula', 'id', 'nit', 'documento', 'cedulanit', 'identificacion'],
+    nombre: ['arrendatario', 'nombre', 'inquilino', 'cliente', 'razonsocial'],
+    email: ['email', 'correo', 'mail', 'correoelectronico'],
+    contrato: ['inmueble', 'contrato', 'codigo', 'cod'],
+    url: ['archivo', 'link', 'url', 'pdf'],
+    mes: ['mes', 'periodo'],
+  };
+  const quees = (titulo) => {
+    const n = norm(titulo);
+    if (!n) return null;
+    return Object.keys(ALIAS).find((k) => ALIAS[k].includes(n)) || null;
+  };
+
+  // El encabezado es la primera fila donde se reconocen dos titulos o mas. Antes
+  // de ella puede haber logos, fechas o filas en blanco.
+  let iCab = matriz.findIndex((f) => f.filter((c) => quees(c)).length >= 2);
+  if (iCab < 0) iCab = 0;
+
+  const titulos = matriz[iCab] || [];
+  const columnas = titulos.map((t, i) => String(t || '').trim() || `(columna ${i + 1})`);
+
+  // Que columna es cada cosa. Las que no tienen titulo quedan sin asignar y se
+  // resuelven despues por la forma de sus datos.
+  const idx = {};
+  titulos.forEach((t, i) => {
+    const k = quees(t);
+    if (k && idx[k] === undefined) idx[k] = i;
+  });
+
+  const cuerpo = matriz.slice(iCab + 1);
+  const enteroCorto = (v) => /^\d{1,5}$/.test(String(v ?? '').trim());
+
+  // El contrato, si no vino con titulo, es la columna cuyos valores son enteros
+  // cortos: los contratos van del 22 al 3984, y la cedula tiene de 6 a 10
+  // digitos. Se exige el 70% de las filas para no elegir una columna con dos
+  // numeros sueltos.
+  if (idx.contrato === undefined || cuerpo.every((f) => !enteroCorto(f[idx.contrato]))) {
+    let mejor = -1; let mejorPct = 0;
+    for (let i = 0; i < columnas.length; i++) {
+      if (Object.values(idx).includes(i)) continue;
+      const vals = cuerpo.map((f) => f[i]).filter((v) => String(v ?? '').trim());
+      if (vals.length < 3) continue;
+      const pct = vals.filter(enteroCorto).length / vals.length;
+      if (pct > mejorPct) { mejorPct = pct; mejor = i; }
+    }
+    if (mejorPct >= 0.7) idx.contrato = mejor;
+  }
+
+  const filas = [];
+  const descartadas = [];
+  for (const f of cuerpo) {
+    const fila = {
+      documento: String(f[idx.documento] ?? '').trim(),
+      nombre: String(f[idx.nombre] ?? '').trim(),
+      email: String(f[idx.email] ?? '').trim(),
+      contrato: String(f[idx.contrato] ?? '').trim(),
+      url: String(f[idx.url] ?? '').trim(),
+      Mes: String(f[idx.mes] ?? '').trim(),
+    };
+    // Sin cedula ni nombre ni correo no es un inquilino: es la fila del
+    // "Impreso : 27/08/2026", una separadora o el final de la hoja.
+    if (!fila.documento && !fila.nombre && !fila.email) {
+      if (f.some((c) => String(c ?? '').trim())) descartadas.push(f.filter(Boolean).join(' ').slice(0, 60));
+      continue;
+    }
+    filas.push(fila);
+  }
+
+  return {
+    columnas,
+    filas,
+    descartadas,
+    mapeo: Object.fromEntries(
+      Object.entries(idx).map(([k, i]) => [k, columnas[i]]),
+    ),
+    traeContrato: idx.contrato !== undefined && filas.some((f) => f.contrato),
+    traeUrl: idx.url !== undefined && filas.some((f) => f.url),
+  };
 }
